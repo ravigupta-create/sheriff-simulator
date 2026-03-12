@@ -3462,13 +3462,27 @@ function handleDialogChoice(action, npc) {
 
     case 'accept_quest':
       var quest = QUEST_TEMPLATES[rand(0, QUEST_TEMPLATES.length - 1)];
+      // Build target building array for visit-type quests
+      var questTargets = quest.targets;
+      var questTargetBuildings = [];
+      if (typeof quest.targets === 'number' && (quest.type === 'patrol' || quest.type === 'visit' || quest.type === 'collect_taxes' || quest.type === 'investigation')) {
+        var allTypes = game.buildings.map(function(b) { return b.type; });
+        var shuffled = allTypes.sort(function() { return Math.random() - 0.5; });
+        var unique = [];
+        for (var qi = 0; qi < shuffled.length; qi++) {
+          if (unique.indexOf(shuffled[qi]) === -1) unique.push(shuffled[qi]);
+          if (unique.length >= quest.targets) break;
+        }
+        questTargetBuildings = unique;
+      }
       game.activeQuest = {
         name: quest.name,
         desc: quest.desc,
         type: quest.type,
         repReward: quest.repReward,
         goldReward: quest.goldReward,
-        targets: quest.targets,
+        targets: questTargets,
+        targetBuildings: questTargetBuildings,
         visited: new Set(),
         startTime: game.time,
         startDay: game.dayCount,
@@ -5962,9 +5976,9 @@ function render() {
   }
 
   // 8. Quest target indicators on buildings (pulsing gold)
-  if (game.activeQuest && game.activeQuest.targets) {
+  if (game.activeQuest && game.activeQuest.targetBuildings && game.activeQuest.targetBuildings.length > 0) {
     const now = Date.now();
-    for (const targetType of game.activeQuest.targets) {
+    for (const targetType of game.activeQuest.targetBuildings) {
       if (game.activeQuest.visited && game.activeQuest.visited.has(targetType)) continue;
       const building = game.buildings.find(b => b.type === targetType);
       if (!building) continue;
