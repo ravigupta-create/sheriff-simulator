@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheriff Simulator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui-overlay">
+    <div id="top-bar">
+      <div id="rep-container">
+        <span id="rep-label">REPUTATION</span>
+        <div id="rep-bar-outer"><div id="rep-bar-inner"></div></div>
+        <span id="rep-value">50</span>
+      </div>
+      <div id="time-display">
+        <span id="day-count">Day 1</span>
+        <span id="clock">6:00 AM</span>
+      </div>
+      <div id="stats-bar">
+        <span id="gold-display">$0</span>
+        <span id="rank-display">Deputy</span>
+      </div>
+    </div>
+    <div id="minimap-container">
+      <canvas id="minimapCanvas" width="150" height="150"></canvas>
+    </div>
+    <div id="dialog-box" class="hidden">
+      <div id="dialog-portrait"></div>
+      <div id="dialog-content">
+        <span id="dialog-name"></span>
+        <p id="dialog-text"></p>
+        <div id="dialog-choices"></div>
+      </div>
+    </div>
+    <div id="notification" class="hidden"></div>
+    <div id="quest-tracker" class="hidden">
+      <h4>ACTIVE MISSION</h4>
+      <p id="quest-text"></p>
+    </div>
+    <div id="duel-ui" class="hidden">
+      <div id="duel-prompt">DRAW!</div>
+      <div id="duel-timer"></div>
+    </div>
+    <div id="journal-panel" class="hidden">
+      <h3>SHERIFF'S JOURNAL</h3>
+      <div id="journal-content"></div>
+      <button id="journal-close">Close [J]</button>
+    </div>
+    <div id="controls-hint">
+      WASD/Arrows: Move | E: Interact | SPACE: Action | J: Journal | M: Map
+    </div>
+  </div>
+  <div id="title-screen">
+    <div id="title-content">
+      <h1>SHERIFF<br>SIMULATOR</h1>
+      <p class="subtitle">A Spaghetti Western Adventure</p>
+      <div id="title-menu">
+        <button class="menu-btn" id="btn-new">NEW GAME</button>
+        <button class="menu-btn" id="btn-continue" class="hidden">CONTINUE</button>
+        <button class="menu-btn" id="btn-controls">CONTROLS</button>
+      </div>
+      <div id="controls-panel" class="hidden">
+        <p>WASD / Arrows — Move</p>
+        <p>E — Talk / Interact</p>
+        <p>SPACE — Shoot / Action</p>
+        <p>J — Sheriff's Journal</p>
+        <p>M — Toggle Minimap</p>
+        <p>ESC — Pause</p>
+        <button class="menu-btn" id="btn-back">BACK</button>
+      </div>
+    </div>
+  </div>
+  <div id="pause-screen" class="hidden">
+    <h2>PAUSED</h2>
+    <button class="menu-btn" id="btn-resume">RESUME</button>
+    <button class="menu-btn" id="btn-save">SAVE & QUIT</button>
+  </div>
+  <div id="game-over-screen" class="hidden">
+    <h2 id="go-title">GAME OVER</h2>
+    <p id="go-reason"></p>
+    <div id="go-stats"></div>
+    <button class="menu-btn" id="btn-restart">TRY AGAIN</button>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
