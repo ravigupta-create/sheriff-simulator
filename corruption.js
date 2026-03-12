@@ -539,19 +539,20 @@ function _updateBodyguards(dt) {
       }
     }
 
-    // Bodyguard takes damage from hostile NPCs
-    // (handled by game.js bullet system hitting them — we check for proximity damage)
-    for (var m = 0; m < game.npcs.length; m++) {
-      var hostileNPC = game.npcs[m];
-      if (!hostileNPC.hostile || hostileNPC.state === 'dead' || hostileNPC.dead) continue;
-      if (dist(bg, hostileNPC) < 30 && Math.random() < 0.01) {
-        bg.hp--;
-        particles.emitBlood(bg.x, bg.y);
-        if (bg.hp <= 0) {
-          bg.dead = true;
-          showNotification('A bodyguard was killed!', 'bad');
+    // Bodyguard takes damage from hostile NPCs (only if cheat mode is OFF)
+    if (!game._cheatMode) {
+      for (var m = 0; m < game.npcs.length; m++) {
+        var hostileNPC = game.npcs[m];
+        if (!hostileNPC.hostile || hostileNPC.state === 'dead' || hostileNPC.dead) continue;
+        if (dist(bg, hostileNPC) < 30 && Math.random() < 0.01) {
+          bg.hp--;
           particles.emitBlood(bg.x, bg.y);
-          break;
+          if (bg.hp <= 0) {
+            bg.dead = true;
+            showNotification('A bodyguard was killed!', 'bad');
+            particles.emitBlood(bg.x, bg.y);
+            break;
+          }
         }
       }
     }
