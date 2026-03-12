@@ -21,12 +21,18 @@
         <span id="clock">6:00 AM</span>
       </div>
       <div id="stats-bar">
+        <span id="hp-display">HP: 5/5</span>
+        <span id="ammo-display">Ammo: 24</span>
         <span id="gold-display">$0</span>
         <span id="rank-display">Deputy</span>
       </div>
     </div>
     <div id="minimap-container">
-      <canvas id="minimapCanvas" width="150" height="150"></canvas>
+      <canvas id="minimapCanvas" width="160" height="160"></canvas>
+    </div>
+    <div id="crime-timer" class="hidden">
+      <span id="crime-timer-label">CRIME IN PROGRESS</span>
+      <span id="crime-timer-value">45s</span>
     </div>
     <div id="dialog-box" class="hidden">
       <div id="dialog-portrait"></div>
@@ -42,16 +48,39 @@
       <p id="quest-text"></p>
     </div>
     <div id="duel-ui" class="hidden">
+      <div id="duel-instructions"></div>
       <div id="duel-prompt">DRAW!</div>
       <div id="duel-timer"></div>
     </div>
     <div id="journal-panel" class="hidden">
       <h3>SHERIFF'S JOURNAL</h3>
+      <div id="journal-tabs">
+        <button class="jtab active" data-tab="stats">Stats</button>
+        <button class="jtab" data-tab="missions">Missions</button>
+        <button class="jtab" data-tab="wanted">Wanted</button>
+        <button class="jtab" data-tab="achievements">Badges</button>
+        <button class="jtab" data-tab="log">Log</button>
+      </div>
       <div id="journal-content"></div>
       <button id="journal-close">Close [J]</button>
     </div>
+    <div id="poker-ui" class="hidden">
+      <h3>SALOON POKER</h3>
+      <div id="poker-content"></div>
+    </div>
+    <div id="shop-ui" class="hidden">
+      <h3 id="shop-title">GENERAL STORE</h3>
+      <div id="shop-items"></div>
+      <button id="shop-close" class="menu-btn">Close [E]</button>
+    </div>
+    <div id="tutorial-overlay" class="hidden">
+      <div id="tutorial-box">
+        <p id="tutorial-text"></p>
+        <button id="tutorial-dismiss" class="menu-btn">GOT IT</button>
+      </div>
+    </div>
     <div id="controls-hint">
-      WASD/Arrows: Move | E: Interact | SPACE: Action | J: Journal | M: Map
+      WASD: Move | E: Interact | SPACE: Shoot | F: Melee | J: Journal | M: Map | H: Mount/Dismount | TAB: Shop
     </div>
   </div>
   <div id="title-screen">
@@ -60,15 +89,26 @@
       <p class="subtitle">A Spaghetti Western Adventure</p>
       <div id="title-menu">
         <button class="menu-btn" id="btn-new">NEW GAME</button>
-        <button class="menu-btn" id="btn-continue" class="hidden">CONTINUE</button>
+        <button class="menu-btn hidden" id="btn-continue">CONTINUE</button>
         <button class="menu-btn" id="btn-controls">CONTROLS</button>
+      </div>
+      <div id="difficulty-select" class="hidden">
+        <p class="subtitle">SELECT DIFFICULTY</p>
+        <button class="menu-btn diff-btn" data-diff="easy">EASY — Fewer crimes, more health</button>
+        <button class="menu-btn diff-btn" data-diff="normal">NORMAL — Balanced experience</button>
+        <button class="menu-btn diff-btn" data-diff="hard">HARD — More crimes, tougher outlaws</button>
+        <button class="menu-btn diff-btn" data-diff="hardcore">HARDCORE — One life, permadeath</button>
       </div>
       <div id="controls-panel" class="hidden">
         <p>WASD / Arrows — Move</p>
-        <p>E — Talk / Interact</p>
-        <p>SPACE — Shoot / Action</p>
+        <p>E — Talk / Interact / Shop</p>
+        <p>SPACE — Shoot</p>
+        <p>F — Melee / Punch</p>
+        <p>H — Mount / Dismount Horse</p>
         <p>J — Sheriff's Journal</p>
         <p>M — Toggle Minimap</p>
+        <p>TAB — Quick Shop (near store)</p>
+        <p>1-3 — Dialog choices</p>
         <p>ESC — Pause</p>
         <button class="menu-btn" id="btn-back">BACK</button>
       </div>
@@ -76,6 +116,11 @@
   </div>
   <div id="pause-screen" class="hidden">
     <h2>PAUSED</h2>
+    <div id="pause-options">
+      <label>Master Volume: <input type="range" id="vol-master" min="0" max="100" value="40"></label>
+      <label>Music Volume: <input type="range" id="vol-music" min="0" max="100" value="25"></label>
+      <label>SFX Volume: <input type="range" id="vol-sfx" min="0" max="100" value="50"></label>
+    </div>
     <button class="menu-btn" id="btn-resume">RESUME</button>
     <button class="menu-btn" id="btn-save">SAVE & QUIT</button>
   </div>
@@ -84,6 +129,7 @@
     <p id="go-reason"></p>
     <div id="go-stats"></div>
     <button class="menu-btn" id="btn-restart">TRY AGAIN</button>
+    <button class="menu-btn" id="btn-ng-plus" class="hidden">NEW GAME+</button>
   </div>
 </div>
 <script src="game.js"></script>

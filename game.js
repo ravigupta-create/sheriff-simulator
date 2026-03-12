@@ -1,53 +1,323 @@
+// === PART 1: CORE ENGINE ===
 // ============================================================
-// SHERIFF SIMULATOR - Complete Game Engine
-// 100% free, zero external dependencies
+// SHERIFF SIMULATOR — 2D Top-Down Western Lawman Game
+// Pure HTML5 Canvas + Web Audio API, zero external dependencies
 // ============================================================
 
 'use strict';
 
-// ---- CONSTANTS ----
+// ─────────────────────────────────────────────
+// §1  CONSTANTS
+// ─────────────────────────────────────────────
 const TILE = 32;
 const MAP_W = 80, MAP_H = 60;
-const PLAYER_SPEED = 2.5;
-const DAY_LENGTH = 180; // seconds per game day
-const CRIMES_PER_DAY_MIN = 2, CRIMES_PER_DAY_MAX = 5;
+const WORLD_W = MAP_W * TILE, WORLD_H = MAP_H * TILE;
 
+const PLAYER_SPEED       = 2.5;
+const PLAYER_RUN_SPEED   = 4.0;
+const HORSE_SPEED        = 6.0;
+const NPC_SPEED          = 1.2;
+const OUTLAW_SPEED       = 1.8;
+const BULLET_SPEED       = 8;
+const SHOTGUN_SPREAD     = 0.25;   // radians
+const RIFLE_RANGE        = 400;    // pixels
+const MELEE_RANGE        = 40;     // pixels
+const MELEE_COOLDOWN     = 500;    // ms
+const INTERACT_RANGE     = 48;     // pixels
+
+const DAY_LENGTH          = 180;   // seconds per game day
+const DAWN_HOUR           = 6;
+const DUSK_HOUR           = 19;
+const MIDNIGHT_HOUR       = 0;
+const HOURS_PER_DAY       = 24;
+
+const CRIMES_PER_DAY_MIN  = 2;
+const CRIMES_PER_DAY_MAX  = 5;
+const CRIME_RESOLVE_TIME  = 120;   // seconds before crime auto-fails
+
+const STARTING_HP         = 10;
+const STARTING_AMMO       = 24;
+const STARTING_MONEY      = 50;
+const MAX_HP_CAP          = 20;
+const MAX_AMMO_CAP        = 99;
+
+const DUEL_WINDOW_DEFAULT = 600;   // ms to draw
+const REPUTATION_MAX      = 100;
+
+const WANTED_LEVEL_DECAY  = 0.05;  // per second of good behavior
+const HORSE_HEAL_AMOUNT   = 3;
+const TONIC_HEAL_AMOUNT   = 2;
+
+const SAVE_KEY = 'sheriff_sim_save';
+
+// ─────────────────────────────────────────────
+// §2  COLOR PALETTE  (spaghetti-western tones)
+// ─────────────────────────────────────────────
 const PALETTE = {
-  sand: '#c4a55a', sandDark: '#a68a3e', sandLight: '#dbc278',
-  wood: '#6b4226', woodDark: '#4a2e1a', woodLight: '#8b6340',
-  stone: '#7a7062', stoneDark: '#5a5248', stoneLight: '#9a9082',
-  roof: '#8b4513', roofDark: '#6b3010', roofLight: '#a85a28',
-  cactus: '#4a7a2e', cactusD: '#3a6020',
-  sky: '#d4a050', skyNight: '#1a1030', skyDusk: '#c06030',
-  water: '#4a6a8a', blood: '#8b0000',
-  gold: '#ffd700', uiDark: '#140c04', uiBorder: '#5a3a18',
-  skin: '#d4a574', skinDark: '#b8844a',
-  hat: '#3a2a14', cloth: '#8b1a1a', badge: '#ffd700',
-  outlaw: '#2a2a2a', outlawHat: '#1a1a1a'
+  // terrain
+  sand:        '#c4a55a',
+  sandDark:    '#a68a3e',
+  sandLight:   '#dbc278',
+  dirt:        '#8b7355',
+  dirtDark:    '#6b5335',
+  wood:        '#6b4226',
+  woodDark:    '#4a2e1a',
+  woodLight:   '#8b6340',
+  stone:       '#7a7062',
+  stoneDark:   '#5a5248',
+  stoneLight:  '#9a9082',
+  road:        '#9e8b6e',
+  roadDark:    '#7e6b4e',
+
+  // structures
+  roof:        '#8b4513',
+  roofDark:    '#6b3010',
+  roofLight:   '#a85a28',
+  roofTile:    '#a0522d',
+  wallAdobe:   '#c8a882',
+  wallAdobeD:  '#a88862',
+  plank:       '#7a5a3a',
+  plankDark:   '#5a3a1a',
+
+  // nature
+  cactus:      '#4a7a2e',
+  cactusD:     '#3a6020',
+  tumbleweed:  '#a89060',
+  grass:       '#6a8a3a',
+  water:       '#4a6a8a',
+  waterLight:  '#6a8aaa',
+
+  // sky
+  sky:         '#d4a050',
+  skyNight:    '#1a1030',
+  skyDusk:     '#c06030',
+  skyDawn:     '#e0a060',
+  skyNoon:     '#87ceeb',
+
+  // characters
+  skin:        '#d4a574',
+  skinDark:    '#b8844a',
+  skinLight:   '#e8c8a0',
+  hat:         '#3a2a14',
+  hatBrim:     '#2a1a0a',
+  cloth:       '#8b1a1a',
+  clothDark:   '#5b0a0a',
+  denim:       '#4a5a8a',
+  leather:     '#6a4a2a',
+  badge:       '#ffd700',
+  badgeShine:  '#fff8c0',
+  outlaw:      '#2a2a2a',
+  outlawHat:   '#1a1a1a',
+  bandana:     '#8b0000',
+
+  // effects
+  blood:       '#8b0000',
+  muzzleFlash: '#ffcc00',
+  dust:        '#c8b898',
+  gold:        '#ffd700',
+  silver:      '#c0c0c0',
+
+  // UI
+  uiDark:      '#140c04',
+  uiPanel:     '#1e1208',
+  uiBorder:    '#5a3a18',
+  uiBorderLt:  '#8a6a38',
+  uiText:      '#e8d8b8',
+  uiTextDim:   '#a09070',
+  uiHighlight: '#ffd700',
+  uiDanger:    '#cc3030',
+  uiSuccess:   '#30aa30',
+  uiHealth:    '#cc3030',
+  uiHealthBg:  '#440000',
+  uiAmmo:      '#ccaa30',
+  uiMoney:     '#ffd700',
+  uiRep:       '#4488cc',
 };
 
+// ─────────────────────────────────────────────
+// §3  RANK SYSTEM
+// ─────────────────────────────────────────────
 const RANKS = [
-  { name: 'Deputy', rep: 0 },
-  { name: 'Sheriff', rep: 25 },
-  { name: 'Marshal', rep: 50 },
-  { name: 'Legend', rep: 75 },
-  { name: 'Wyatt Earp', rep: 95 }
+  { name: 'Deputy',     rep: 0,   payBonus: 1.0, badge: '⭐' },
+  { name: 'Sheriff',    rep: 25,  payBonus: 1.25, badge: '🌟' },
+  { name: 'Marshal',    rep: 50,  payBonus: 1.5, badge: '🔱' },
+  { name: 'Legend',     rep: 75,  payBonus: 2.0, badge: '💫' },
+  { name: 'Wyatt Earp', rep: 95, payBonus: 3.0, badge: '👑' },
 ];
 
+function getRank(reputation) {
+  let rank = RANKS[0];
+  for (const r of RANKS) {
+    if (reputation >= r.rep) rank = r;
+  }
+  return rank;
+}
+
+// ─────────────────────────────────────────────
+// §4  BUILDING TYPES
+// ─────────────────────────────────────────────
 const BUILDING_TYPES = {
-  SHERIFF: 0, SALOON: 1, BANK: 2, GENERAL: 3, JAIL: 4,
-  CHURCH: 5, STABLE: 6, HOTEL: 7, HOUSE: 8, BLACKSMITH: 9,
-  WELL: 10, GALLOWS: 11
+  SHERIFF:      0,
+  SALOON:       1,
+  BANK:         2,
+  GENERAL:      3,
+  JAIL:         4,
+  CHURCH:       5,
+  STABLE:       6,
+  HOTEL:        7,
+  HOUSE:        8,
+  BLACKSMITH:   9,
+  WELL:         10,
+  GALLOWS:      11,
+  WANTED_BOARD: 12,
 };
 
+const BUILDING_COLORS = {
+  [BUILDING_TYPES.SHERIFF]:      { wall: '#a88862', roof: '#6b3010', trim: '#ffd700' },
+  [BUILDING_TYPES.SALOON]:       { wall: '#8b6340', roof: '#8b4513', trim: '#cc3030' },
+  [BUILDING_TYPES.BANK]:         { wall: '#9a9082', roof: '#5a5248', trim: '#ffd700' },
+  [BUILDING_TYPES.GENERAL]:      { wall: '#c8a882', roof: '#a0522d', trim: '#4a7a2e' },
+  [BUILDING_TYPES.JAIL]:         { wall: '#7a7062', roof: '#5a5248', trim: '#444444' },
+  [BUILDING_TYPES.CHURCH]:       { wall: '#ddd8cc', roof: '#8b4513', trim: '#ffffff' },
+  [BUILDING_TYPES.STABLE]:       { wall: '#6b4226', roof: '#4a2e1a', trim: '#8b6340' },
+  [BUILDING_TYPES.HOTEL]:        { wall: '#b8844a', roof: '#8b4513', trim: '#cc8844' },
+  [BUILDING_TYPES.HOUSE]:        { wall: '#c8a882', roof: '#a0522d', trim: '#6b4226' },
+  [BUILDING_TYPES.BLACKSMITH]:   { wall: '#5a5248', roof: '#3a3028', trim: '#cc6600' },
+  [BUILDING_TYPES.WELL]:         { wall: '#7a7062', roof: '#5a5248', trim: '#4a6a8a' },
+  [BUILDING_TYPES.GALLOWS]:      { wall: '#4a2e1a', roof: '#3a2010', trim: '#2a1a0a' },
+  [BUILDING_TYPES.WANTED_BOARD]: { wall: '#6b4226', roof: '#4a2e1a', trim: '#c8a882' },
+};
+
+// ─────────────────────────────────────────────
+// §5  NPC TYPES
+// ─────────────────────────────────────────────
 const NPC_TYPES = {
-  TOWNSPERSON: 'townsperson', OUTLAW: 'outlaw', BARTENDER: 'bartender',
-  SHOPKEEPER: 'shopkeeper', MAYOR: 'mayor', DEPUTY: 'deputy',
-  BANKER: 'banker', PREACHER: 'preacher', STRANGER: 'stranger',
-  BOUNTY: 'bounty'
+  TOWNSPERSON: 'townsperson',
+  OUTLAW:      'outlaw',
+  BARTENDER:   'bartender',
+  SHOPKEEPER:  'shopkeeper',
+  MAYOR:       'mayor',
+  DEPUTY:      'deputy',
+  BANKER:      'banker',
+  PREACHER:    'preacher',
+  STRANGER:    'stranger',
+  BOUNTY:      'bounty',
 };
 
-// ---- AUDIO ENGINE ----
+// ─────────────────────────────────────────────
+// §6  ACHIEVEMENTS  (25 definitions)
+// ─────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id: 'gunslinger',       name: 'Gunslinger',        desc: 'Win 10 duels',                         icon: '🔫', check: 'checkDuelsWon',       target: 10 },
+  { id: 'peacekeeper',      name: 'Peacekeeper',       desc: 'Arrest 10 outlaws',                    icon: '⛓️', check: 'checkArrests',        target: 10 },
+  { id: 'protector',        name: 'Protector',         desc: 'Resolve 15 crimes',                    icon: '🛡️', check: 'checkCrimesResolved', target: 15 },
+  { id: 'quick_draw',       name: 'Quick Draw',        desc: 'Win a duel in under 200ms',            icon: '⚡', check: 'checkQuickDraw',       target: 200 },
+  { id: 'pacifist',         name: 'Pacifist',          desc: 'Arrest 5 outlaws without killing any', icon: '🕊️', check: 'checkPacifist',       target: 5 },
+  { id: 'wealthy',          name: 'Wealthy',           desc: 'Have $500 or more at once',            icon: '💰', check: 'checkWealth',          target: 500 },
+  { id: 'iron_sheriff',     name: 'Iron Sheriff',      desc: 'Survive 30 days',                      icon: '🏋️', check: 'checkDaysSurvived',   target: 30 },
+  { id: 'legend',           name: 'Legend',             desc: 'Reach Wyatt Earp rank',                icon: '🏆', check: 'checkMaxRank',         target: 95 },
+  { id: 'night_owl',        name: 'Night Owl',         desc: 'Complete 3 night watches',             icon: '🦉', check: 'checkNightWatches',    target: 3 },
+  { id: 'sharpshooter',     name: 'Sharpshooter',      desc: 'Land 50 shots on target',              icon: '🎯', check: 'checkShotsHit',        target: 50 },
+  { id: 'brawler',          name: 'Brawler',           desc: 'Win 10 melee fights',                  icon: '👊', check: 'checkMeleeWins',        target: 10 },
+  { id: 'card_shark',       name: 'Card Shark',        desc: 'Win 10 poker hands',                   icon: '🃏', check: 'checkPokerWins',        target: 10 },
+  { id: 'horse_whisperer',  name: 'Horse Whisperer',   desc: 'Ride 1000 tiles on horseback',         icon: '🐴', check: 'checkTilesRidden',      target: 1000 },
+  { id: 'corrupt',          name: 'Corrupt',           desc: 'Accept 5 bribes',                      icon: '🤑', check: 'checkBribesAccepted',   target: 5 },
+  { id: 'feared',           name: 'Feared',            desc: 'Reach 95+ reputation',                 icon: '😈', check: 'checkReputation',       target: 95 },
+  { id: 'incorruptible',    name: 'Incorruptible',     desc: 'Never accept a bribe (day 10+)',       icon: '⚖️', check: 'checkIncorruptible',   target: 0 },
+  { id: 'explorer',         name: 'Explorer',          desc: 'Visit every building in town',         icon: '🗺️', check: 'checkAllBuildings',    target: 0 },
+  { id: 'socialite',        name: 'Socialite',         desc: 'Talk to 20 different NPCs',            icon: '🗣️', check: 'checkNpcsTalkedTo',    target: 20 },
+  { id: 'survivor',         name: 'Survivor',          desc: 'Win a fight with only 1 HP left',      icon: '💀', check: 'checkSurvivor',         target: 1 },
+  { id: 'hangman',          name: 'Hangman',           desc: 'Capture 3 bounty targets',             icon: '📜', check: 'checkBountiesCaptured', target: 3 },
+  { id: 'speed_demon',      name: 'Speed Demon',       desc: 'Resolve a crime in under 10 seconds',  icon: '💨', check: 'checkSpeedResolve',     target: 10 },
+  { id: 'gold_rush',        name: 'Gold Rush',         desc: 'Earn $1000 total across the game',     icon: '🪙', check: 'checkTotalEarnings',    target: 1000 },
+  { id: 'frontier_doctor',  name: 'Frontier Doctor',   desc: 'Buy 10 health tonics',                 icon: '🧪', check: 'checkTonicsBought',     target: 10 },
+  { id: 'town_hero',        name: 'Town Hero',         desc: 'Reach day 50',                         icon: '🌅', check: 'checkDaysSurvived50',   target: 50 },
+  { id: 'untouchable',      name: 'Untouchable',       desc: 'Complete a full day without damage',   icon: '✨', check: 'checkNoDamageDay',      target: 0 },
+];
+
+// ─────────────────────────────────────────────
+// §7  SHOP ITEMS
+// ─────────────────────────────────────────────
+const SHOP_ITEMS = {
+  general: [
+    { id: 'health_tonic', name: 'Health Tonic',      price: 25,  desc: 'Restores 2 HP',              icon: '🧴', effect: 'healHP',       value: 2,  oneTime: false },
+    { id: 'ammo_pack',    name: 'Ammo Pack',         price: 10,  desc: '+12 rounds of ammunition',   icon: '🔹', effect: 'addAmmo',      value: 12, oneTime: false },
+    { id: 'horse_feed',   name: 'Horse Feed',        price: 15,  desc: 'Heals your horse',           icon: '🌾', effect: 'healHorse',    value: HORSE_HEAL_AMOUNT, oneTime: false },
+    { id: 'gun_repair',   name: 'Gun Repair Kit',    price: 30,  desc: 'Restore full accuracy',      icon: '🔧', effect: 'repairGun',    value: 1,  oneTime: false },
+  ],
+  blacksmith: [
+    { id: 'vest',         name: 'Bulletproof Vest',  price: 100, desc: '+2 max HP',                  icon: '🦺', effect: 'addMaxHP',     value: 2,  oneTime: true },
+    { id: 'speed_boots',  name: 'Speed Boots',       price: 75,  desc: '+15% movement speed',        icon: '👢', effect: 'addSpeed',     value: 0.15, oneTime: true },
+    { id: 'shotgun',      name: 'Shotgun',           price: 150, desc: 'Spread shot, close range',   icon: '🔫', effect: 'unlockShotgun', value: 1, oneTime: true },
+    { id: 'rifle',        name: 'Rifle',             price: 200, desc: 'Long range precision shots',  icon: '🎯', effect: 'unlockRifle',  value: 1, oneTime: true },
+  ],
+};
+
+// ─────────────────────────────────────────────
+// §8  DIFFICULTY CONFIGS
+// ─────────────────────────────────────────────
+const DIFFICULTY = {
+  easy: {
+    label:           'Easy',
+    crimeFreqMult:   0.7,
+    outlawHPMult:    0.7,
+    playerHP:        14,
+    startingAmmo:    36,
+    startingMoney:   100,
+    duelWindow:      900,   // ms
+    outlawDamageMult: 0.6,
+    rewardMult:      1.3,
+    repGainMult:     1.3,
+    repLossMult:     0.7,
+    nightCrimeMult:  1.0,
+  },
+  normal: {
+    label:           'Normal',
+    crimeFreqMult:   1.0,
+    outlawHPMult:    1.0,
+    playerHP:        STARTING_HP,
+    startingAmmo:    STARTING_AMMO,
+    startingMoney:   STARTING_MONEY,
+    duelWindow:      DUEL_WINDOW_DEFAULT,
+    outlawDamageMult: 1.0,
+    rewardMult:      1.0,
+    repGainMult:     1.0,
+    repLossMult:     1.0,
+    nightCrimeMult:  1.3,
+  },
+  hard: {
+    label:           'Hard',
+    crimeFreqMult:   1.4,
+    outlawHPMult:    1.5,
+    playerHP:        8,
+    startingAmmo:    18,
+    startingMoney:   30,
+    duelWindow:      400,
+    outlawDamageMult: 1.4,
+    rewardMult:      0.8,
+    repGainMult:     0.8,
+    repLossMult:     1.4,
+    nightCrimeMult:  1.8,
+  },
+  hardcore: {
+    label:           'Hardcore',
+    crimeFreqMult:   1.8,
+    outlawHPMult:    2.0,
+    playerHP:        6,
+    startingAmmo:    12,
+    startingMoney:   20,
+    duelWindow:      280,
+    outlawDamageMult: 1.8,
+    rewardMult:      0.6,
+    repGainMult:     0.6,
+    repLossMult:     2.0,
+    nightCrimeMult:  2.5,
+  },
+};
+
+// ─────────────────────────────────────────────
+// §9  AUDIO ENGINE  (procedural Web Audio API)
+// ─────────────────────────────────────────────
 class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -55,575 +325,1468 @@ class AudioEngine {
     this.musicGain = null;
     this.sfxGain = null;
     this.initialized = false;
+    this._windSource = null;
+    this._cricketSource = null;
+    this._riffInterval = null;
+    this._gallopInterval = null;
   }
 
   init() {
     if (this.initialized) return;
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (_) { return; }
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.4;
     this.master.connect(this.ctx.destination);
+
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.25;
     this.musicGain.connect(this.master);
+
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.gain.value = 0.5;
     this.sfxGain.connect(this.master);
+
     this.initialized = true;
   }
 
-  playNote(freq, duration, type = 'square', gainNode = null) {
+  setMasterVolume(v)  { if (this.master) this.master.gain.value = clamp(v, 0, 1); }
+  setMusicVolume(v)   { if (this.musicGain) this.musicGain.gain.value = clamp(v, 0, 1); }
+  setSfxVolume(v)     { if (this.sfxGain) this.sfxGain.gain.value = clamp(v, 0, 1); }
+
+  // ── Core helpers ──
+
+  playNote(freq, duration, type = 'square', destGain = null) {
     if (!this.initialized) return;
+    const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     osc.type = type;
     osc.frequency.value = freq;
-    g.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + duration);
     osc.connect(g);
-    g.connect(gainNode || this.sfxGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
+    g.connect(destGain || this.sfxGain);
+    osc.start(t);
+    osc.stop(t + duration);
   }
+
+  _noiseBuffer(seconds, shapeFunc) {
+    const len = Math.floor(this.ctx.sampleRate * seconds);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = shapeFunc(i, len, this.ctx.sampleRate);
+    }
+    return buf;
+  }
+
+  _playBuffer(buf, gain, dest) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g);
+    g.connect(dest || this.sfxGain);
+    src.start();
+    return src;
+  }
+
+  // ── Sound Effects ──
 
   playGunshot() {
     if (!this.initialized) return;
-    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.3, this.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3);
-    }
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    const g = this.ctx.createGain();
-    g.gain.value = 0.6;
-    src.connect(g);
-    g.connect(this.sfxGain);
-    src.start();
+    const buf = this._noiseBuffer(0.35, (i, len) => {
+      const t = i / len;
+      const crack = (Math.random() * 2 - 1) * Math.pow(1 - t, 4);
+      const rumble = (Math.random() * 2 - 1) * 0.3 * Math.pow(1 - t, 2) * Math.sin(t * 120);
+      return crack + rumble;
+    });
+    this._playBuffer(buf, 0.6, this.sfxGain);
   }
 
-  playStep() {
+  playStep(tileType) {
     if (!this.initialized) return;
-    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.05, this.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.2 * (1 - i / data.length);
+    // Vary pitch/texture by tile:  sand=low+soft, wood=high+sharp, stone=mid+hard
+    let pitchMult = 1.0, vol = 0.15, dur = 0.05;
+    switch (tileType) {
+      case 0: // sand
+        pitchMult = 0.6; vol = 0.10; dur = 0.07;
+        break;
+      case 1: // road / dirt
+        pitchMult = 0.85; vol = 0.14; dur = 0.05;
+        break;
+      case 8: // wood floor
+        pitchMult = 1.4; vol = 0.18; dur = 0.04;
+        break;
+      case 3: case 7: // stone / rock
+        pitchMult = 1.0; vol = 0.16; dur = 0.035;
+        break;
+      default:
+        pitchMult = 0.8; vol = 0.12; dur = 0.05;
     }
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    const g = this.ctx.createGain();
-    g.gain.value = 0.15;
-    src.connect(g);
-    g.connect(this.sfxGain);
-    src.start();
+    const buf = this._noiseBuffer(dur, (i, len, sr) => {
+      const env = 1 - i / len;
+      const raw = Math.random() * 2 - 1;
+      // Crude low-pass by averaging with previous — pitchMult controls cutoff feel
+      return raw * env * 0.3 * pitchMult;
+    });
+    this._playBuffer(buf, vol, this.sfxGain);
+  }
+
+  playMelee() {
+    if (!this.initialized) return;
+    const buf = this._noiseBuffer(0.12, (i, len) => {
+      const t = i / len;
+      return (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * 0.5
+             + Math.sin(t * 600) * 0.3 * (1 - t);
+    });
+    this._playBuffer(buf, 0.45, this.sfxGain);
   }
 
   playDing() {
+    if (!this.initialized) return;
     this.playNote(880, 0.15, 'sine');
     setTimeout(() => this.playNote(1108, 0.2, 'sine'), 100);
   }
 
   playBad() {
+    if (!this.initialized) return;
     this.playNote(220, 0.2, 'sawtooth');
     setTimeout(() => this.playNote(165, 0.3, 'sawtooth'), 150);
   }
 
   playDuelDraw() {
+    if (!this.initialized) return;
     this.playNote(440, 0.1, 'square');
     setTimeout(() => this.playNote(660, 0.1, 'square'), 80);
     setTimeout(() => this.playNote(880, 0.15, 'square'), 160);
   }
 
   playVictory() {
-    [0, 100, 200, 300, 400].forEach((t, i) => {
-      setTimeout(() => this.playNote([523, 659, 784, 1047, 1318][i], 0.3, 'sine'), t);
+    if (!this.initialized) return;
+    const melody = [523, 659, 784, 1047, 1318];
+    melody.forEach((f, i) => {
+      setTimeout(() => this.playNote(f, 0.3, 'sine', this.sfxGain), i * 100);
     });
   }
 
-  playAmbientWind() {
+  playPanic() {
     if (!this.initialized) return;
-    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 4, this.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.03 * (0.5 + 0.5 * Math.sin(i / 5000));
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => this.playNote(800 + i * 80, 0.08, 'square'), i * 70);
     }
+  }
+
+  playCheer() {
+    if (!this.initialized) return;
+    const notes = [392, 494, 588, 784];
+    notes.forEach((f, i) => {
+      setTimeout(() => this.playNote(f, 0.2, 'triangle', this.sfxGain), i * 120);
+    });
+  }
+
+  playHorseNeigh() {
+    if (!this.initialized) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(600, t0);
+    osc.frequency.linearRampToValueAtTime(1200, t0 + 0.15);
+    osc.frequency.linearRampToValueAtTime(400, t0 + 0.5);
+    g.gain.setValueAtTime(0.2, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.55);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + 0.55);
+  }
+
+  playHorseGallop() {
+    if (!this.initialized) return;
+    const buf = this._noiseBuffer(0.08, (i, len) => {
+      const t = i / len;
+      return (Math.random() * 2 - 1) * Math.pow(1 - t, 3) * 0.4;
+    });
+    this._playBuffer(buf, 0.25, this.sfxGain);
+  }
+
+  playPokerChip() {
+    if (!this.initialized) return;
+    this.playNote(2200, 0.06, 'sine');
+    setTimeout(() => this.playNote(3300, 0.04, 'sine'), 40);
+  }
+
+  playBellAlarm() {
+    if (!this.initialized) return;
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        this.playNote(1400, 0.15, 'sine');
+        this.playNote(1760, 0.15, 'sine');
+      }, i * 250);
+    }
+  }
+
+  playWhistle() {
+    if (!this.initialized) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, t0);
+    osc.frequency.linearRampToValueAtTime(1200, t0 + 0.3);
+    osc.frequency.linearRampToValueAtTime(600, t0 + 0.8);
+    g.gain.setValueAtTime(0.2, t0);
+    g.gain.setValueAtTime(0.2, t0 + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.85);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + 0.85);
+  }
+
+  playDoorOpen() {
+    if (!this.initialized) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, t0);
+    osc.frequency.exponentialRampToValueAtTime(120, t0 + 0.25);
+    g.gain.setValueAtTime(0.12, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + 0.3);
+    // creak noise overlay
+    const buf = this._noiseBuffer(0.2, (i, len) => {
+      const t = i / len;
+      return (Math.random() * 2 - 1) * 0.08 * Math.sin(t * 300) * (1 - t);
+    });
+    this._playBuffer(buf, 0.15, this.sfxGain);
+  }
+
+  playDrink() {
+    if (!this.initialized) return;
+    // gulp sounds
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => this.playNote(150 + i * 20, 0.08, 'sine'), i * 100);
+    }
+  }
+
+  playReload() {
+    if (!this.initialized) return;
+    // metallic click sequence
+    const clicks = [3200, 2800, 4000, 2400];
+    clicks.forEach((f, i) => {
+      setTimeout(() => this.playNote(f, 0.03, 'square'), i * 80);
+    });
+    // finishing snap
+    setTimeout(() => {
+      const buf = this._noiseBuffer(0.04, (i, len) => {
+        return (Math.random() * 2 - 1) * (1 - i / len) * 0.3;
+      });
+      this._playBuffer(buf, 0.3, this.sfxGain);
+    }, 350);
+  }
+
+  // ── Ambient / Music ──
+
+  playAmbientWind() {
+    if (!this.initialized || this._windSource) return;
+    const dur = 4;
+    const buf = this._noiseBuffer(dur, (i, len, sr) => {
+      const t = i / len;
+      // Modulated noise: sine swell gives organic wind feel
+      const swell = 0.5 + 0.5 * Math.sin(2 * Math.PI * t * 0.5);
+      const gust = 0.5 + 0.5 * Math.sin(2 * Math.PI * t * 2.3);
+      return (Math.random() * 2 - 1) * 0.04 * swell * (0.6 + 0.4 * gust);
+    });
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    // Crossfade-safe loop: the buffer is designed to wrap smoothly
+    // because both endpoints sit near zero amplitude via the sine swell
+    const g = this.ctx.createGain();
+    g.gain.value = 0.3;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 600;
+    src.connect(lp);
+    lp.connect(g);
+    g.connect(this.musicGain);
+    src.start();
+    this._windSource = src;
+  }
+
+  stopAmbientWind() {
+    if (this._windSource) {
+      try { this._windSource.stop(); } catch (_) {}
+      this._windSource = null;
+    }
+  }
+
+  playCrickets() {
+    if (!this.initialized || this._cricketSource) return;
+    const dur = 3;
+    const buf = this._noiseBuffer(dur, (i, len, sr) => {
+      const t = i / sr;
+      // Chirp pattern: bursts of high-freq sine modulated by on/off envelope
+      const chirpRate = 12;        // chirps per second
+      const chirpDuty = 0.3;
+      const phase = (t * chirpRate) % 1;
+      const on = phase < chirpDuty ? 1 : 0;
+      const carrier = Math.sin(2 * Math.PI * 4800 * t) * 0.3;
+      const mod = Math.sin(2 * Math.PI * 80 * t);
+      // Volume swell so loop point is seamless
+      const swell = 0.5 + 0.5 * Math.sin(2 * Math.PI * (i / len));
+      return carrier * on * mod * swell * 0.08;
+    });
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
     const g = this.ctx.createGain();
-    g.gain.value = 0.3;
+    g.gain.value = 0.2;
     src.connect(g);
     g.connect(this.musicGain);
     src.start();
+    this._cricketSource = src;
+  }
+
+  stopCrickets() {
+    if (this._cricketSource) {
+      try { this._cricketSource.stop(); } catch (_) {}
+      this._cricketSource = null;
+    }
   }
 
   playWesternRiff() {
     if (!this.initialized) return;
-    const notes = [330, 0, 392, 0, 330, 294, 262, 0, 294, 330, 294, 262, 220, 0, 262, 0];
-    notes.forEach((n, i) => {
-      if (n > 0) setTimeout(() => this.playNote(n, 0.25, 'triangle', this.musicGain), i * 200);
-    });
+    // Ennio Morricone-style repeating melody
+    // Notes: E4 – G4 – E4 – D4 – C4 – D4 – E4 – D4 – C4 – A3 – C4 – rest – (repeat)
+    const melody = [
+      { f: 330, d: 0.28 },  // E4
+      { f: 0,   d: 0.12 },  // rest
+      { f: 392, d: 0.28 },  // G4
+      { f: 0,   d: 0.12 },  // rest
+      { f: 330, d: 0.24 },  // E4
+      { f: 294, d: 0.24 },  // D4
+      { f: 262, d: 0.40 },  // C4
+      { f: 0,   d: 0.16 },  // rest
+      { f: 294, d: 0.24 },  // D4
+      { f: 330, d: 0.24 },  // E4
+      { f: 294, d: 0.24 },  // D4
+      { f: 262, d: 0.36 },  // C4
+      { f: 220, d: 0.40 },  // A3
+      { f: 0,   d: 0.16 },  // rest
+      { f: 262, d: 0.36 },  // C4
+      { f: 0,   d: 0.40 },  // rest (breathing room before repeat)
+    ];
+
+    let totalDur = 0;
+    for (const n of melody) totalDur += n.d;
+
+    const playOnce = (offset) => {
+      let t = offset;
+      for (const n of melody) {
+        if (n.f > 0) {
+          setTimeout(() => {
+            if (!this.initialized) return;
+            this.playNote(n.f, n.d * 0.9, 'triangle', this.musicGain);
+          }, t * 1000);
+        }
+        t += n.d;
+      }
+    };
+
+    // Play and repeat
+    playOnce(0);
+    this._riffInterval = setInterval(() => playOnce(0), totalDur * 1000);
+  }
+
+  stopWesternRiff() {
+    if (this._riffInterval) {
+      clearInterval(this._riffInterval);
+      this._riffInterval = null;
+    }
+  }
+
+  // Stop all ambient loops
+  stopAllAmbient() {
+    this.stopAmbientWind();
+    this.stopCrickets();
+    this.stopWesternRiff();
   }
 }
 
 const audio = new AudioEngine();
 
-// ---- INPUT ----
+// ─────────────────────────────────────────────
+// §10  INPUT SYSTEM
+// ─────────────────────────────────────────────
 const keys = {};
 const keysJustPressed = {};
+
 document.addEventListener('keydown', e => {
   if (!keys[e.code]) keysJustPressed[e.code] = true;
   keys[e.code] = true;
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('keyup', e => {
+  keys[e.code] = false;
+});
+
 function consumeKey(code) {
-  if (keysJustPressed[code]) { keysJustPressed[code] = false; return true; }
+  if (keysJustPressed[code]) {
+    keysJustPressed[code] = false;
+    return true;
+  }
   return false;
 }
 
-// ---- UTILITY ----
+function clearJustPressed() {
+  for (const k in keysJustPressed) keysJustPressed[k] = false;
+}
+
+// ─────────────────────────────────────────────
+// §11  UTILITY FUNCTIONS
+// ─────────────────────────────────────────────
 function rand(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
 function randF(a, b) { return Math.random() * (b - a) + a; }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-// ---- PROCEDURAL TOWN MAP ----
+function lerpColor(hexA, hexB, t) {
+  const parse = h => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const a = parse(hexA), b = parse(hexB);
+  const r = Math.round(lerp(a[0], b[0], t));
+  const g = Math.round(lerp(a[1], b[1], t));
+  const bl = Math.round(lerp(a[2], b[2], t));
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
+}
+
+function angleBetween(a, b) {
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+function pointInRect(px, py, rx, ry, rw, rh) {
+  return px >= rx && px < rx + rw && py >= ry && py < ry + rh;
+}
+
+function tileAt(map, px, py) {
+  const tx = Math.floor(px / TILE);
+  const ty = Math.floor(py / TILE);
+  if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return 3; // out-of-bounds = wall
+  return map[ty][tx];
+}
+
+function isSolid(tile) {
+  return tile === 2 || tile === 3 || tile === 6 || tile === 7;
+}
+
+// === END PART 1 ===
+// === PART 2: MAP, NPCS, CRIMES, QUESTS ===
+
+// ─────────────────────────────────────────────
+// §A  TOWN GENERATION
+// ─────────────────────────────────────────────
+
 function generateTown() {
-  // 0=sand, 1=road, 2=building, 3=wall, 4=door, 5=water, 6=cactus, 7=rock, 8=wood floor
-  const map = Array.from({ length: MAP_H }, () => new Uint8Array(MAP_W));
+  const map = [];
+  for (let y = 0; y < MAP_H; y++) {
+    map[y] = new Uint8Array(MAP_W);
+    // fill with sand (0)
+  }
+
+  // --- Main roads: horizontal y=28-31, vertical x=38-41 ---
+  for (let y = 28; y <= 31; y++) {
+    for (let x = 0; x < MAP_W; x++) map[y][x] = 1;
+  }
+  for (let x = 38; x <= 41; x++) {
+    for (let y = 0; y < MAP_H; y++) map[y][x] = 1;
+  }
+
+  // --- Secondary roads ---
+  const secHoriz = [[15, 16], [43, 44]];
+  const secVert  = [[20, 21], [58, 59]];
+  for (const pair of secHoriz) {
+    for (const y of pair) {
+      for (let x = 0; x < MAP_W; x++) map[y][x] = 1;
+    }
+  }
+  for (const pair of secVert) {
+    for (const x of pair) {
+      for (let y = 0; y < MAP_H; y++) map[y][x] = 1;
+    }
+  }
+
+  // --- Buildings ---
   const buildings = [];
 
-  // Fill with sand
-  for (let y = 0; y < MAP_H; y++)
-    for (let x = 0; x < MAP_W; x++)
-      map[y][x] = 0;
-
-  // Main road horizontal
-  for (let x = 0; x < MAP_W; x++)
-    for (let y = 28; y <= 31; y++)
-      map[y][x] = 1;
-
-  // Cross road vertical
-  for (let y = 0; y < MAP_H; y++)
-    for (let x = 38; x <= 41; x++)
-      map[y][x] = 1;
-
-  // Secondary roads
-  for (let x = 10; x < 70; x++) { map[15][x] = 1; map[16][x] = 1; }
-  for (let x = 10; x < 70; x++) { map[43][x] = 1; map[44][x] = 1; }
-  for (let y = 5; y < 55; y++) { map[y][20] = 1; map[y][21] = 1; }
-  for (let y = 5; y < 55; y++) { map[y][58] = 1; map[y][59] = 1; }
-
-  // Building placement
-  const bDefs = [
-    { type: BUILDING_TYPES.SHERIFF, name: "Sheriff's Office", w: 8, h: 6, x: 10, y: 8 },
-    { type: BUILDING_TYPES.SALOON, name: 'Saloon', w: 10, h: 7, x: 24, y: 7 },
-    { type: BUILDING_TYPES.BANK, name: 'Bank', w: 8, h: 6, x: 44, y: 8 },
-    { type: BUILDING_TYPES.GENERAL, name: 'General Store', w: 8, h: 5, x: 55, y: 8 },
-    { type: BUILDING_TYPES.JAIL, name: 'Jail', w: 7, h: 6, x: 10, y: 34 },
-    { type: BUILDING_TYPES.CHURCH, name: 'Church', w: 8, h: 8, x: 24, y: 34 },
-    { type: BUILDING_TYPES.STABLE, name: 'Stables', w: 10, h: 6, x: 44, y: 34 },
-    { type: BUILDING_TYPES.HOTEL, name: 'Hotel', w: 8, h: 7, x: 55, y: 34 },
-    { type: BUILDING_TYPES.BLACKSMITH, name: 'Blacksmith', w: 7, h: 5, x: 65, y: 8 },
-    { type: BUILDING_TYPES.HOUSE, name: 'House', w: 6, h: 5, x: 10, y: 47 },
-    { type: BUILDING_TYPES.HOUSE, name: 'House', w: 6, h: 5, x: 24, y: 47 },
-    { type: BUILDING_TYPES.HOUSE, name: 'House', w: 6, h: 5, x: 44, y: 47 },
-    { type: BUILDING_TYPES.WELL, name: 'Well', w: 3, h: 3, x: 39, y: 24 },
-    { type: BUILDING_TYPES.GALLOWS, name: 'Gallows', w: 4, h: 4, x: 34, y: 34 },
+  const bldgDefs = [
+    { type: BUILDING_TYPES.SHERIFF,    name: "Sheriff's Office", x: 10, y: 8,  w: 8,  h: 6 },
+    { type: BUILDING_TYPES.SALOON,     name: 'Saloon',           x: 24, y: 7,  w: 10, h: 7 },
+    { type: BUILDING_TYPES.BANK,       name: 'Bank',             x: 44, y: 8,  w: 8,  h: 6 },
+    { type: BUILDING_TYPES.GENERAL,    name: 'General Store',    x: 55, y: 8,  w: 8,  h: 5 },
+    { type: BUILDING_TYPES.JAIL,       name: 'Jail',             x: 10, y: 34, w: 7,  h: 6 },
+    { type: BUILDING_TYPES.CHURCH,     name: 'Church',           x: 24, y: 34, w: 8,  h: 8 },
+    { type: BUILDING_TYPES.STABLE,     name: 'Stable',           x: 44, y: 34, w: 10, h: 6 },
+    { type: BUILDING_TYPES.HOTEL,      name: 'Hotel',            x: 55, y: 34, w: 8,  h: 7 },
+    { type: BUILDING_TYPES.BLACKSMITH, name: 'Blacksmith',       x: 65, y: 8,  w: 7,  h: 5 },
+    { type: BUILDING_TYPES.HOUSE,      name: 'House 1',          x: 10, y: 47, w: 6,  h: 5 },
+    { type: BUILDING_TYPES.HOUSE,      name: 'House 2',          x: 24, y: 47, w: 6,  h: 5 },
+    { type: BUILDING_TYPES.HOUSE,      name: 'House 3',          x: 44, y: 47, w: 6,  h: 5 },
+    { type: BUILDING_TYPES.WELL,       name: 'Well',             x: 39, y: 24, w: 3,  h: 3 },
+    { type: BUILDING_TYPES.GALLOWS,    name: 'Gallows',          x: 34, y: 34, w: 4,  h: 4 },
   ];
 
-  for (const b of bDefs) {
-    // Walls
-    for (let dy = 0; dy < b.h; dy++) {
-      for (let dx = 0; dx < b.w; dx++) {
-        const mx = b.x + dx, my = b.y + dy;
-        if (mx >= 0 && mx < MAP_W && my >= 0 && my < MAP_H) {
-          if (dy === 0 || dy === b.h - 1 || dx === 0 || dx === b.w - 1) {
-            map[my][mx] = 3; // wall
-          } else {
-            map[my][mx] = 8; // wood floor
-          }
+  for (const def of bldgDefs) {
+    const bx = def.x, by = def.y, bw = def.w, bh = def.h;
+
+    // walls around perimeter, wood floor inside
+    for (let dy = 0; dy < bh; dy++) {
+      for (let dx = 0; dx < bw; dx++) {
+        const tx = bx + dx, ty = by + dy;
+        if (tx >= MAP_W || ty >= MAP_H) continue;
+        if (dy === 0 || dy === bh - 1 || dx === 0 || dx === bw - 1) {
+          map[ty][tx] = 3; // wall
+        } else {
+          map[ty][tx] = 8; // wood floor
         }
       }
     }
-    // Door at bottom center
-    const doorX = b.x + Math.floor(b.w / 2);
-    const doorY = b.y + b.h - 1;
-    if (doorX >= 0 && doorX < MAP_W && doorY >= 0 && doorY < MAP_H) {
-      map[doorY][doorX] = 4;
+
+    // door at bottom-center
+    const doorX = bx + Math.floor(bw / 2);
+    const doorY = by + bh - 1;
+    if (doorX < MAP_W && doorY < MAP_H) {
+      map[doorY][doorX] = 4; // door
     }
-    buildings.push({ ...b, doorX, doorY });
+
+    buildings.push({
+      type: def.type,
+      name: def.name,
+      w: bw,
+      h: bh,
+      x: bx,
+      y: by,
+      doorX: doorX,
+      doorY: doorY,
+    });
   }
 
-  // Scatter cacti
-  for (let i = 0; i < 60; i++) {
-    const x = rand(1, MAP_W - 2), y = rand(1, MAP_H - 2);
-    if (map[y][x] === 0) map[y][x] = 6;
+  // --- Fences around stable ---
+  const stable = buildings.find(b => b.type === BUILDING_TYPES.STABLE);
+  if (stable) {
+    const fx1 = stable.x - 1, fy1 = stable.y - 1;
+    const fx2 = stable.x + stable.w, fy2 = stable.y + stable.h;
+    for (let x = fx1; x <= fx2; x++) {
+      if (x >= 0 && x < MAP_W) {
+        if (fy1 >= 0 && fy1 < MAP_H && map[fy1][x] === 0) map[fy1][x] = 10;
+        if (fy2 >= 0 && fy2 < MAP_H && map[fy2][x] === 0) map[fy2][x] = 10;
+      }
+    }
+    for (let y = fy1; y <= fy2; y++) {
+      if (y >= 0 && y < MAP_H) {
+        if (fx1 >= 0 && fx1 < MAP_W && map[y][fx1] === 0) map[y][fx1] = 10;
+        if (fx2 >= 0 && fx2 < MAP_W && map[y][fx2] === 0) map[y][fx2] = 10;
+      }
+    }
+    // gate opening at front-center
+    const gateX = stable.doorX;
+    if (fy2 >= 0 && fy2 < MAP_H && gateX >= 0 && gateX < MAP_W) {
+      map[fy2][gateX] = 1;
+    }
   }
 
-  // Scatter rocks
-  for (let i = 0; i < 40; i++) {
-    const x = rand(1, MAP_W - 2), y = rand(1, MAP_H - 2);
-    if (map[y][x] === 0) map[y][x] = 7;
+  // --- Scatter 60 cacti on sand ---
+  let placed = 0;
+  while (placed < 60) {
+    const cx = rand(1, MAP_W - 2);
+    const cy = rand(1, MAP_H - 2);
+    if (map[cy][cx] === 0) {
+      map[cy][cx] = 6; // cactus
+      placed++;
+    }
   }
 
-  // Small pond
-  for (let dy = -2; dy <= 2; dy++) {
-    for (let dx = -3; dx <= 3; dx++) {
-      const x = 70 + dx, y = 50 + dy;
-      if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H && Math.hypot(dx, dy) < 3) {
-        map[y][x] = 5;
+  // --- Scatter 40 rocks on sand ---
+  placed = 0;
+  while (placed < 40) {
+    const rx = rand(1, MAP_W - 2);
+    const ry = rand(1, MAP_H - 2);
+    if (map[ry][rx] === 0) {
+      map[ry][rx] = 7; // rock
+      placed++;
+    }
+  }
+
+  // --- Pond at (70,50) radius 3, with grass border ---
+  const pondCX = 70, pondCY = 50, pondR = 3;
+  for (let dy = -pondR - 1; dy <= pondR + 1; dy++) {
+    for (let dx = -pondR - 1; dx <= pondR + 1; dx++) {
+      const px = pondCX + dx, py = pondCY + dy;
+      if (px < 0 || px >= MAP_W || py < 0 || py >= MAP_H) continue;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= pondR) {
+        map[py][px] = 5; // water
+      } else if (d <= pondR + 1.5 && map[py][px] === 0) {
+        map[py][px] = 9; // grass
       }
     }
   }
 
-  return { map, buildings };
+  return { map: map, buildings: buildings };
 }
 
-// ---- NPC GENERATION ----
+// ─────────────────────────────────────────────
+// §B  NPC SYSTEM
+// ─────────────────────────────────────────────
+
 const NPC_NAMES = {
-  townsperson: ['Martha', 'Hank', 'Clara', 'Jeb', 'Eliza', 'Silas', 'Ada', 'Gus', 'Pearl', 'Clem', 'Maude', 'Buck'],
-  outlaw: ['Black Jack', 'Rattlesnake Pete', 'El Diablo', 'Scarface McGee', 'Dead-Eye Dan', 'Bloody Mary'],
-  bartender: ['Big Jim'],
-  shopkeeper: ['Mr. Chen'],
-  mayor: ['Mayor Hargrove'],
-  deputy: ['Deputy Barnes'],
-  banker: ['Mr. Whitmore'],
-  preacher: ['Father O\'Brien'],
-  stranger: ['The Stranger', 'Mysterious Drifter', 'One-Eyed Jack'],
-  bounty: ['Wanted: El Lobo', 'Wanted: The Viper', 'Wanted: Mad Dog Murphy', 'Wanted: Coyote Bill']
+  townsperson: [
+    'Earl', 'Martha', 'Jeb', 'Clara', 'Hank', 'Abigail', 'Roscoe', 'Ellie',
+    'Virgil', 'Daisy', 'Cletus', 'Mabel', 'Otis', 'Sadie', 'Luther', 'Prudence',
+    'Floyd', 'Nettie', 'Gus', 'Hattie', 'Wilbur', 'Opal', 'Chester', 'Birdie',
+  ],
+  outlaw: [
+    'Snake', 'Rattler', 'Coyote', 'Buzzard', 'Scar', 'Viper', 'Jackal', 'Fang',
+    'Crow', 'Grim', 'Bones', 'Dusty', 'Reno', 'Blaze', 'Copper', 'Slade',
+    'Dagger', 'Flint', 'Slash', 'Rook', 'Bane', 'Spike',
+  ],
+  stranger: [
+    'The Drifter', 'The Stranger', 'Shadow', 'Whisper', 'No-Name', 'The Ghost',
+    'Silent Jack', 'Pale Rider', 'The Wanderer', 'Tombstone', 'Phantom', 'Ash',
+    'The Revenant', 'Dustwalker', 'The Nomad', 'Wraith', 'Holloway', 'Graves',
+    'Dusk', 'The Vagrant', 'Cipher', 'Zero',
+  ],
 };
 
 const DIALOGS = {
   townsperson: {
     idle: [
-      "Fine day, Sheriff. Watch yourself out there.",
-      "Heard there's trouble brewin' at the edge of town.",
-      "Thank the Lord we got a lawman 'round here.",
-      "My chickens been real nervous lately. Somethin' ain't right.",
-      "You keep this town safe, Sheriff. We're countin' on ya.",
-      "Seen some shady characters near the saloon last night."
+      "Fine day, ain't it, Sheriff?",
+      "Watch yourself out there, law man.",
+      "I heard there's trouble brewin' at the saloon.",
+      "My crops ain't doin' so good this year.",
+      "Thank the lord we got a sheriff in this town.",
+      "I saw some shady characters near the bank.",
+      "The well water's been tastin' funny lately.",
+      "You keepin' this town safe? Sure feels like it.",
+      "Heard tell of outlaws roamin' the desert.",
+      "Good to see you makin' your rounds, Sheriff.",
     ],
     crime: [
       "Sheriff! There's trouble! You gotta help!",
-      "Quick, Sheriff! Someone's causin' a ruckus!",
-      "Thank goodness you're here! We need you!"
-    ]
+      "Outlaws! They got guns! Do somethin'!",
+      "For the love of God, Sheriff, save us!",
+      "I saw 'em run toward the bank! Hurry!",
+      "They're shootin' up the place! Help!",
+    ],
+    repHigh: [
+      "You're the best sheriff we ever had!",
+      "My children look up to you, Sheriff.",
+      "This town is blessed to have you.",
+    ],
+    repLow: [
+      "You ain't doin' much for this town, are ya?",
+      "Some sheriff you turned out to be...",
+      "Maybe we need a new law man around here.",
+    ],
   },
+
   bartender: {
     idle: [
-      "What'll it be, Sheriff? First one's on the house.",
-      "Word travels fast in these parts. Keep your ears open.",
-      "A cowboy walked in yesterday askin' about the bank vault...",
-      "You look like you could use a drink, lawman."
+      "What'll it be, Sheriff? Whiskey's on the house.",
+      "Belly up to the bar, partner.",
+      "Things have been mighty rowdy in here lately.",
+      "I water down the drinks for the mean ones.",
+      "You look like you could use a stiff one.",
+      "Business is boomin'... mostly fights though.",
+      "The piano player quit. Shame, that.",
+      "Don't mind the bullet holes. Character, I say.",
     ],
-    tip: [
-      "Between you and me, I heard {name} is plannin' somethin' at {place}.",
-      "Watch the {place} tonight, Sheriff. Somethin's brewin'.",
-      "There's a stranger in town been askin' a lot of questions about the {place}."
-    ]
+    tips: [
+      "Word is {name} been actin' suspicious near the {place}.",
+      "I overheard some fellas talkin' about hittin' the {place}.",
+      "Keep your eye on {name}. Somethin' ain't right.",
+      "Saw {name} hidin' somethin' behind the {place}.",
+      "A stranger was askin' about the {place}'s layout.",
+    ],
   },
+
   outlaw: {
     hostile: [
-      "This town ain't big enough for the both of us!",
-      "You're gonna regret wearin' that badge, lawman.",
-      "Draw, Sheriff! Let's settle this like men!",
-      "I've killed better men than you for less."
+      "You ain't takin' me alive, Sheriff!",
+      "Draw, you yellow-bellied tin star!",
+      "This town ain't big enough for both of us!",
+      "I'll put you in a pine box!",
+      "You're gonna regret wearin' that badge!",
+      "Say your prayers, law dog!",
+      "I've killed better men than you!",
+      "Your badge won't stop a bullet!",
     ],
     surrender: [
       "Alright, alright! I give up! Don't shoot!",
-      "You got me, Sheriff. I'll come quietly.",
-      "I ain't lookin' for trouble no more."
-    ]
+      "I surrender! Just... just don't hurt me!",
+      "You win, Sheriff. I'm done runnin'.",
+      "Take me to jail. I ain't got no fight left.",
+    ],
   },
+
   mayor: {
     idle: [
-      "Sheriff, this town needs order. Don't let me down.",
-      "The governor is watchin'. Keep the peace, and there'll be a bonus.",
-      "Folks are talkin' about your work. Keep it up.",
-      "I need this town runnin' smooth for the railroad investors."
+      "Sheriff, the town council appreciates your service.",
+      "We need law and order to prosper.",
+      "The governor is watching our little town.",
+      "I've got political ambitions, Sheriff. Keep things clean.",
+      "Revenue is up since you started keepin' the peace.",
+      "The townspeople are countin' on us both.",
     ],
     quest: [
-      "Sheriff, I got a job for you. Interested?",
-      "There's a matter that needs your... personal attention."
-    ]
+      "Sheriff, I have a task that requires your... expertise.",
+      "There's a matter of some delicacy I need handled.",
+      "The town needs you for a special assignment.",
+    ],
   },
+
   shopkeeper: {
     idle: [
-      "Welcome, Sheriff! Got some new stock today.",
-      "Business has been slow since those outlaws showed up.",
-      "Need supplies? I got the best prices this side of the Pecos."
-    ]
+      "Got fresh supplies in just this mornin'.",
+      "Prices are fair, Sheriff. No gougin' here.",
+      "Need ammo? Tonics? I got it all.",
+      "Business is steady. Outlaws are good for sales, oddly.",
+      "Best goods this side of the Pecos.",
+    ],
   },
+
   deputy: {
     idle: [
-      "Ready for duty, Sheriff!",
-      "All quiet on my end. You need anything?",
-      "I've been keepin' an eye on the prisoners. They're behavin'.",
-      "Heard gunshots earlier. Everything alright?"
-    ]
+      "Ready for duty, Sheriff.",
+      "All quiet on my end, boss.",
+      "I'll keep an eye on the jail.",
+      "Need backup? Just say the word.",
+      "Prisoners are fed and accounted for.",
+    ],
   },
+
   banker: {
     idle: [
-      "Good day, Sheriff. The vault is secure.",
-      "Your salary's been deposited. $50 for the week.",
-      "We've had some suspicious characters casing the bank..."
-    ]
+      "The vault is secure, Sheriff. For now.",
+      "Gold shipment coming in next week.",
+      "Interest rates are holding steady.",
+      "We've had some... concerning visitors lately.",
+      "Your account is in good standing, Sheriff.",
+    ],
   },
+
   preacher: {
     idle: [
-      "Bless you, Sheriff. The Lord's work takes many forms.",
-      "Even a lawman needs salvation, friend.",
-      "I pray for peace in this town every night."
-    ]
+      "The Lord watches over this town, Sheriff.",
+      "Come to Sunday service. It'll do your soul good.",
+      "I pray for the souls of those outlaws.",
+      "Peace be upon you, Sheriff.",
+      "Even in the desert, there is grace.",
+    ],
   },
+
   stranger: {
     idle: [
-      "...",
-      "You don't want to know my business, lawman.",
-      "I'm just passin' through. Don't mind me.",
-      "Nice badge. Be a shame if somethin' happened to it."
-    ]
-  }
+      "...I've seen things out there in the desert.",
+      "Don't ask where I came from. It don't matter.",
+      "This town... it reminds me of another. Before the fire.",
+      "You got a look about you, Sheriff. Seen it before.",
+      "I ain't lookin' for trouble. Trouble finds me.",
+      "Keep your friends close, Sheriff. And your gun closer.",
+      "The desert takes everything eventually.",
+      "I'll be movin' on soon. Maybe.",
+    ],
+  },
 };
 
-function generateNPCs(buildings) {
-  const npcs = [];
-  let id = 0;
-
-  // Fixed NPCs
-  const saloon = buildings.find(b => b.type === BUILDING_TYPES.SALOON);
-  if (saloon) {
-    npcs.push(createNPC(id++, NPC_TYPES.BARTENDER, 'Big Jim', saloon.x + 5, saloon.y + 2, saloon));
-  }
-
-  const bank = buildings.find(b => b.type === BUILDING_TYPES.BANK);
-  if (bank) {
-    npcs.push(createNPC(id++, NPC_TYPES.BANKER, 'Mr. Whitmore', bank.x + 4, bank.y + 2, bank));
-  }
-
-  const church = buildings.find(b => b.type === BUILDING_TYPES.CHURCH);
-  if (church) {
-    npcs.push(createNPC(id++, NPC_TYPES.PREACHER, "Father O'Brien", church.x + 4, church.y + 3, church));
-  }
-
-  const general = buildings.find(b => b.type === BUILDING_TYPES.GENERAL);
-  if (general) {
-    npcs.push(createNPC(id++, NPC_TYPES.SHOPKEEPER, 'Mr. Chen', general.x + 4, general.y + 2, general));
-  }
-
-  const sheriff = buildings.find(b => b.type === BUILDING_TYPES.SHERIFF);
-  if (sheriff) {
-    npcs.push(createNPC(id++, NPC_TYPES.DEPUTY, 'Deputy Barnes', sheriff.x + 4, sheriff.y + 3, sheriff));
-  }
-
-  // Mayor wanders
-  npcs.push(createNPC(id++, NPC_TYPES.MAYOR, 'Mayor Hargrove', 40, 26, null));
-
-  // Townspeople
-  for (let i = 0; i < 12; i++) {
-    const name = NPC_NAMES.townsperson[i % NPC_NAMES.townsperson.length];
-    const x = rand(5, MAP_W - 5), y = rand(5, MAP_H - 5);
-    npcs.push(createNPC(id++, NPC_TYPES.TOWNSPERSON, name, x, y, null));
-  }
-
-  // Stranger
-  npcs.push(createNPC(id++, NPC_TYPES.STRANGER, 'The Stranger', 60, 30, null));
-
-  return npcs;
+function getNPCColors(type) {
+  const variations = {
+    townsperson: [
+      { hat: '#5a4a2a', shirt: '#8b6b4b', pants: '#4a4a6a', skin: '#d4a574' },
+      { hat: '#3a3a3a', shirt: '#6a3a2a', pants: '#4a3a2a', skin: '#c49464' },
+      { hat: '#7a5a30', shirt: '#4a6a4a', pants: '#5a4a3a', skin: '#e8c8a0' },
+      { hat: '#4a3020', shirt: '#8a4a3a', pants: '#3a3a5a', skin: '#b8844a' },
+      { hat: '#6a4a28', shirt: '#5a5a7a', pants: '#4a4a4a', skin: '#d4a574' },
+    ],
+    outlaw: [
+      { hat: '#1a1a1a', shirt: '#2a2a2a', pants: '#1a1a2a', skin: '#c49464', bandana: '#8b0000' },
+      { hat: '#2a1a0a', shirt: '#3a2a1a', pants: '#2a2a2a', skin: '#d4a574', bandana: '#600000' },
+      { hat: '#0a0a0a', shirt: '#1a1a1a', pants: '#0a0a1a', skin: '#b8844a', bandana: '#aa2020' },
+    ],
+    bartender: [
+      { hat: '#4a3020', shirt: '#ffffff', pants: '#2a2a2a', skin: '#d4a574', apron: '#c8c8c8' },
+    ],
+    shopkeeper: [
+      { hat: '#6a5a3a', shirt: '#7a6a4a', pants: '#4a4a4a', skin: '#d4a574', apron: '#8a7a5a' },
+    ],
+    mayor: [
+      { hat: '#1a1a1a', shirt: '#2a2a4a', pants: '#1a1a1a', skin: '#d4a574', vest: '#8b0000' },
+    ],
+    deputy: [
+      { hat: '#4a3a1a', shirt: '#6a5a3a', pants: '#4a4a5a', skin: '#c49464', badge: '#ffd700' },
+    ],
+    banker: [
+      { hat: '#2a2a2a', shirt: '#3a3a5a', pants: '#2a2a2a', skin: '#e8c8a0', vest: '#4a4a4a' },
+    ],
+    preacher: [
+      { hat: '#1a1a1a', shirt: '#1a1a1a', pants: '#1a1a1a', skin: '#d4a574', collar: '#ffffff' },
+    ],
+    stranger: [
+      { hat: '#2a2010', shirt: '#4a3a2a', pants: '#3a3020', skin: '#b8844a', cloak: '#3a2a1a' },
+      { hat: '#1a1a1a', shirt: '#2a2a2a', pants: '#1a1a1a', skin: '#c49464', cloak: '#1a1a2a' },
+    ],
+    bounty: [
+      { hat: '#1a0a0a', shirt: '#3a1a1a', pants: '#2a1a0a', skin: '#c49464', bandana: '#660000' },
+    ],
+  };
+  const pool = variations[type] || variations.townsperson;
+  return pool[rand(0, pool.length - 1)];
 }
 
 function createNPC(id, type, name, tileX, tileY, building) {
+  const personalities = ['friendly', 'grumpy', 'nervous', 'suspicious'];
   return {
-    id, type, name,
+    id: id,
+    type: type,
+    name: name,
     x: tileX * TILE + TILE / 2,
     y: tileY * TILE + TILE / 2,
     homeX: tileX * TILE + TILE / 2,
     homeY: tileY * TILE + TILE / 2,
-    building,
-    dir: rand(0, 3), // 0=down 1=up 2=left 3=right
-    state: 'idle', // idle, walking, fleeing, hostile, arrested, dead
+    building: building,
+    dir: rand(0, 3), // 0=down,1=up,2=left,3=right
+    state: 'idle',
     moveTimer: rand(60, 180),
     animFrame: 0,
     animTimer: 0,
-    hp: type === NPC_TYPES.OUTLAW || type === NPC_TYPES.BOUNTY ? 3 : 1,
+    hp: type === NPC_TYPES.OUTLAW || type === NPC_TYPES.BOUNTY ? 4 : 3,
     hostile: false,
-    wantsToFight: false,
     surrendered: false,
-    speed: type === NPC_TYPES.OUTLAW ? 1.8 : 1.2,
+    speed: type === NPC_TYPES.OUTLAW ? OUTLAW_SPEED : NPC_SPEED,
     dialogCooldown: 0,
-    questGiver: type === NPC_TYPES.MAYOR || type === NPC_TYPES.BARTENDER,
-    colors: getNPCColors(type)
+    personality: personalities[rand(0, personalities.length - 1)],
+    relationship: 50,
+    colors: getNPCColors(type),
+    schedule: [],
+    lastDialogIndex: -1,
+    visible: true,
+    arrested: false,
+    dead: false,
+    fleeing: false,
+    targetX: 0,
+    targetY: 0,
+    pathTimer: 0,
+    awareness: 0,
+    weapon: type === NPC_TYPES.OUTLAW || type === NPC_TYPES.BOUNTY ? 'pistol' : null,
+    shootCooldown: 0,
+    wanderRadius: building ? 3 * TILE : 6 * TILE,
   };
 }
 
-function getNPCColors(type) {
-  switch (type) {
-    case NPC_TYPES.OUTLAW:
-    case NPC_TYPES.BOUNTY:
-      return { hat: '#1a1a1a', body: '#2a2a2a', skin: '#c49464', pants: '#3a2a1a' };
-    case NPC_TYPES.BARTENDER:
-      return { hat: null, body: '#f0e0c0', skin: '#d4a574', pants: '#4a3a2a' };
-    case NPC_TYPES.MAYOR:
-      return { hat: '#2a2a4a', body: '#3a3a5a', skin: '#d4a574', pants: '#2a2a3a' };
-    case NPC_TYPES.DEPUTY:
-      return { hat: '#5a4a2a', body: '#6a5a3a', skin: '#c49464', pants: '#4a3a2a' };
-    case NPC_TYPES.PREACHER:
-      return { hat: '#1a1a1a', body: '#1a1a1a', skin: '#d4a574', pants: '#1a1a1a' };
-    case NPC_TYPES.SHOPKEEPER:
-      return { hat: null, body: '#8a7050', skin: '#c49a64', pants: '#5a4a3a' };
-    case NPC_TYPES.STRANGER:
-      return { hat: '#2a1a0a', body: '#4a3a2a', skin: '#b08050', pants: '#2a1a0a' };
-    case NPC_TYPES.BANKER:
-      return { hat: '#2a2a2a', body: '#4a4a5a', skin: '#d4a574', pants: '#2a2a3a' };
-    default:
-      const hue = rand(0, 5);
-      const bodies = ['#8b1a1a', '#1a5a1a', '#4a3a8a', '#8a6a2a', '#2a4a6a', '#6a2a4a'];
-      return { hat: '#5a4a2a', body: bodies[hue], skin: '#d4a574', pants: '#5a4030' };
+function generateNPCs(buildings) {
+  const npcs = [];
+  let npcId = 0;
+
+  // --- Fixed building NPCs ---
+
+  // Bartender in Saloon
+  const saloon = buildings.find(b => b.type === BUILDING_TYPES.SALOON);
+  if (saloon) {
+    const npc = createNPC(npcId++, NPC_TYPES.BARTENDER, 'Barkeep Bill', saloon.x + 3, saloon.y + 2, saloon);
+    npc.schedule = [
+      { startHour: 8, endHour: 2, buildingType: BUILDING_TYPES.SALOON },
+    ];
+    npcs.push(npc);
   }
+
+  // Shopkeeper in General Store
+  const general = buildings.find(b => b.type === BUILDING_TYPES.GENERAL);
+  if (general) {
+    const npc = createNPC(npcId++, NPC_TYPES.SHOPKEEPER, 'Merchant Mae', general.x + 3, general.y + 2, general);
+    npc.schedule = [
+      { startHour: 7, endHour: 19, buildingType: BUILDING_TYPES.GENERAL },
+    ];
+    npcs.push(npc);
+  }
+
+  // Deputy in Sheriff's Office
+  const sheriff = buildings.find(b => b.type === BUILDING_TYPES.SHERIFF);
+  if (sheriff) {
+    const npc = createNPC(npcId++, NPC_TYPES.DEPUTY, 'Deputy Dan', sheriff.x + 3, sheriff.y + 2, sheriff);
+    npc.schedule = [
+      { startHour: 6, endHour: 18, buildingType: BUILDING_TYPES.SHERIFF },
+      { startHour: 18, endHour: 22, buildingType: BUILDING_TYPES.SALOON },
+    ];
+    npcs.push(npc);
+  }
+
+  // Banker in Bank
+  const bank = buildings.find(b => b.type === BUILDING_TYPES.BANK);
+  if (bank) {
+    const npc = createNPC(npcId++, NPC_TYPES.BANKER, 'Banker Beauregard', bank.x + 3, bank.y + 2, bank);
+    npc.schedule = [
+      { startHour: 8, endHour: 17, buildingType: BUILDING_TYPES.BANK },
+    ];
+    npcs.push(npc);
+  }
+
+  // Preacher in Church
+  const church = buildings.find(b => b.type === BUILDING_TYPES.CHURCH);
+  if (church) {
+    const npc = createNPC(npcId++, NPC_TYPES.PREACHER, 'Reverend Josiah', church.x + 3, church.y + 3, church);
+    npc.schedule = [
+      { startHour: 6, endHour: 21, buildingType: BUILDING_TYPES.CHURCH },
+    ];
+    npcs.push(npc);
+  }
+
+  // Blacksmith shopkeeper
+  const blacksmith = buildings.find(b => b.type === BUILDING_TYPES.BLACKSMITH);
+  if (blacksmith) {
+    const npc = createNPC(npcId++, NPC_TYPES.SHOPKEEPER, 'Iron Mike', blacksmith.x + 3, blacksmith.y + 2, blacksmith);
+    npc.schedule = [
+      { startHour: 6, endHour: 20, buildingType: BUILDING_TYPES.BLACKSMITH },
+    ];
+    npcs.push(npc);
+  }
+
+  // --- Mayor ---
+  const hotel = buildings.find(b => b.type === BUILDING_TYPES.HOTEL);
+  if (hotel) {
+    const npc = createNPC(npcId++, NPC_TYPES.MAYOR, 'Mayor Whitfield', hotel.x + 3, hotel.y + 3, hotel);
+    npc.schedule = [
+      { startHour: 9, endHour: 12, buildingType: BUILDING_TYPES.HOTEL },
+      { startHour: 12, endHour: 17, buildingType: BUILDING_TYPES.SHERIFF },
+      { startHour: 17, endHour: 21, buildingType: BUILDING_TYPES.SALOON },
+    ];
+    npcs.push(npc);
+  }
+
+  // --- Stranger ---
+  const strangerNames = NPC_NAMES.stranger;
+  const sName = strangerNames[rand(0, strangerNames.length - 1)];
+  const strangerNPC = createNPC(npcId++, NPC_TYPES.STRANGER, sName, 60, 30, null);
+  strangerNPC.schedule = [
+    { startHour: 20, endHour: 6, buildingType: BUILDING_TYPES.SALOON },
+  ];
+  npcs.push(strangerNPC);
+
+  // --- 15 Townspeople scattered around town ---
+  const townNames = NPC_NAMES.townsperson.slice();
+  const houses = buildings.filter(b => b.type === BUILDING_TYPES.HOUSE);
+
+  for (let i = 0; i < 15; i++) {
+    const nameIdx = rand(0, townNames.length - 1);
+    const tName = townNames.splice(nameIdx, 1)[0] || ('Townsfolk ' + i);
+
+    // Place near roads or buildings
+    let tx, ty;
+    if (i < houses.length) {
+      tx = houses[i].x + rand(1, houses[i].w - 2);
+      ty = houses[i].y + rand(1, houses[i].h - 2);
+    } else {
+      // scatter along roads
+      const roadChoice = rand(0, 3);
+      if (roadChoice === 0) { tx = rand(2, MAP_W - 3); ty = rand(28, 31); }
+      else if (roadChoice === 1) { tx = rand(38, 41); ty = rand(2, MAP_H - 3); }
+      else if (roadChoice === 2) { tx = rand(2, MAP_W - 3); ty = rand(15, 16); }
+      else { tx = rand(2, MAP_W - 3); ty = rand(43, 44); }
+    }
+
+    const home = i < houses.length ? houses[i] : null;
+    const npc = createNPC(npcId++, NPC_TYPES.TOWNSPERSON, tName, tx, ty, home);
+    npc.schedule = [
+      { startHour: 7, endHour: 12, buildingType: BUILDING_TYPES.GENERAL },
+      { startHour: 12, endHour: 18, buildingType: null }, // wander
+      { startHour: 18, endHour: 22, buildingType: BUILDING_TYPES.SALOON },
+      { startHour: 22, endHour: 7, buildingType: BUILDING_TYPES.HOUSE },
+    ];
+    npcs.push(npc);
+  }
+
+  return npcs;
 }
 
-// ---- CRIME SYSTEM ----
+// ─────────────────────────────────────────────
+// §C  CRIME SYSTEM
+// ─────────────────────────────────────────────
+
 const CRIME_TYPES = [
   {
-    name: 'Bank Robbery', building: BUILDING_TYPES.BANK, severity: 3,
-    desc: 'Outlaws are robbing the bank!', repGain: 15, repLoss: -10, gold: 100,
-    outlawCount: 2
+    name: 'Bank Robbery',
+    buildingType: BUILDING_TYPES.BANK,
+    severity: 5,
+    desc: 'Outlaws are robbing the bank! Stop them before they crack the vault!',
+    repGain: 15,
+    repLoss: 12,
+    goldReward: 80,
+    outlawCount: 3,
+    mechanic: 'timed_vault',
   },
   {
-    name: 'Bar Fight', building: BUILDING_TYPES.SALOON, severity: 1,
-    desc: 'A fight has broken out in the saloon!', repGain: 5, repLoss: -3, gold: 20,
-    outlawCount: 1
+    name: 'Bar Fight',
+    buildingType: BUILDING_TYPES.SALOON,
+    severity: 2,
+    desc: 'A violent brawl has broken out in the saloon!',
+    repGain: 5,
+    repLoss: 3,
+    goldReward: 20,
+    outlawCount: 2,
+    mechanic: 'standard',
   },
   {
-    name: 'Horse Theft', building: BUILDING_TYPES.STABLE, severity: 2,
-    desc: 'Someone is stealing horses from the stables!', repGain: 10, repLoss: -7, gold: 50,
-    outlawCount: 1
+    name: 'Horse Theft',
+    buildingType: BUILDING_TYPES.STABLE,
+    severity: 3,
+    desc: 'Someone is stealing horses from the stable! Chase them down!',
+    repGain: 8,
+    repLoss: 6,
+    goldReward: 40,
+    outlawCount: 1,
+    mechanic: 'chase',
   },
   {
-    name: 'Shootout', building: null, severity: 3,
-    desc: 'Gunfight in the streets!', repGain: 12, repLoss: -8, gold: 75,
-    outlawCount: 2
+    name: 'Shootout',
+    buildingType: null,
+    severity: 4,
+    desc: 'Outlaws are having a shootout in the street!',
+    repGain: 12,
+    repLoss: 10,
+    goldReward: 60,
+    outlawCount: 3,
+    mechanic: 'standard',
   },
   {
-    name: 'Store Holdup', building: BUILDING_TYPES.GENERAL, severity: 2,
-    desc: 'The general store is being held up!', repGain: 8, repLoss: -5, gold: 40,
-    outlawCount: 1
+    name: 'Store Holdup',
+    buildingType: BUILDING_TYPES.GENERAL,
+    severity: 3,
+    desc: 'Armed bandits are holding up the general store!',
+    repGain: 8,
+    repLoss: 6,
+    goldReward: 35,
+    outlawCount: 2,
+    mechanic: 'standard',
   },
   {
-    name: 'Jail Break', building: BUILDING_TYPES.JAIL, severity: 3,
-    desc: 'Prisoners are trying to escape!', repGain: 15, repLoss: -12, gold: 80,
-    outlawCount: 3
+    name: 'Jail Break',
+    buildingType: BUILDING_TYPES.JAIL,
+    severity: 4,
+    desc: 'Prisoners are attempting to break out of jail!',
+    repGain: 12,
+    repLoss: 10,
+    goldReward: 50,
+    outlawCount: 4,
+    mechanic: 'waves',
   },
   {
-    name: 'Kidnapping', building: BUILDING_TYPES.HOUSE, severity: 3,
-    desc: 'A citizen has been taken hostage!', repGain: 18, repLoss: -15, gold: 120,
-    outlawCount: 2
+    name: 'Kidnapping',
+    buildingType: BUILDING_TYPES.HOUSE,
+    severity: 4,
+    desc: 'A townsperson has been kidnapped! Rescue them before it is too late!',
+    repGain: 14,
+    repLoss: 12,
+    goldReward: 65,
+    outlawCount: 2,
+    mechanic: 'hostage',
   },
   {
-    name: 'Arson', building: BUILDING_TYPES.HOTEL, severity: 2,
-    desc: "Someone's trying to burn down the hotel!", repGain: 10, repLoss: -8, gold: 60,
-    outlawCount: 1
-  }
+    name: 'Arson',
+    buildingType: BUILDING_TYPES.HOTEL,
+    severity: 4,
+    desc: 'Someone set the hotel on fire! Put out the flames and catch the arsonist!',
+    repGain: 13,
+    repLoss: 10,
+    goldReward: 55,
+    outlawCount: 1,
+    mechanic: 'fire',
+  },
+  {
+    name: 'Stagecoach Robbery',
+    buildingType: null,
+    severity: 3,
+    desc: 'Bandits are attacking the incoming stagecoach on the main road!',
+    repGain: 10,
+    repLoss: 8,
+    goldReward: 45,
+    outlawCount: 3,
+    mechanic: 'chase',
+  },
+  {
+    name: 'Assassination',
+    buildingType: BUILDING_TYPES.HOTEL,
+    severity: 5,
+    desc: 'An assassin is targeting someone important in town!',
+    repGain: 16,
+    repLoss: 14,
+    goldReward: 90,
+    outlawCount: 1,
+    mechanic: 'standard',
+  },
 ];
 
 function generateCrime(buildings, gameState) {
-  const type = CRIME_TYPES[rand(0, CRIME_TYPES.length - 1)];
+  // pick a crime type weighted by day and difficulty
+  const day = gameState.day || 1;
+  const maxSeverity = Math.min(5, 2 + Math.floor(day / 3));
+
+  // filter crimes by severity the player can handle
+  const eligible = CRIME_TYPES.filter(c => c.severity <= maxSeverity);
+  const crime = eligible[rand(0, eligible.length - 1)];
+
+  // find target building
   let targetBuilding = null;
-  if (type.building !== null) {
-    targetBuilding = buildings.find(b => b.type === type.building);
-  }
-  if (!targetBuilding) {
-    targetBuilding = buildings[rand(0, buildings.length - 1)];
+  if (crime.buildingType !== null) {
+    const candidates = buildings.filter(b => b.type === crime.buildingType);
+    if (candidates.length > 0) {
+      targetBuilding = candidates[rand(0, candidates.length - 1)];
+    }
   }
 
+  // if no building, pick a road location
+  let crimeX, crimeY;
+  if (targetBuilding) {
+    crimeX = targetBuilding.doorX;
+    crimeY = targetBuilding.doorY;
+  } else {
+    // spawn on main road intersection area
+    crimeX = rand(30, 50);
+    crimeY = rand(25, 35);
+  }
+
+  // generate outlaw names
+  const outlawPool = NPC_NAMES.outlaw.slice();
+  const outlaws = [];
+  for (let i = 0; i < crime.outlawCount; i++) {
+    const idx = rand(0, outlawPool.length - 1);
+    outlaws.push(outlawPool.splice(idx, 1)[0]);
+  }
+
+  // time limit based on mechanic
+  let timeLimit = CRIME_RESOLVE_TIME;
+  if (crime.mechanic === 'timed_vault') timeLimit = 90;
+  else if (crime.mechanic === 'fire') timeLimit = 60;
+  else if (crime.mechanic === 'hostage') timeLimit = 100;
+  else if (crime.mechanic === 'chase') timeLimit = 80;
+
   return {
-    ...type,
-    targetBuilding,
-    x: targetBuilding.doorX * TILE,
-    y: targetBuilding.doorY * TILE,
-    active: true,
-    timer: 30 + type.severity * 15, // seconds to respond
-    responded: false,
+    type: crime,
+    building: targetBuilding,
+    x: crimeX,
+    y: crimeY,
+    outlawNames: outlaws,
+    outlawNPCs: [], // filled when spawned
+    timeLimit: timeLimit,
+    timeRemaining: timeLimit,
+    started: false,
     resolved: false,
-    outlaws: []
+    failed: false,
+    mechanic: crime.mechanic,
+    mechanicState: {}, // extra state per mechanic (vault progress, fire tiles, etc.)
+    spawnTime: Date.now(),
   };
 }
 
-// ---- QUEST SYSTEM ----
+// ─────────────────────────────────────────────
+// §D  QUEST SYSTEM
+// ─────────────────────────────────────────────
+
 const QUEST_TEMPLATES = [
   {
-    name: 'Patrol the Town',
-    desc: 'Walk past all major buildings to check for trouble.',
+    name: 'Town Patrol',
+    desc: 'Walk the streets and visit {count} buildings to ensure order.',
     type: 'patrol',
-    repReward: 8, goldReward: 30,
-    targets: [BUILDING_TYPES.BANK, BUILDING_TYPES.SALOON, BUILDING_TYPES.GENERAL, BUILDING_TYPES.STABLE]
+    repReward: 5,
+    goldReward: 15,
+    targets: 4,
   },
   {
     name: 'Collect Taxes',
-    desc: 'Visit the shopkeepers and collect this week\'s taxes.',
-    type: 'visit',
-    repReward: 5, goldReward: 50,
-    targets: [BUILDING_TYPES.SALOON, BUILDING_TYPES.GENERAL, BUILDING_TYPES.HOTEL]
+    desc: 'Visit {count} businesses and collect their weekly taxes.',
+    type: 'collect_taxes',
+    repReward: 4,
+    goldReward: 30,
+    targets: 3,
   },
   {
     name: 'Bounty Hunt',
-    desc: 'A dangerous outlaw has been spotted near town. Hunt them down!',
+    desc: 'Track down and capture the wanted outlaw: {target}.',
     type: 'bounty',
-    repReward: 20, goldReward: 150,
-    targets: []
+    repReward: 12,
+    goldReward: 60,
+    targets: 1,
   },
   {
     name: 'Escort Duty',
-    desc: 'Escort the mayor safely across town.',
+    desc: 'Escort {target} safely from the {start} to the {end}.',
     type: 'escort',
-    repReward: 10, goldReward: 60,
-    targets: []
+    repReward: 8,
+    goldReward: 35,
+    targets: 1,
   },
   {
     name: 'Night Watch',
-    desc: 'Patrol the streets during the night hours.',
+    desc: 'Patrol the town between dusk and dawn. Keep the peace through the night.',
     type: 'nightwatch',
-    repReward: 12, goldReward: 40,
-    targets: []
-  }
+    repReward: 7,
+    goldReward: 25,
+    targets: 0,
+  },
+  {
+    name: 'Investigation',
+    desc: 'Investigate suspicious activity. Talk to {count} witnesses for clues.',
+    type: 'investigation',
+    repReward: 6,
+    goldReward: 20,
+    targets: 3,
+  },
+  {
+    name: 'Defend the Town',
+    desc: 'A gang raid is coming. Prepare defenses and repel {count} waves of attackers.',
+    type: 'defend',
+    repReward: 15,
+    goldReward: 75,
+    targets: 3,
+  },
+  {
+    name: 'Poker Tournament',
+    desc: 'Enter the saloon poker tournament and win {count} hands.',
+    type: 'poker_tournament',
+    repReward: 3,
+    goldReward: 50,
+    targets: 3,
+  },
 ];
 
-// ---- PARTICLE SYSTEM ----
+const WANTED_OUTLAWS = [
+  {
+    name: 'Black Bart',
+    desc: 'Notorious stagecoach robber. Wears all black. Armed and extremely dangerous.',
+    bounty: 100,
+    danger: 5,
+    hp: 8,
+  },
+  {
+    name: 'Dynamite Dolly',
+    desc: 'Explosives expert. Wanted for blowing up three banks across the territory.',
+    bounty: 120,
+    danger: 5,
+    hp: 6,
+  },
+  {
+    name: 'Iron Tom McGraw',
+    desc: 'Former blacksmith turned killer. Massive build. Crushes men with bare hands.',
+    bounty: 90,
+    danger: 4,
+    hp: 10,
+  },
+  {
+    name: 'Sidewinder Pete',
+    desc: 'Snake-fast draw. Never been beaten in a fair fight. Prefers unfair ones.',
+    bounty: 110,
+    danger: 5,
+    hp: 6,
+  },
+  {
+    name: 'Red Mary',
+    desc: 'Leads a gang of cattle rustlers. Deadly shot with a Winchester rifle.',
+    bounty: 80,
+    danger: 4,
+    hp: 7,
+  },
+  {
+    name: 'El Diablo',
+    desc: 'Mexican outlaw who crossed the border. Wanted for murder and robbery.',
+    bounty: 130,
+    danger: 5,
+    hp: 9,
+  },
+  {
+    name: 'Doc Hollister',
+    desc: 'Disgraced doctor turned poisoner. Charming but absolutely ruthless.',
+    bounty: 70,
+    danger: 3,
+    hp: 5,
+  },
+  {
+    name: 'One-Eye Jack',
+    desc: 'Lost an eye in a knife fight. Swore revenge on all lawmen. Carries a sawed-off.',
+    bounty: 95,
+    danger: 4,
+    hp: 7,
+  },
+];
+
+// === END PART 2 ===
+// === PART 3: RENDERING ===
+
+// ─────────────────────────────────────────────
+// §A  CANVAS SETUP
+// ─────────────────────────────────────────────
+const gameCanvas = document.getElementById('gameCanvas');
+const canvas = gameCanvas; // alias used by Parts 4-5
+const ctx = gameCanvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimapCanvas');
+const mmCtx = minimapCanvas.getContext('2d');
+
+function resizeCanvas() {
+  gameCanvas.width = window.innerWidth;
+  gameCanvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─────────────────────────────────────────────
+// §B  PARTICLE SYSTEM
+// ─────────────────────────────────────────────
 class ParticleSystem {
   constructor() {
     this.particles = [];
   }
 
-  emit(x, y, count, color, speed = 2, life = 30) {
+  emit(x, y, count, color, speed, life) {
     for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = speed * (0.3 + Math.random() * 0.7);
       this.particles.push({
-        x, y,
-        vx: randF(-speed, speed),
-        vy: randF(-speed, speed),
-        life,
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: life * (0.5 + Math.random() * 0.5),
         maxLife: life,
-        color,
-        size: randF(1, 3)
+        color: color,
+        size: 1 + Math.random() * 2,
+        gravity: 0
       });
     }
   }
 
   emitDust(x, y) {
-    this.emit(x, y, 5, '#c4a55a88', 1, 20);
+    for (let i = 0; i < 5; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = 0.3 + Math.random() * 0.6;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 8,
+        y: y + (Math.random() - 0.5) * 4,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd - 0.3,
+        life: 20 + Math.random() * 20,
+        maxLife: 40,
+        color: PALETTE.sand,
+        size: 1 + Math.random() * 2,
+        gravity: 0.01
+      });
+    }
   }
 
   emitBlood(x, y) {
-    this.emit(x, y, 8, '#8b0000', 3, 25);
+    for (let i = 0; i < 12; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = 1 + Math.random() * 2.5;
+      this.particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: 30 + Math.random() * 30,
+        maxLife: 60,
+        color: PALETTE.blood,
+        size: 1.5 + Math.random() * 2,
+        gravity: 0.08
+      });
+    }
   }
 
   emitSpark(x, y) {
-    this.emit(x, y, 6, '#ffd700', 4, 15);
+    for (let i = 0; i < 8; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd = 1.5 + Math.random() * 2;
+      this.particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd - 1,
+        life: 10 + Math.random() * 15,
+        maxLife: 25,
+        color: '#ffcc00',
+        size: 1 + Math.random(),
+        gravity: 0.05
+      });
+    }
   }
 
   emitSmoke(x, y) {
-    this.emit(x, y, 10, '#88888888', 0.5, 60);
+    for (let i = 0; i < 6; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 6,
+        y: y,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.4 - Math.random() * 0.5,
+        life: 40 + Math.random() * 40,
+        maxLife: 80,
+        color: '#888888',
+        size: 2 + Math.random() * 3,
+        gravity: -0.01
+      });
+    }
+  }
+
+  emitMuzzleFlash(x, y, dir) {
+    for (let i = 0; i < 10; i++) {
+      const spread = (Math.random() - 0.5) * 0.6;
+      const angle = dir + spread;
+      const spd = 2 + Math.random() * 4;
+      this.particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: 4 + Math.random() * 6,
+        maxLife: 10,
+        color: i < 5 ? '#ffcc00' : '#ff8800',
+        size: 1.5 + Math.random() * 2,
+        gravity: 0
+      });
+    }
+    // white core flash
+    this.particles.push({
+      x: x + Math.cos(dir) * 6,
+      y: y + Math.sin(dir) * 6,
+      vx: 0, vy: 0,
+      life: 3, maxLife: 3,
+      color: '#ffffff',
+      size: 5,
+      gravity: 0
+    });
+  }
+
+  emitTumbleweed(x, y) {
+    this.particles.push({
+      x: x,
+      y: y,
+      vx: 0.8 + Math.random() * 1.2,
+      vy: (Math.random() - 0.5) * 0.3,
+      life: 300 + Math.random() * 200,
+      maxLife: 500,
+      color: PALETTE.tumbleweed || '#a89060',
+      size: 6 + Math.random() * 4,
+      gravity: 0,
+      isTumbleweed: true,
+      rotation: 0,
+      rotSpeed: 0.05 + Math.random() * 0.05
+    });
   }
 
   update() {
@@ -631,140 +1794,1305 @@ class ParticleSystem {
       const p = this.particles[i];
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += 0.05;
-      p.vx *= 0.98;
+      p.vy += p.gravity;
       p.life--;
-      if (p.life <= 0) this.particles.splice(i, 1);
+      if (p.isTumbleweed) {
+        p.rotation += p.rotSpeed;
+        p.vy += Math.sin(p.life * 0.1) * 0.02;
+      }
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+      }
     }
   }
 
   draw(ctx, camX, camY) {
     for (const p of this.particles) {
-      const alpha = p.life / p.maxLife;
+      const alpha = clamp(p.life / p.maxLife, 0, 1);
+      const sx = p.x - camX;
+      const sy = p.y - camY;
+      if (sx < -20 || sx > gameCanvas.width + 20 || sy < -20 || sy > gameCanvas.height + 20) continue;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - camX - p.size / 2, p.y - camY - p.size / 2, p.size, p.size);
+      if (p.isTumbleweed) {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(p.rotation);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-p.size / 3, -p.size / 4);
+        ctx.lineTo(p.size / 3, p.size / 4);
+        ctx.moveTo(p.size / 3, -p.size / 4);
+        ctx.lineTo(-p.size / 3, p.size / 4);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(sx - p.size / 2, sy - p.size / 2, p.size, p.size);
+      }
     }
     ctx.globalAlpha = 1;
   }
 }
 
-// ---- BULLET SYSTEM ----
+// ─────────────────────────────────────────────
+// §C  BULLET SYSTEM
+// ─────────────────────────────────────────────
 class BulletSystem {
   constructor() {
     this.bullets = [];
   }
 
-  fire(x, y, dir, fromPlayer = true) {
-    const speed = 6;
-    const dirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
-    const [dx, dy] = dirs[dir] || [0, 1];
-    this.bullets.push({
-      x, y, vx: dx * speed, vy: dy * speed,
-      life: 40, fromPlayer
-    });
-    audio.playGunshot();
+  fire(x, y, dir, fromPlayer, type) {
+    type = type || 'revolver';
+    if (type === 'shotgun') {
+      for (let i = -1; i <= 1; i++) {
+        const spread = i * SHOTGUN_SPREAD;
+        this.bullets.push({
+          x: x, y: y,
+          vx: Math.cos(dir + spread) * BULLET_SPEED,
+          vy: Math.sin(dir + spread) * BULLET_SPEED,
+          fromPlayer: fromPlayer,
+          type: type,
+          life: 18,
+          maxLife: 18,
+          damage: 2
+        });
+      }
+    } else if (type === 'rifle') {
+      this.bullets.push({
+        x: x, y: y,
+        vx: Math.cos(dir) * (BULLET_SPEED * 1.5),
+        vy: Math.sin(dir) * (BULLET_SPEED * 1.5),
+        fromPlayer: fromPlayer,
+        type: type,
+        life: 40,
+        maxLife: 40,
+        damage: 4
+      });
+    } else {
+      this.bullets.push({
+        x: x, y: y,
+        vx: Math.cos(dir) * BULLET_SPEED,
+        vy: Math.sin(dir) * BULLET_SPEED,
+        fromPlayer: fromPlayer,
+        type: type,
+        life: 25,
+        maxLife: 25,
+        damage: 2
+      });
+    }
   }
 
-  update(npcs, player, particles, gameState) {
+  update(npcs, player, particles, gameState, map) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
       b.x += b.vx;
       b.y += b.vy;
       b.life--;
 
-      // Check NPC hits (from player)
+      // Wall collision
+      const tx = Math.floor(b.x / TILE);
+      const ty = Math.floor(b.y / TILE);
+      if (tx >= 0 && tx < MAP_W && ty >= 0 && ty < MAP_H) {
+        const tile = map[ty][tx];
+        if (tile === 3 || tile === 10) {
+          particles.emitSpark(b.x, b.y);
+          this.bullets.splice(i, 1);
+          continue;
+        }
+      }
+
+      // Out of bounds
+      if (b.x < 0 || b.x > WORLD_W || b.y < 0 || b.y > WORLD_H || b.life <= 0) {
+        this.bullets.splice(i, 1);
+        continue;
+      }
+
+      // Player bullet hitting NPCs
       if (b.fromPlayer) {
+        let hit = false;
         for (const npc of npcs) {
-          if (npc.state === 'dead' || npc.state === 'arrested') continue;
-          if (dist(b, npc) < 16) {
-            npc.hp--;
+          if (npc.dead || npc.arrested) continue;
+          if (dist(b, npc) < 14) {
+            npc.hp = (npc.hp || 3) - b.damage;
             particles.emitBlood(npc.x, npc.y);
+            hit = true;
             if (npc.hp <= 0) {
-              npc.state = 'dead';
-              if (npc.hostile || npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) {
-                gameState.reputation = clamp(gameState.reputation + 5, 0, 100);
-                gameState.gold += 25;
-                gameState.outlawsKilled++;
-                showNotification('Outlaw eliminated! +5 Rep, +$25');
+              npc.dead = true;
+              npc.deathTime = Date.now();
+              if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY || npc.hostile) {
+                const reward = Math.floor((10 + rand(5, 20)) * (gameState.difficulty ? gameState.difficulty.rewardMult || 1 : 1));
+                gameState.money = (gameState.money || 0) + reward;
+                gameState.reputation = clamp((gameState.reputation || 50) + 3, 0, REPUTATION_MAX);
+                gameState.stats = gameState.stats || {};
+                gameState.stats.outlawsKilled = (gameState.stats.outlawsKilled || 0) + 1;
+                gameState.stats.shotsHit = (gameState.stats.shotsHit || 0) + 1;
+                if (typeof addFloatingText === 'function') {
+                  addFloatingText(npc.x, npc.y - 20, '+$' + reward, PALETTE.gold);
+                  addFloatingText(npc.x, npc.y - 36, '+3 REP', '#44ff44');
+                }
               } else {
-                gameState.reputation = clamp(gameState.reputation - 20, 0, 100);
-                showNotification('You killed an innocent! -20 Rep');
-                audio.playBad();
+                // Killed an innocent
+                gameState.reputation = clamp((gameState.reputation || 50) - 15, 0, REPUTATION_MAX);
+                gameState.stats = gameState.stats || {};
+                gameState.stats.innocentsKilled = (gameState.stats.innocentsKilled || 0) + 1;
+                if (typeof addFloatingText === 'function') {
+                  addFloatingText(npc.x, npc.y - 20, '-15 REP', '#ff4444');
+                }
+                if (typeof showNotification === 'function') {
+                  showNotification('You killed an innocent!', 'bad');
+                }
               }
+            } else {
+              gameState.stats = gameState.stats || {};
+              gameState.stats.shotsHit = (gameState.stats.shotsHit || 0) + 1;
             }
-            b.life = 0;
+            this.bullets.splice(i, 1);
             break;
           }
         }
-      } else {
-        // Check player hits (from NPC)
+        if (hit) continue;
+      }
+
+      // NPC bullet hitting player
+      if (!b.fromPlayer && player) {
         if (dist(b, player) < 14) {
-          player.hp--;
+          const dmgMult = gameState.difficulty ? gameState.difficulty.outlawDamageMult || 1 : 1;
+          const dmg = Math.max(1, Math.round(b.damage * dmgMult));
+          player.hp -= dmg;
           particles.emitBlood(player.x, player.y);
-          b.life = 0;
+          if (typeof triggerShake === 'function') triggerShake(6, 10);
+          this.bullets.splice(i, 1);
           if (player.hp <= 0) {
-            gameState.state = 'gameover';
-            gameState.gameOverReason = 'You were killed in the line of duty.';
+            player.hp = 0;
+            player.dead = true;
           }
+          continue;
         }
       }
-
-      // Check map collision
-      const tx = Math.floor(b.x / TILE), ty = Math.floor(b.y / TILE);
-      if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) { b.life = 0; continue; }
-      const tile = gameState.map[ty]?.[tx];
-      if (tile === 3) {
-        particles.emitSpark(b.x, b.y);
-        b.life = 0;
-      }
-
-      if (b.life <= 0) this.bullets.splice(i, 1);
     }
   }
 
   draw(ctx, camX, camY) {
-    ctx.fillStyle = '#ffd700';
     for (const b of this.bullets) {
+      const sx = b.x - camX;
+      const sy = b.y - camY;
+      if (sx < -10 || sx > gameCanvas.width + 10 || sy < -10 || sy > gameCanvas.height + 10) continue;
+      const alpha = clamp(b.life / b.maxLife, 0.3, 1);
+      ctx.globalAlpha = alpha;
+      // Bullet trail
+      ctx.strokeStyle = b.type === 'rifle' ? '#ffaa00' : '#ffcc44';
+      ctx.lineWidth = b.type === 'rifle' ? 2 : 1;
       ctx.beginPath();
-      ctx.arc(b.x - camX, b.y - camY, 2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - b.vx * 2, sy - b.vy * 2);
+      ctx.stroke();
+      // Bullet head
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(sx - 1, sy - 1, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ─────────────────────────────────────────────
+// §D  BLOOD DECAL SYSTEM
+// ─────────────────────────────────────────────
+const bloodDecals = [];
+
+function addBloodDecal(x, y) {
+  bloodDecals.push({
+    x: x,
+    y: y,
+    size: 4 + Math.random() * 8,
+    life: 3600, // 60 seconds at 60fps
+    maxLife: 3600
+  });
+}
+
+function updateBloodDecals() {
+  for (let i = bloodDecals.length - 1; i >= 0; i--) {
+    bloodDecals[i].life--;
+    if (bloodDecals[i].life <= 0) {
+      bloodDecals.splice(i, 1);
     }
   }
 }
 
-// ---- FLOATING TEXT ----
+function drawBloodDecals(ctx, camX, camY) {
+  for (const d of bloodDecals) {
+    const sx = d.x - camX;
+    const sy = d.y - camY;
+    if (sx < -20 || sx > gameCanvas.width + 20 || sy < -20 || sy > gameCanvas.height + 20) continue;
+    const alpha = clamp(d.life / d.maxLife, 0, 0.6);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = PALETTE.blood;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, d.size, d.size * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Darker center
+    ctx.fillStyle = '#550000';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, d.size * 0.4, d.size * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ─────────────────────────────────────────────
+// §E  FLOATING TEXT SYSTEM
+// ─────────────────────────────────────────────
 const floatingTexts = [];
-function addFloatingText(x, y, text, color = '#ffd700') {
-  floatingTexts.push({ x, y, text, color, life: 60 });
+
+function addFloatingText(x, y, text, color) {
+  floatingTexts.push({
+    x: x,
+    y: y,
+    text: text,
+    color: color || '#ffffff',
+    life: 60,
+    maxLife: 60
+  });
 }
 
-// ---- NOTIFICATION ----
-let notifTimer = 0;
-function showNotification(text) {
+function updateFloatingTexts() {
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y -= 0.8;
+    ft.life--;
+    if (ft.life <= 0) {
+      floatingTexts.splice(i, 1);
+    }
+  }
+}
+
+function drawFloatingTexts(ctx, camX, camY) {
+  for (const ft of floatingTexts) {
+    const sx = ft.x - camX;
+    const sy = ft.y - camY;
+    if (sx < -100 || sx > gameCanvas.width + 100 || sy < -50 || sy > gameCanvas.height + 50) continue;
+    const alpha = clamp(ft.life / ft.maxLife, 0, 1);
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    // Shadow
+    ctx.fillStyle = '#000000';
+    ctx.fillText(ft.text, sx + 1, sy + 1);
+    // Text
+    ctx.fillStyle = ft.color;
+    ctx.fillText(ft.text, sx, sy);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+}
+
+// ─────────────────────────────────────────────
+// §F  SCREEN SHAKE SYSTEM
+// ─────────────────────────────────────────────
+const shake = { intensity: 0, duration: 0, timer: 0 };
+
+function triggerShake(intensity, duration) {
+  shake.intensity = intensity;
+  shake.duration = duration;
+  shake.timer = duration;
+}
+
+function updateShake() {
+  if (shake.timer > 0) {
+    shake.timer--;
+    const t = shake.timer / shake.duration;
+    const mag = shake.intensity * t;
+    return {
+      dx: (Math.random() - 0.5) * mag * 2,
+      dy: (Math.random() - 0.5) * mag * 2
+    };
+  }
+  return { dx: 0, dy: 0 };
+}
+
+// ─────────────────────────────────────────────
+// §G  NOTIFICATION SYSTEM
+// ─────────────────────────────────────────────
+let _notifTimer = null;
+
+function showNotification(text, type) {
+  type = type || 'neutral';
   const el = document.getElementById('notification');
+  if (!el) return;
   el.textContent = text;
+  el.className = '';
+  el.classList.add('notif-' + type);
   el.classList.remove('hidden');
-  notifTimer = 180;
+  if (_notifTimer) clearTimeout(_notifTimer);
+  _notifTimer = setTimeout(() => {
+    el.classList.add('hidden');
+    _notifTimer = null;
+  }, 3000);
 }
 
-// ---- MAIN GAME STATE ----
+// ─────────────────────────────────────────────
+// §H  TILE DRAWING
+// ─────────────────────────────────────────────
+const _tileRandCache = {};
+function _tileRand(tx, ty, idx) {
+  const key = tx * 10000 + ty * 100 + idx;
+  if (_tileRandCache[key] !== undefined) return _tileRandCache[key];
+  // Deterministic pseudo-random per tile
+  let h = (tx * 374761 + ty * 668265 + idx * 982451) & 0x7fffffff;
+  h = ((h >> 16) ^ h) * 0x45d9f3b;
+  h = ((h >> 16) ^ h) * 0x45d9f3b;
+  h = (h >> 16) ^ h;
+  const v = (h & 0xffff) / 0xffff;
+  _tileRandCache[key] = v;
+  return v;
+}
+
+function drawTile(x, y, camX, camY, tileType, timeOfDay) {
+  const sx = x * TILE - camX;
+  const sy = y * TILE - camY;
+  if (sx < -TILE || sx > gameCanvas.width || sy < -TILE || sy > gameCanvas.height) return;
+
+  switch (tileType) {
+    case 0: { // Sand
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Texture dots
+      for (let i = 0; i < 6; i++) {
+        const dx = _tileRand(x, y, i) * (TILE - 2) + 1;
+        const dy = _tileRand(x, y, i + 10) * (TILE - 2) + 1;
+        ctx.fillStyle = _tileRand(x, y, i + 20) > 0.5 ? PALETTE.sandDark : PALETTE.sandLight;
+        ctx.fillRect(sx + dx, sy + dy, 1, 1);
+      }
+      break;
+    }
+    case 1: { // Road
+      ctx.fillStyle = PALETTE.road || '#9e8b6e';
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Wagon rut lines
+      ctx.fillStyle = PALETTE.roadDark || '#7e6b4e';
+      ctx.fillRect(sx, sy + 10, TILE, 1);
+      ctx.fillRect(sx, sy + 21, TILE, 1);
+      // Scattered pebbles
+      for (let i = 0; i < 3; i++) {
+        const dx = _tileRand(x, y, i + 30) * (TILE - 4) + 2;
+        const dy = _tileRand(x, y, i + 40) * (TILE - 4) + 2;
+        ctx.fillStyle = PALETTE.sandDark;
+        ctx.fillRect(sx + dx, sy + dy, 2, 1);
+      }
+      break;
+    }
+    case 3: { // Wall
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Horizontal plank lines
+      ctx.fillStyle = PALETTE.woodDark;
+      for (let py = 0; py < TILE; py += 8) {
+        ctx.fillRect(sx, sy + py, TILE, 1);
+      }
+      // Dark edges
+      ctx.fillRect(sx, sy, 1, TILE);
+      ctx.fillRect(sx + TILE - 1, sy, 1, TILE);
+      // Knot details
+      if (_tileRand(x, y, 50) > 0.6) {
+        const kx = _tileRand(x, y, 51) * (TILE - 8) + 4;
+        const ky = _tileRand(x, y, 52) * (TILE - 8) + 4;
+        ctx.fillStyle = PALETTE.woodDark;
+        ctx.beginPath();
+        ctx.arc(sx + kx, sy + ky, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 4: { // Door
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Inset
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(sx + 3, sy + 2, TILE - 6, TILE - 3);
+      // Plank lines
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(sx + TILE / 2, sy + 2, 1, TILE - 3);
+      // Gold handle
+      ctx.fillStyle = PALETTE.gold;
+      ctx.fillRect(sx + TILE - 10, sy + TILE / 2 - 1, 3, 3);
+      ctx.fillStyle = PALETTE.badgeShine || '#fff8c0';
+      ctx.fillRect(sx + TILE - 9, sy + TILE / 2, 1, 1);
+      break;
+    }
+    case 5: { // Water
+      ctx.fillStyle = PALETTE.water;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Animated shimmer
+      const t = Date.now() * 0.002;
+      const wl = PALETTE.waterLight || '#6a8aaa';
+      ctx.fillStyle = wl;
+      for (let wy = 0; wy < TILE; wy += 6) {
+        const offset = Math.sin(t + x * 0.5 + wy * 0.3) * 4;
+        ctx.fillRect(sx + 8 + offset, sy + wy, 6, 1);
+        const offset2 = Math.sin(t + x * 0.7 + wy * 0.2 + 2) * 5;
+        ctx.fillRect(sx + 20 + offset2, sy + wy + 3, 4, 1);
+      }
+      break;
+    }
+    case 6: { // Cactus on sand
+      // Sand base
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Cactus body
+      ctx.fillStyle = PALETTE.cactus;
+      ctx.fillRect(sx + 12, sy + 6, 8, 22);
+      // Left arm
+      ctx.fillRect(sx + 5, sy + 10, 7, 5);
+      ctx.fillRect(sx + 5, sy + 6, 5, 4);
+      // Right arm
+      ctx.fillRect(sx + 20, sy + 12, 7, 5);
+      ctx.fillRect(sx + 22, sy + 8, 5, 4);
+      // Darker shading
+      ctx.fillStyle = PALETTE.cactusD;
+      ctx.fillRect(sx + 12, sy + 6, 2, 22);
+      ctx.fillRect(sx + 5, sy + 10, 2, 5);
+      ctx.fillRect(sx + 20, sy + 12, 2, 5);
+      // Spines
+      ctx.fillStyle = '#9ab060';
+      const spines = [[14, 8], [16, 12], [14, 18], [18, 15], [7, 9], [24, 11], [25, 16]];
+      for (const [spx, spy] of spines) {
+        ctx.fillRect(sx + spx, sy + spy, 1, 1);
+      }
+      break;
+    }
+    case 7: { // Rock on sand
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Irregular rock shape
+      ctx.fillStyle = PALETTE.stone;
+      ctx.beginPath();
+      ctx.moveTo(sx + 6, sy + 24);
+      ctx.lineTo(sx + 4, sy + 16);
+      ctx.lineTo(sx + 8, sy + 8);
+      ctx.lineTo(sx + 16, sy + 5);
+      ctx.lineTo(sx + 24, sy + 7);
+      ctx.lineTo(sx + 28, sy + 14);
+      ctx.lineTo(sx + 26, sy + 22);
+      ctx.lineTo(sx + 18, sy + 26);
+      ctx.closePath();
+      ctx.fill();
+      // Highlight
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.beginPath();
+      ctx.moveTo(sx + 10, sy + 10);
+      ctx.lineTo(sx + 16, sy + 8);
+      ctx.lineTo(sx + 22, sy + 9);
+      ctx.lineTo(sx + 20, sy + 14);
+      ctx.lineTo(sx + 12, sy + 14);
+      ctx.closePath();
+      ctx.fill();
+      // Dark crevice
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(sx + 12, sy + 15, 8, 1);
+      ctx.fillRect(sx + 14, sy + 19, 6, 1);
+      break;
+    }
+    case 8: { // Wood floor
+      ctx.fillStyle = PALETTE.plank || PALETTE.wood;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Alternating plank shading
+      const dark = PALETTE.plankDark || PALETTE.woodDark;
+      for (let py = 0; py < TILE; py += 8) {
+        const shade = (Math.floor(py / 8) + x) % 2 === 0;
+        if (shade) {
+          ctx.fillStyle = dark;
+          ctx.globalAlpha = 0.2;
+          ctx.fillRect(sx, sy + py, TILE, 8);
+          ctx.globalAlpha = 1;
+        }
+        // Plank line
+        ctx.fillStyle = dark;
+        ctx.fillRect(sx, sy + py, TILE, 1);
+      }
+      // Stagger vertical joins
+      const joinX = ((x + y) % 3) * 10 + 6;
+      ctx.fillStyle = dark;
+      ctx.fillRect(sx + joinX, sy, 1, TILE);
+      break;
+    }
+    case 9: { // Grass on sand
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Green tufts
+      ctx.fillStyle = PALETTE.grass;
+      for (let i = 0; i < 8; i++) {
+        const gx = _tileRand(x, y, i + 60) * (TILE - 4) + 2;
+        const gy = _tileRand(x, y, i + 70) * (TILE - 6) + 4;
+        const gh = 3 + _tileRand(x, y, i + 80) * 4;
+        ctx.fillRect(sx + gx, sy + gy - gh, 1, gh);
+        ctx.fillRect(sx + gx - 1, sy + gy - gh + 1, 1, gh - 2);
+        ctx.fillRect(sx + gx + 1, sy + gy - gh + 2, 1, gh - 3);
+      }
+      break;
+    }
+    case 10: { // Fence on sand
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Vertical posts
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(sx + 2, sy + 6, 4, 22);
+      ctx.fillRect(sx + TILE - 6, sy + 6, 4, 22);
+      // Horizontal rails
+      ctx.fillRect(sx, sy + 10, TILE, 3);
+      ctx.fillRect(sx, sy + 20, TILE, 3);
+      // Post tops
+      ctx.fillStyle = PALETTE.woodLight;
+      ctx.fillRect(sx + 2, sy + 5, 4, 2);
+      ctx.fillRect(sx + TILE - 6, sy + 5, 4, 2);
+      // Nail details
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(sx + 3, sy + 11, 1, 1);
+      ctx.fillRect(sx + TILE - 5, sy + 11, 1, 1);
+      ctx.fillRect(sx + 3, sy + 21, 1, 1);
+      ctx.fillRect(sx + TILE - 5, sy + 21, 1, 1);
+      break;
+    }
+    default: {
+      ctx.fillStyle = PALETTE.sand;
+      ctx.fillRect(sx, sy, TILE, TILE);
+      break;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §I  BUILDING ROOF DRAWING
+// ─────────────────────────────────────────────
+function drawBuildingRoof(b, camX, camY, timeOfDay) {
+  const sx = b.x * TILE - camX;
+  const sy = b.y * TILE - camY;
+  const sw = b.w * TILE;
+  const sh = b.h * TILE;
+
+  // Skip if off screen
+  if (sx + sw < -TILE || sx > gameCanvas.width + TILE || sy + sh < -TILE || sy > gameCanvas.height + TILE) return;
+
+  const colors = BUILDING_COLORS ? BUILDING_COLORS[b.type] : null;
+  const roofColor = colors ? colors.roof : PALETTE.roof;
+  const trimColor = colors ? colors.trim : PALETTE.gold;
+
+  // Overhanging roof
+  const overhang = 6;
+  ctx.fillStyle = roofColor;
+  ctx.fillRect(sx - overhang, sy - 10, sw + overhang * 2, 12);
+  // Roof shading
+  ctx.fillStyle = PALETTE.roofDark;
+  ctx.fillRect(sx - overhang, sy - 10, sw + overhang * 2, 2);
+  ctx.fillRect(sx - overhang, sy, sw + overhang * 2, 2);
+  // Roof light edge
+  ctx.fillStyle = PALETTE.roofLight;
+  ctx.fillRect(sx - overhang, sy - 8, sw + overhang * 2, 1);
+
+  // Building name sign
+  const names = {
+    [BUILDING_TYPES.SHERIFF]: 'SHERIFF',
+    [BUILDING_TYPES.SALOON]: 'SALOON',
+    [BUILDING_TYPES.BANK]: 'BANK',
+    [BUILDING_TYPES.GENERAL]: 'GENERAL STORE',
+    [BUILDING_TYPES.JAIL]: 'JAIL',
+    [BUILDING_TYPES.CHURCH]: 'CHURCH',
+    [BUILDING_TYPES.STABLE]: 'STABLE',
+    [BUILDING_TYPES.HOTEL]: 'HOTEL',
+    [BUILDING_TYPES.HOUSE]: 'HOUSE',
+    [BUILDING_TYPES.BLACKSMITH]: 'BLACKSMITH',
+    [BUILDING_TYPES.WELL]: 'WELL',
+    [BUILDING_TYPES.GALLOWS]: 'GALLOWS',
+    [BUILDING_TYPES.WANTED_BOARD]: 'WANTED'
+  };
+  const name = names[b.type] || 'BUILDING';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#000000';
+  ctx.fillText(name, sx + sw / 2 + 1, sy - 1);
+  ctx.fillStyle = trimColor;
+  ctx.fillText(name, sx + sw / 2, sy - 2);
+  ctx.textAlign = 'left';
+
+  // Night: lit windows
+  timeOfDay = timeOfDay || 0;
+  const isNight = timeOfDay < 0.2 || timeOfDay > 0.8;
+  if (isNight) {
+    const winColor = '#ffdd66';
+    const winGlow = '#ffeeaa';
+    const numWins = Math.floor(sw / (TILE * 1.5));
+    for (let wi = 0; wi < numWins; wi++) {
+      const wx = sx + 12 + wi * Math.floor(sw / (numWins + 1));
+      const wy = sy + 6;
+      // Glow
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = winGlow;
+      ctx.fillRect(wx - 2, wy - 2, 12, 14);
+      ctx.globalAlpha = 1;
+      // Window
+      ctx.fillStyle = winColor;
+      ctx.fillRect(wx, wy, 8, 10);
+      // Cross pane
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(wx + 3, wy, 2, 10);
+      ctx.fillRect(wx, wy + 4, 8, 2);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §J  PLAYER DRAWING
+// ─────────────────────────────────────────────
+function drawPlayer(player, camX, camY) {
+  const sx = player.x - camX;
+  const sy = player.y - camY;
+  if (sx < -TILE * 2 || sx > gameCanvas.width + TILE * 2 || sy < -TILE * 2 || sy > gameCanvas.height + TILE * 2) return;
+
+  const now = Date.now();
+  const bobOffset = player.moving ? Math.sin(now * 0.01) * 2 : 0;
+  const dir = player.dir || 0; // angle in radians
+  const facingRight = Math.cos(dir) >= 0;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  if (player.mounted) {
+    // ── Mounted on horse ──
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 18, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Horse body
+    const hBob = player.moving ? Math.sin(now * 0.015) * 1.5 : 0;
+    ctx.fillStyle = '#8b5e3c';
+    ctx.fillRect(-12, 2 + hBob, 24, 10);
+    // Horse head
+    const headX = facingRight ? 12 : -18;
+    ctx.fillRect(headX, -2 + hBob, 6, 8);
+    // Horse ears
+    ctx.fillStyle = '#7a4e2c';
+    ctx.fillRect(headX + 1, -5 + hBob, 2, 3);
+    ctx.fillRect(headX + 3, -5 + hBob, 2, 3);
+    // Horse legs
+    ctx.fillStyle = '#6b4226';
+    const legBob = player.moving ? Math.sin(now * 0.02) * 3 : 0;
+    ctx.fillRect(-8, 12 + hBob, 3, 8 + legBob);
+    ctx.fillRect(6, 12 + hBob, 3, 8 - legBob);
+    // Horse tail
+    const tailX = facingRight ? -14 : 14;
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(tailX, 3 + hBob, 3, 7);
+
+    // Player on top of horse
+    const py = -12 + hBob + bobOffset;
+    // Torso/vest
+    ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
+    ctx.fillRect(-5, py, 10, 8);
+    // Shirt
+    ctx.fillStyle = '#d8c8a0';
+    ctx.fillRect(-4, py + 1, 8, 5);
+    // Badge
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(facingRight ? 1 : -3, py + 2, 3, 3);
+    ctx.fillStyle = PALETTE.badgeShine || '#fff8c0';
+    ctx.fillRect(facingRight ? 2 : -2, py + 3, 1, 1);
+    // Head
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(-3, py - 6, 6, 6);
+    // Eyes
+    ctx.fillStyle = '#000000';
+    if (facingRight) {
+      ctx.fillRect(1, py - 4, 1, 1);
+    } else {
+      ctx.fillRect(-2, py - 4, 1, 1);
+    }
+    // Hat
+    ctx.fillStyle = PALETTE.hat;
+    ctx.fillRect(-6, py - 9, 12, 3);
+    ctx.fillRect(-3, py - 12, 6, 3);
+    // Hat brim
+    ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
+    ctx.fillRect(-7, py - 9, 14, 1);
+  } else {
+    // ── On foot ──
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 12, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const py = bobOffset;
+
+    // Boots
+    ctx.fillStyle = '#3a2a14';
+    const lBob = player.moving ? Math.sin(now * 0.01) * 2 : 0;
+    ctx.fillRect(-4, 8 + py - lBob, 3, 4);
+    ctx.fillRect(1, 8 + py + lBob, 3, 4);
+
+    // Pants / denim
+    ctx.fillStyle = PALETTE.denim || '#4a5a8a';
+    ctx.fillRect(-4, 3 + py, 3, 6);
+    ctx.fillRect(1, 3 + py, 3, 6);
+
+    // Vest / torso
+    ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
+    ctx.fillRect(-5, -4 + py, 10, 8);
+
+    // Shirt underneath
+    ctx.fillStyle = '#d8c8a0';
+    ctx.fillRect(-4, -3 + py, 8, 6);
+
+    // Star badge
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(facingRight ? 1 : -4, -2 + py, 3, 3);
+    ctx.fillStyle = PALETTE.badgeShine || '#fff8c0';
+    ctx.fillRect(facingRight ? 2 : -3, -1 + py, 1, 1);
+
+    // Gun holster on side
+    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+    const holsterX = facingRight ? 5 : -7;
+    ctx.fillRect(holsterX, 0 + py, 2, 5);
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(holsterX, 0 + py, 2, 2);
+
+    // Head
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(-3, -10 + py, 6, 6);
+
+    // Darker jaw line
+    ctx.fillStyle = PALETTE.skinDark;
+    ctx.fillRect(-3, -5 + py, 6, 1);
+
+    // Eyes based on direction
+    ctx.fillStyle = '#000000';
+    if (facingRight) {
+      ctx.fillRect(1, -8 + py, 1, 1);
+      ctx.fillRect(-1, -8 + py, 1, 1);
+    } else {
+      ctx.fillRect(-2, -8 + py, 1, 1);
+      ctx.fillRect(0, -8 + py, 1, 1);
+    }
+
+    // Hat (wide brim)
+    ctx.fillStyle = PALETTE.hat;
+    ctx.fillRect(-7, -14 + py, 14, 3);
+    ctx.fillRect(-4, -17 + py, 8, 3);
+    // Hat brim shadow
+    ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
+    ctx.fillRect(-8, -14 + py, 16, 1);
+    // Hat band
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(-4, -14 + py, 8, 1);
+  }
+
+  // HP bar when damaged
+  if (player.hp < player.maxHp) {
+    const barW = 20;
+    const barH = 3;
+    const barY = player.mounted ? -28 : -22 + bobOffset;
+    const hpPct = clamp(player.hp / player.maxHp, 0, 1);
+    ctx.fillStyle = '#440000';
+    ctx.fillRect(-barW / 2, barY, barW, barH);
+    ctx.fillStyle = hpPct > 0.3 ? '#cc3030' : '#ff0000';
+    ctx.fillRect(-barW / 2, barY, barW * hpPct, barH);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(-barW / 2, barY, barW, barH);
+  }
+
+  // Muzzle flash when just shot
+  if (player.lastShotTime && now - player.lastShotTime < 80) {
+    const flashDist = 14;
+    const fx = Math.cos(dir) * flashDist;
+    const fy = Math.sin(dir) * flashDist - 4;
+    ctx.fillStyle = '#ffcc00';
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(fx, fy + bobOffset, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(fx, fy + bobOffset, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+// §K  NPC DRAWING
+// ─────────────────────────────────────────────
+function drawNPC(npc, camX, camY, playerDist) {
+  const sx = npc.x - camX;
+  const sy = npc.y - camY;
+  if (sx < -TILE * 2 || sx > gameCanvas.width + TILE * 2 || sy < -TILE * 2 || sy > gameCanvas.height + TILE * 2) return;
+
+  const now = Date.now();
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  if (npc.dead) {
+    // Body on ground
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Blood pool
+    ctx.fillStyle = PALETTE.blood;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(2, 3, 8, 5, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Fallen body (side view)
+    const isOutlaw = npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY;
+    ctx.fillStyle = isOutlaw ? PALETTE.outlaw : PALETTE.cloth || '#8b1a1a';
+    ctx.fillRect(-8, -2, 16, 5);
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(-10, -1, 4, 3);
+    // Hat fallen off
+    ctx.fillStyle = isOutlaw ? PALETTE.outlawHat : PALETTE.hat;
+    ctx.fillRect(8, -3, 5, 3);
+    ctx.restore();
+    return;
+  }
+
+  if (npc.arrested) {
+    // Sitting with hands bound
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Body sitting
+    ctx.fillStyle = PALETTE.outlaw;
+    ctx.fillRect(-4, -2, 8, 8);
+    // Head
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(-3, -8, 6, 6);
+    // Bound hands
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(-3, 4, 6, 2);
+    ctx.fillStyle = '#666666';
+    ctx.fillRect(-2, 4, 1, 2);
+    ctx.fillRect(1, 4, 1, 2);
+    ctx.restore();
+    return;
+  }
+
+  const bobOffset = npc.moving ? Math.sin(now * 0.008 + npc.x) * 1.5 : 0;
+  const isOutlaw = npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY;
+  const isShopkeeper = npc.type === NPC_TYPES.SHOPKEEPER || npc.type === NPC_TYPES.BARTENDER || npc.type === NPC_TYPES.BANKER;
+  const facingRight = npc.facingRight !== undefined ? npc.facingRight : true;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(0, 10, 8, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Boots
+  ctx.fillStyle = isOutlaw ? '#222222' : '#5a3a1a';
+  const lBob = npc.moving ? Math.sin(now * 0.008 + npc.x) * 2 : 0;
+  ctx.fillRect(-3, 7 + bobOffset - lBob, 3, 3);
+  ctx.fillRect(1, 7 + bobOffset + lBob, 3, 3);
+
+  // Pants
+  ctx.fillStyle = isOutlaw ? '#333333' : (isShopkeeper ? '#5a4a3a' : '#4a5a8a');
+  ctx.fillRect(-3, 2 + bobOffset, 3, 6);
+  ctx.fillRect(1, 2 + bobOffset, 3, 6);
+
+  // Torso
+  if (isOutlaw) {
+    ctx.fillStyle = PALETTE.outlaw;
+  } else if (isShopkeeper) {
+    ctx.fillStyle = '#6a5a4a';
+  } else if (npc.type === NPC_TYPES.PREACHER) {
+    ctx.fillStyle = '#222222';
+  } else if (npc.type === NPC_TYPES.MAYOR) {
+    ctx.fillStyle = '#4a3a6a';
+  } else if (npc.type === NPC_TYPES.DEPUTY) {
+    ctx.fillStyle = '#5a4a2a';
+  } else {
+    // Townsperson with variety
+    const hue = ((npc.x * 37 + npc.y * 17) & 0xff);
+    const r = 80 + (hue & 0x3f);
+    const g = 60 + ((hue >> 2) & 0x3f);
+    const b = 50 + ((hue >> 4) & 0x3f);
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  ctx.fillRect(-4, -5 + bobOffset, 8, 8);
+
+  // Bandana for outlaws
+  if (isOutlaw) {
+    ctx.fillStyle = PALETTE.bandana || '#8b0000';
+    ctx.fillRect(-3, -6 + bobOffset, 6, 2);
+  }
+
+  // Head
+  ctx.fillStyle = PALETTE.skin;
+  ctx.fillRect(-3, -11 + bobOffset, 6, 6);
+
+  // Eyes
+  ctx.fillStyle = '#000000';
+  if (facingRight) {
+    ctx.fillRect(1, -9 + bobOffset, 1, 1);
+  } else {
+    ctx.fillRect(-2, -9 + bobOffset, 1, 1);
+  }
+
+  // Hat variation
+  if (isOutlaw) {
+    ctx.fillStyle = PALETTE.outlawHat;
+    ctx.fillRect(-5, -14 + bobOffset, 10, 3);
+    ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+  } else if (npc.type === NPC_TYPES.PREACHER) {
+    // Tall black hat
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(-4, -17 + bobOffset, 8, 6);
+    ctx.fillRect(-5, -12 + bobOffset, 10, 1);
+  } else if (npc.type === NPC_TYPES.MAYOR) {
+    // Top hat
+    ctx.fillStyle = '#2a2a4a';
+    ctx.fillRect(-4, -18 + bobOffset, 8, 7);
+    ctx.fillRect(-5, -12 + bobOffset, 10, 1);
+  } else if (npc.type === NPC_TYPES.DEPUTY) {
+    // Deputy hat + badge
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(-5, -14 + bobOffset, 10, 3);
+    ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(0, -5 + bobOffset, 2, 2);
+  } else if (isShopkeeper) {
+    // Visor / cap
+    ctx.fillStyle = '#6a5040';
+    ctx.fillRect(-4, -13 + bobOffset, 8, 2);
+    ctx.fillRect(facingRight ? -1 : -5, -13 + bobOffset, 6, 1);
+  } else {
+    // Random hat or no hat based on NPC
+    const hasHat = ((npc.x * 13 + npc.y * 7) % 3) !== 0;
+    if (hasHat) {
+      const hatShade = 30 + ((npc.x * 17 + npc.y * 31) & 0x3f);
+      ctx.fillStyle = 'rgb(' + hatShade + ',' + Math.floor(hatShade * 0.8) + ',' + Math.floor(hatShade * 0.5) + ')';
+      ctx.fillRect(-5, -14 + bobOffset, 10, 3);
+      ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+    }
+  }
+
+  // Hostile red indicator
+  if (npc.hostile) {
+    const pulse = 0.6 + Math.sin(now * 0.006) * 0.4;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(0, -20 + bobOffset, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Exclamation mark
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-0.5, -22 + bobOffset, 1, 3);
+    ctx.fillRect(-0.5, -18 + bobOffset, 1, 1);
+  }
+
+  // HP bar when damaged (for outlaws)
+  if (isOutlaw && npc.hp !== undefined && npc.maxHp !== undefined && npc.hp < npc.maxHp) {
+    const barW = 16;
+    const barH = 2;
+    const barY = -24 + bobOffset;
+    const hpPct = clamp(npc.hp / npc.maxHp, 0, 1);
+    ctx.fillStyle = '#440000';
+    ctx.fillRect(-barW / 2, barY, barW, barH);
+    ctx.fillStyle = '#cc3030';
+    ctx.fillRect(-barW / 2, barY, barW * hpPct, barH);
+  }
+
+  // Interaction prompt [E] when player is near
+  playerDist = playerDist || Infinity;
+  if (playerDist < INTERACT_RANGE && !npc.hostile && !npc.dead && !npc.arrested) {
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('[E]', 1, -26 + bobOffset);
+    ctx.fillStyle = '#ffdd44';
+    ctx.fillText('[E]', 0, -27 + bobOffset);
+  }
+
+  // Name tag when close
+  if (playerDist < INTERACT_RANGE * 2 && npc.name) {
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(npc.name, 1, -30 + bobOffset);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(npc.name, 0, -31 + bobOffset);
+  }
+
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+// §L  AMBIENT PARTICLE SYSTEM
+// ─────────────────────────────────────────────
+const ambientParticles = [];
+let _ambientTimer = 0;
+
+// updateAmbientParticles defined in Part 5 (more complete version)
+
+function drawAmbientParticles(ctx, camX, camY) {
+  const now = Date.now();
+  for (const p of ambientParticles) {
+    const sx = p.x - camX;
+    const sy = p.y - camY;
+    if (sx < -20 || sx > gameCanvas.width + 20 || sy < -20 || sy > gameCanvas.height + 20) continue;
+
+    if (p.type === 'tumbleweed') {
+      const alpha = clamp(p.life / 100, 0, 0.7);
+      ctx.globalAlpha = alpha;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.rotation);
+      ctx.strokeStyle = PALETTE.tumbleweed || '#a89060';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-p.size / 3, -p.size / 4);
+      ctx.lineTo(p.size / 3, p.size / 4);
+      ctx.moveTo(p.size / 3, -p.size / 4);
+      ctx.lineTo(-p.size / 3, p.size / 4);
+      ctx.moveTo(0, -p.size / 3);
+      ctx.lineTo(0, p.size / 3);
+      ctx.stroke();
+      ctx.restore();
+    } else if (p.type === 'dust') {
+      const alpha = clamp(p.life / 80, 0, 0.3);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = PALETTE.dust || '#c8b898';
+      ctx.fillRect(sx, sy, p.size, p.size);
+    } else if (p.type === 'firefly') {
+      const pulse = 0.3 + Math.sin(now * 0.005 + (p.phase || 0)) * 0.7;
+      ctx.globalAlpha = clamp(pulse * (p.life / 120), 0, 1);
+      ctx.fillStyle = '#eeff55';
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      // Small glow
+      ctx.globalAlpha *= 0.3;
+      ctx.fillStyle = '#ffffaa';
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.size * 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ─────────────────────────────────────────────
+// §M  DAY/NIGHT OVERLAY
+// ─────────────────────────────────────────────
+function getSkyColor(t) {
+  // t: 0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk, 1=midnight
+  if (t < 0.2) {
+    return PALETTE.skyNight;
+  } else if (t < 0.3) {
+    const p = (t - 0.2) / 0.1;
+    return lerpColor(PALETTE.skyNight, PALETTE.skyDawn || '#e0a060', p);
+  } else if (t < 0.4) {
+    const p = (t - 0.3) / 0.1;
+    return lerpColor(PALETTE.skyDawn || '#e0a060', PALETTE.skyNoon || '#87ceeb', p);
+  } else if (t < 0.65) {
+    return PALETTE.skyNoon || '#87ceeb';
+  } else if (t < 0.75) {
+    const p = (t - 0.65) / 0.1;
+    return lerpColor(PALETTE.skyNoon || '#87ceeb', PALETTE.skyDusk || '#c06030', p);
+  } else if (t < 0.85) {
+    const p = (t - 0.75) / 0.1;
+    return lerpColor(PALETTE.skyDusk || '#c06030', PALETTE.skyNight, p);
+  } else {
+    return PALETTE.skyNight;
+  }
+}
+
+function drawDayNightOverlay(timeOfDay) {
+  const t = timeOfDay || 0;
+  let overlayColor = null;
+  let alpha = 0;
+
+  if (t < 0.2) {
+    // Night
+    overlayColor = '#0a0820';
+    alpha = 0.5;
+  } else if (t < 0.3) {
+    // Dawn transition
+    const p = (t - 0.2) / 0.1;
+    overlayColor = lerpColor('#0a0820', '#cc6622', p);
+    alpha = lerp(0.5, 0.15, p);
+  } else if (t < 0.35) {
+    // Dawn to clear
+    const p = (t - 0.3) / 0.05;
+    overlayColor = '#cc6622';
+    alpha = lerp(0.15, 0, p);
+  } else if (t < 0.7) {
+    // Clear day
+    alpha = 0;
+  } else if (t < 0.75) {
+    // Approaching dusk
+    const p = (t - 0.7) / 0.05;
+    overlayColor = '#cc4400';
+    alpha = lerp(0, 0.15, p);
+  } else if (t < 0.85) {
+    // Dusk
+    const p = (t - 0.75) / 0.1;
+    overlayColor = lerpColor('#cc4400', '#0a0820', p);
+    alpha = lerp(0.15, 0.5, p);
+  } else {
+    // Night
+    overlayColor = '#0a0820';
+    alpha = 0.5;
+  }
+
+  if (alpha > 0 && overlayColor) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = overlayColor;
+    ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ─────────────────────────────────────────────
+// §N  MINIMAP DRAWING
+// ─────────────────────────────────────────────
+function drawMinimap(game) {
+  if (!game) return;
+  const mw = minimapCanvas.width;
+  const mh = minimapCanvas.height;
+  const scaleX = mw / WORLD_W;
+  const scaleY = mh / WORLD_H;
+
+  // Background
+  mmCtx.fillStyle = PALETTE.sand;
+  mmCtx.fillRect(0, 0, mw, mh);
+
+  // Roads
+  if (game.map) {
+    for (let ty = 0; ty < MAP_H; ty += 2) {
+      for (let tx = 0; tx < MAP_W; tx += 2) {
+        const tile = game.map[ty][tx];
+        if (tile === 1) {
+          mmCtx.fillStyle = PALETTE.road || '#9e8b6e';
+          mmCtx.fillRect(tx * TILE * scaleX, ty * TILE * scaleY, Math.max(2, TILE * 2 * scaleX), Math.max(2, TILE * 2 * scaleY));
+        } else if (tile === 5) {
+          mmCtx.fillStyle = PALETTE.water;
+          mmCtx.fillRect(tx * TILE * scaleX, ty * TILE * scaleY, Math.max(2, TILE * 2 * scaleX), Math.max(2, TILE * 2 * scaleY));
+        }
+      }
+    }
+  }
+
+  // Buildings
+  if (game.buildings) {
+    for (const b of game.buildings) {
+      const colors = BUILDING_COLORS ? BUILDING_COLORS[b.type] : null;
+      const bColor = colors ? colors.wall : '#8b6340';
+      mmCtx.fillStyle = bColor;
+      const bx = b.x * TILE * scaleX;
+      const by = b.y * TILE * scaleY;
+      const bw = Math.max(3, b.w * TILE * scaleX);
+      const bh = Math.max(3, b.h * TILE * scaleY);
+      mmCtx.fillRect(bx, by, bw, bh);
+
+      // Quest target building highlighted
+      if (game.activeQuest && game.activeQuest.targetBuilding === b.type) {
+        mmCtx.strokeStyle = '#ffff00';
+        mmCtx.lineWidth = 1;
+        mmCtx.strokeRect(bx - 1, by - 1, bw + 2, bh + 2);
+      }
+    }
+  }
+
+  // NPCs as colored dots
+  if (game.npcs) {
+    for (const npc of game.npcs) {
+      if (npc.dead) continue;
+      const nx = npc.x * scaleX;
+      const ny = npc.y * scaleY;
+      if (npc.hostile) {
+        mmCtx.fillStyle = '#ff0000';
+      } else if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) {
+        mmCtx.fillStyle = '#ff8800';
+      } else {
+        mmCtx.fillStyle = '#44cc44';
+      }
+      mmCtx.fillRect(nx - 1, ny - 1, 2, 2);
+    }
+  }
+
+  // Crime location as flashing red
+  if (game.activeCrime && game.activeCrime.x !== undefined) {
+    const pulse = Math.sin(Date.now() * 0.008) > 0;
+    if (pulse) {
+      mmCtx.fillStyle = '#ff0000';
+      const cx = game.activeCrime.x * scaleX;
+      const cy = game.activeCrime.y * scaleY;
+      mmCtx.beginPath();
+      mmCtx.arc(cx, cy, 3, 0, Math.PI * 2);
+      mmCtx.fill();
+    }
+  }
+
+  // Horse location as brown dot
+  if (game.horse && !game.player.mounted) {
+    mmCtx.fillStyle = '#8b5e3c';
+    const hx = game.horse.x * scaleX;
+    const hy = game.horse.y * scaleY;
+    mmCtx.fillRect(hx - 1.5, hy - 1.5, 3, 3);
+  }
+
+  // Player as gold dot
+  if (game.player) {
+    mmCtx.fillStyle = PALETTE.gold;
+    const px = game.player.x * scaleX;
+    const py = game.player.y * scaleY;
+    mmCtx.fillRect(px - 2, py - 2, 4, 4);
+    // Border
+    mmCtx.strokeStyle = '#000000';
+    mmCtx.lineWidth = 0.5;
+    mmCtx.strokeRect(px - 2, py - 2, 4, 4);
+  }
+
+  // Minimap border
+  mmCtx.strokeStyle = PALETTE.uiBorder;
+  mmCtx.lineWidth = 2;
+  mmCtx.strokeRect(0, 0, mw, mh);
+}
+
+// === END PART 3 ===// === PART 4: GAMEPLAY SYSTEMS ===
+
+// ─────────────────────────────────────────────
+// §A  GAME STATE OBJECT
+// ─────────────────────────────────────────────
 const game = {
-  state: 'title', // title, playing, paused, dialog, duel, journal, gameover
+  state: 'title',
   map: null,
   buildings: [],
   npcs: [],
   player: null,
   camera: { x: 0, y: 0 },
-  time: 0.25, // 0-1, starts at 6AM
+  time: 0.25,
   dayCount: 1,
   timeSpeed: 1 / (DAY_LENGTH * 60),
   reputation: 50,
   gold: 0,
   rank: 'Deputy',
-  crimes: [],
   activeCrime: null,
-  quests: [],
   activeQuest: null,
   completedQuests: [],
   outlawsKilled: 0,
@@ -777,14 +3105,56 @@ const game = {
   gameOverReason: '',
   journalEntries: [],
   visitedBuildings: new Set(),
-  questProgress: {},
   dialogState: null,
   duelState: null,
   showMinimap: true,
-  stepTimer: 0
+  stepTimer: 0,
+  difficulty: 'normal',
+  ammo: 24,
+  totalGoldEarned: 0,
+  totalShots: 0,
+  totalHits: 0,
+  meleeFights: 0,
+  pokerWins: 0,
+  pokerLosses: 0,
+  healthTonics: 0,
+  bribesTaken: 0,
+  npcstalkedTo: new Set(),
+  noDamageToday: true,
+  achievements: [],
+  wantedList: [],
+  horse: null,
+  mounted: false,
+  currentWeapon: 'revolver',
+  hasVest: false,
+  hasSpeedBoots: false,
+  hasShotgun: false,
+  hasRifle: false,
+  gunDurability: 100,
+  shopOpen: false,
+  shopType: null,
+  pokerState: null,
+  tutorialShown: {},
+  ngPlusLevel: 0,
+  ambientParticles: [],
+  fireEffects: [],
+  hostageNPC: null,
+  waveCount: 0,
+  journalTab: 'stats',
+  duelsWon: 0,
+  quickDrawTime: Infinity,
+  nightWatchesCompleted: 0,
+  tilesRidden: 0,
+  bountiesCaptured: 0,
+  speedResolveTime: Infinity,
+  noDamageDays: 0,
+  prayedToday: false,
+  crimeStartTime: 0
 };
 
-// ---- PLAYER ----
+// ─────────────────────────────────────────────
+// §B  CREATE PLAYER
+// ─────────────────────────────────────────────
 function createPlayer(x, y) {
   return {
     x: x * TILE + TILE / 2,
@@ -796,373 +3166,89 @@ function createPlayer(x, y) {
     hp: 5,
     maxHp: 5,
     shootCooldown: 0,
-    interactCooldown: 0
+    interactCooldown: 0,
+    meleeCooldown: 0,
+    justShot: 0
   };
 }
 
-// ---- CANVAS SETUP ----
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const mmCanvas = document.getElementById('minimapCanvas');
-const mmCtx = mmCanvas.getContext('2d');
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+// ─────────────────────────────────────────────
+// §C  HORSE SYSTEM
+// ─────────────────────────────────────────────
+function spawnHorse(x, y) {
+  game.horse = {
+    x: x * TILE + TILE / 2,
+    y: y * TILE + TILE / 2,
+    hp: 8,
+    maxHp: 8,
+    dir: 0,
+    animFrame: 0,
+    animTimer: 0,
+    gallopTimer: 0
+  };
 }
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
 
-// ---- DRAWING HELPERS ----
-function drawTile(x, y, camX, camY, tileType, timeOfDay) {
-  const sx = x * TILE - camX, sy = y * TILE - camY;
-  if (sx < -TILE || sx > canvas.width || sy < -TILE || sy > canvas.height) return;
-
-  switch (tileType) {
-    case 0: // Sand
-      ctx.fillStyle = PALETTE.sand;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      // Sand detail
-      if ((x + y) % 7 === 0) {
-        ctx.fillStyle = PALETTE.sandDark;
-        ctx.fillRect(sx + 4, sy + 4, 2, 1);
-      }
-      if ((x * 3 + y * 7) % 11 === 0) {
-        ctx.fillStyle = PALETTE.sandLight;
-        ctx.fillRect(sx + 12, sy + 8, 3, 1);
-      }
-      break;
-    case 1: // Road
-      ctx.fillStyle = '#a08850';
-      ctx.fillRect(sx, sy, TILE, TILE);
-      // Road detail - wagon ruts
-      ctx.fillStyle = '#907840';
-      if (x % 3 === 0) ctx.fillRect(sx + 8, sy, 2, TILE);
-      if (x % 3 === 1) ctx.fillRect(sx + 20, sy, 2, TILE);
-      break;
-    case 3: // Wall
-      ctx.fillStyle = PALETTE.wood;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      ctx.fillStyle = PALETTE.woodDark;
-      ctx.fillRect(sx, sy, TILE, 2);
-      ctx.fillRect(sx, sy, 2, TILE);
-      // Plank lines
-      ctx.fillStyle = PALETTE.woodLight;
-      for (let py = 4; py < TILE; py += 8) {
-        ctx.fillRect(sx + 2, sy + py, TILE - 4, 1);
-      }
-      break;
-    case 4: // Door
-      ctx.fillStyle = PALETTE.woodDark;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      ctx.fillStyle = '#8b6914';
-      ctx.fillRect(sx + 4, sy + 2, TILE - 8, TILE - 4);
-      // Door handle
-      ctx.fillStyle = PALETTE.gold;
-      ctx.fillRect(sx + TILE - 10, sy + TILE / 2, 3, 3);
-      break;
-    case 5: // Water
-      ctx.fillStyle = PALETTE.water;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      // Shimmer
-      const shimmer = Math.sin(Date.now() / 500 + x + y) * 0.15;
-      ctx.fillStyle = `rgba(150,200,255,${0.2 + shimmer})`;
-      ctx.fillRect(sx + 4, sy + 8 + Math.sin(Date.now() / 300 + x) * 2, 8, 2);
-      break;
-    case 6: // Cactus
-      ctx.fillStyle = PALETTE.sand;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      ctx.fillStyle = PALETTE.cactus;
-      ctx.fillRect(sx + 12, sy + 4, 8, 24);
-      ctx.fillRect(sx + 4, sy + 8, 8, 6);
-      ctx.fillRect(sx + 20, sy + 12, 8, 6);
-      ctx.fillStyle = PALETTE.cactusD;
-      ctx.fillRect(sx + 14, sy + 4, 2, 24);
-      break;
-    case 7: // Rock
-      ctx.fillStyle = PALETTE.sand;
-      ctx.fillRect(sx, sy, TILE, TILE);
-      ctx.fillStyle = PALETTE.stone;
-      ctx.fillRect(sx + 6, sy + 10, 20, 16);
-      ctx.fillStyle = PALETTE.stoneLight;
-      ctx.fillRect(sx + 8, sy + 10, 16, 4);
-      ctx.fillStyle = PALETTE.stoneDark;
-      ctx.fillRect(sx + 6, sy + 22, 20, 4);
-      break;
-    case 8: // Wood floor
-      ctx.fillStyle = '#7a5a30';
-      ctx.fillRect(sx, sy, TILE, TILE);
-      ctx.fillStyle = '#6a4a20';
-      for (let py = 0; py < TILE; py += 8) {
-        ctx.fillRect(sx, sy + py, TILE, 1);
-      }
-      break;
+function mountHorse() {
+  if (!game.horse || game.mounted) return;
+  if (dist(game.player, game.horse) > INTERACT_RANGE + 16) return;
+  game.mounted = true;
+  audio.playHorseNeigh();
+  showNotification('Mounted up! Press H to dismount.');
+  if (!game.tutorialShown.horse) {
+    showTutorial('horse', 'You are now mounted! You move 2x faster but cannot shoot or interact. Press H to dismount.');
   }
 }
 
-function drawBuildingRoof(b, camX, camY) {
-  const sx = b.x * TILE - camX;
-  const sy = b.y * TILE - camY - 8;
-
-  // Roof
-  ctx.fillStyle = PALETTE.roof;
-  ctx.fillRect(sx - 4, sy, b.w * TILE + 8, 12);
-  ctx.fillStyle = PALETTE.roofDark;
-  ctx.fillRect(sx - 4, sy, b.w * TILE + 8, 3);
-
-  // Sign
-  ctx.fillStyle = '#2a1a08';
-  ctx.fillRect(sx + 8, sy + 14, b.w * TILE - 16, 14);
-  ctx.fillStyle = PALETTE.gold;
-  ctx.font = '9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(b.name, sx + b.w * TILE / 2, sy + 24);
+function dismountHorse() {
+  if (!game.mounted) return;
+  game.mounted = false;
+  game.horse.x = game.player.x + 20;
+  game.horse.y = game.player.y;
+  showNotification('Dismounted.');
 }
 
-function drawPlayer(player, camX, camY) {
-  const sx = player.x - camX;
-  const sy = player.y - camY;
-  const bob = player.moving ? Math.sin(player.animTimer * 0.3) * 2 : 0;
-
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.fillRect(sx - 7, sy + 12, 14, 4);
-
-  // Boots
-  ctx.fillStyle = '#3a2010';
-  ctx.fillRect(sx - 5, sy + 8 + bob, 4, 6);
-  ctx.fillRect(sx + 1, sy + 8 + bob, 4, 6);
-
-  // Pants
-  ctx.fillStyle = '#5a4030';
-  ctx.fillRect(sx - 6, sy + 2 + bob, 12, 8);
-
-  // Body (vest)
-  ctx.fillStyle = '#6a4a2a';
-  ctx.fillRect(sx - 7, sy - 6 + bob, 14, 10);
-
-  // Shirt
-  ctx.fillStyle = '#c8b898';
-  ctx.fillRect(sx - 5, sy - 4 + bob, 10, 6);
-
-  // Badge
-  ctx.fillStyle = PALETTE.badge;
-  ctx.fillRect(sx + 2, sy - 3 + bob, 3, 3);
-
-  // Head
-  ctx.fillStyle = PALETTE.skin;
-  ctx.fillRect(sx - 4, sy - 12 + bob, 8, 8);
-
-  // Hat
-  ctx.fillStyle = '#5a4020';
-  ctx.fillRect(sx - 8, sy - 16 + bob, 16, 4);
-  ctx.fillRect(sx - 5, sy - 20 + bob, 10, 5);
-
-  // Eyes based on direction
-  ctx.fillStyle = '#1a1008';
-  if (player.dir === 0) { // down
-    ctx.fillRect(sx - 2, sy - 10 + bob, 2, 2);
-    ctx.fillRect(sx + 1, sy - 10 + bob, 2, 2);
-  } else if (player.dir === 1) { // up
-    // back of head, no eyes
-  } else if (player.dir === 2) { // left
-    ctx.fillRect(sx - 3, sy - 10 + bob, 2, 2);
-  } else { // right
-    ctx.fillRect(sx + 2, sy - 10 + bob, 2, 2);
-  }
-
-  // Gun
-  ctx.fillStyle = '#3a3a3a';
-  if (player.dir === 0) ctx.fillRect(sx + 6, sy + bob, 3, 6);
-  else if (player.dir === 1) ctx.fillRect(sx - 8, sy + bob, 3, 6);
-  else if (player.dir === 2) ctx.fillRect(sx - 12, sy - 2 + bob, 6, 3);
-  else ctx.fillRect(sx + 7, sy - 2 + bob, 6, 3);
-
-  // HP bar
-  if (player.hp < player.maxHp) {
-    ctx.fillStyle = '#300000';
-    ctx.fillRect(sx - 10, sy - 24, 20, 3);
-    ctx.fillStyle = '#cc0000';
-    ctx.fillRect(sx - 10, sy - 24, 20 * (player.hp / player.maxHp), 3);
-  }
+// ─────────────────────────────────────────────
+// §D  COLLISION SYSTEM
+// ─────────────────────────────────────────────
+function isSolidTile(tileX, tileY) {
+  if (tileX < 0 || tileX >= MAP_W || tileY < 0 || tileY >= MAP_H) return true;
+  const t = game.map[tileY][tileX];
+  return t === 3 || t === 5 || t === 6 || t === 7 || t === 10;
 }
 
-function drawNPC(npc, camX, camY) {
-  if (npc.state === 'dead') {
-    // Dead body on ground
-    const sx = npc.x - camX, sy = npc.y - camY;
-    ctx.fillStyle = npc.colors.body;
-    ctx.fillRect(sx - 10, sy + 4, 20, 6);
-    ctx.fillStyle = npc.colors.skin;
-    ctx.fillRect(sx + 10, sy + 2, 6, 6);
-    ctx.fillStyle = '#600000';
-    ctx.fillRect(sx - 2, sy + 6, 8, 3);
-    return;
-  }
-
-  if (npc.state === 'arrested') {
-    // Sitting in place
-    const sx = npc.x - camX, sy = npc.y - camY;
-    ctx.fillStyle = npc.colors.body;
-    ctx.fillRect(sx - 6, sy, 12, 10);
-    ctx.fillStyle = npc.colors.skin;
-    ctx.fillRect(sx - 4, sy - 8, 8, 8);
-    ctx.fillStyle = '#aaaaaa';
-    ctx.fillRect(sx - 6, sy + 2, 2, 4);
-    ctx.fillRect(sx + 5, sy + 2, 2, 4);
-    return;
-  }
-
-  const sx = npc.x - camX;
-  const sy = npc.y - camY;
-  const bob = npc.state === 'walking' ? Math.sin(npc.animTimer * 0.3) * 1.5 : 0;
-
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.fillRect(sx - 6, sy + 10, 12, 3);
-
-  // Boots
-  ctx.fillStyle = '#3a2010';
-  ctx.fillRect(sx - 4, sy + 6 + bob, 3, 5);
-  ctx.fillRect(sx + 1, sy + 6 + bob, 3, 5);
-
-  // Pants
-  ctx.fillStyle = npc.colors.pants;
-  ctx.fillRect(sx - 5, sy + 1 + bob, 10, 7);
-
-  // Body
-  ctx.fillStyle = npc.colors.body;
-  ctx.fillRect(sx - 6, sy - 6 + bob, 12, 9);
-
-  // Head
-  ctx.fillStyle = npc.colors.skin;
-  ctx.fillRect(sx - 4, sy - 12 + bob, 8, 7);
-
-  // Hat
-  if (npc.colors.hat) {
-    ctx.fillStyle = npc.colors.hat;
-    ctx.fillRect(sx - 7, sy - 15 + bob, 14, 3);
-    ctx.fillRect(sx - 4, sy - 18 + bob, 8, 4);
-  }
-
-  // Hostile indicator
-  if (npc.hostile) {
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(sx - 1, sy - 22, 3, 3);
-  }
-
-  // Interaction indicator
-  if (!npc.hostile && npc.dialogCooldown <= 0) {
-    const playerDist = game.player ? dist(npc, game.player) : 999;
-    if (playerDist < 50) {
-      ctx.fillStyle = '#ffd700';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('[E]', sx, sy - 24);
-    }
-  }
-
-  // Name above head
-  if (game.player && dist(npc, game.player) < 80) {
-    ctx.fillStyle = npc.hostile ? '#ff4444' : '#e8d5a3';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(npc.name, sx, sy - 28);
-  }
+function canMove(x, y, radius) {
+  const r = radius || 6;
+  const corners = [
+    [Math.floor((x - r) / TILE), Math.floor((y - r) / TILE)],
+    [Math.floor((x + r) / TILE), Math.floor((y - r) / TILE)],
+    [Math.floor((x - r) / TILE), Math.floor((y + r) / TILE)],
+    [Math.floor((x + r) / TILE), Math.floor((y + r) / TILE)]
+  ];
+  return corners.every(function(c) { return !isSolidTile(c[0], c[1]); });
 }
 
-function drawDayNightOverlay(timeOfDay) {
-  // timeOfDay 0-1: 0=midnight, 0.25=6AM, 0.5=noon, 0.75=6PM
-  let alpha = 0;
-  let color = '0,0,30';
-
-  if (timeOfDay < 0.2) { // Night (midnight to ~5AM)
-    alpha = 0.5;
-  } else if (timeOfDay < 0.3) { // Dawn
-    alpha = lerp(0.5, 0, (timeOfDay - 0.2) / 0.1);
-    color = '60,20,0';
-  } else if (timeOfDay < 0.7) { // Day
-    alpha = 0;
-  } else if (timeOfDay < 0.8) { // Dusk
-    alpha = lerp(0, 0.3, (timeOfDay - 0.7) / 0.1);
-    color = '80,30,0';
-  } else { // Night
-    alpha = lerp(0.3, 0.5, (timeOfDay - 0.8) / 0.2);
-    color = '0,0,30';
-  }
-
-  if (alpha > 0) {
-    ctx.fillStyle = `rgba(${color},${alpha})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-}
-
-function getTimeString(t) {
-  const totalMinutes = t * 24 * 60;
-  let hours = Math.floor(totalMinutes / 60);
-  const minutes = Math.floor(totalMinutes % 60);
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12 || 12;
-  return `${hours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-}
-
-// ---- MINIMAP ----
-function drawMinimap() {
-  if (!game.showMinimap) {
-    document.getElementById('minimap-container').classList.add('hidden');
-    return;
-  }
-  document.getElementById('minimap-container').classList.remove('hidden');
-
-  mmCtx.fillStyle = '#1a1008';
-  mmCtx.fillRect(0, 0, 150, 150);
-
-  const scale = 150 / (MAP_W * TILE);
-  // Draw buildings
-  for (const b of game.buildings) {
-    mmCtx.fillStyle = '#5a3a18';
-    mmCtx.fillRect(b.x * TILE * scale, b.y * TILE * scale, b.w * TILE * scale, b.h * TILE * scale);
-  }
-  // Roads
-  mmCtx.fillStyle = '#706040';
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      if (game.map[y][x] === 1) {
-        mmCtx.fillRect(x * TILE * scale, y * TILE * scale, TILE * scale + 1, TILE * scale + 1);
-      }
-    }
-  }
-  // NPCs
-  for (const npc of game.npcs) {
-    if (npc.state === 'dead') continue;
-    mmCtx.fillStyle = npc.hostile ? '#ff0000' : (npc.type === NPC_TYPES.OUTLAW ? '#ff8800' : '#44aa44');
-    mmCtx.fillRect(npc.x * scale - 1, npc.y * scale - 1, 3, 3);
-  }
-  // Crime
-  if (game.activeCrime) {
-    mmCtx.fillStyle = Date.now() % 500 < 250 ? '#ff0000' : '#ff880088';
-    mmCtx.fillRect(game.activeCrime.x * scale - 3, game.activeCrime.y * scale - 3, 6, 6);
-  }
-  // Player
-  mmCtx.fillStyle = '#ffd700';
-  mmCtx.fillRect(game.player.x * scale - 2, game.player.y * scale - 2, 4, 4);
-}
-
-// ---- DIALOG SYSTEM ----
+// ─────────────────────────────────────────────
+// §E  DIALOG SYSTEM
+// ─────────────────────────────────────────────
 function openDialog(npc) {
   if (npc.dialogCooldown > 0) return;
+  if (game.mounted) {
+    showNotification('Dismount first to talk.');
+    return;
+  }
   npc.dialogCooldown = 120;
+  game.npcstalkedTo.add(npc.id);
 
-  const dialogEl = document.getElementById('dialog-box');
-  const nameEl = document.getElementById('dialog-name');
-  const textEl = document.getElementById('dialog-text');
-  const choicesEl = document.getElementById('dialog-choices');
-  const portraitEl = document.getElementById('dialog-portrait');
+  var dialogEl = document.getElementById('dialog-box');
+  var nameEl = document.getElementById('dialog-name');
+  var textEl = document.getElementById('dialog-text');
+  var choicesEl = document.getElementById('dialog-choices');
+  var portraitEl = document.getElementById('dialog-portrait');
 
   // Draw portrait
-  const pCanvas = document.createElement('canvas');
+  var pCanvas = document.createElement('canvas');
   pCanvas.width = 64; pCanvas.height = 64;
-  const pCtx = pCanvas.getContext('2d');
+  var pCtx = pCanvas.getContext('2d');
   pCtx.fillStyle = '#140c04';
   pCtx.fillRect(0, 0, 64, 64);
   pCtx.fillStyle = npc.colors.skin;
@@ -1177,14 +3263,23 @@ function openDialog(npc) {
   pCtx.fillStyle = '#1a1008';
   pCtx.fillRect(24, 28, 4, 4);
   pCtx.fillRect(36, 28, 4, 4);
-  portraitEl.style.background = `url(${pCanvas.toDataURL()}) center/cover`;
+  portraitEl.style.background = 'url(' + pCanvas.toDataURL() + ') center/cover';
 
   nameEl.textContent = npc.name;
   choicesEl.innerHTML = '';
 
-  const dialogs = DIALOGS[npc.type] || DIALOGS.townsperson;
-  let text = '';
-  let choices = [];
+  var dialogs = DIALOGS[npc.type] || DIALOGS.townsperson;
+  var text = '';
+  var choices = [];
+
+  // Personality modifier
+  var personality = npc.personality || 'neutral';
+  var repMod = '';
+  if (game.reputation < 20) {
+    repMod = 'low';
+  } else if (game.reputation > 80) {
+    repMod = 'high';
+  }
 
   if (npc.hostile) {
     text = dialogs.hostile ? dialogs.hostile[rand(0, dialogs.hostile.length - 1)] : "I'll get you, lawman!";
@@ -1193,63 +3288,108 @@ function openDialog(npc) {
       { text: '2. "Stand down, partner."', action: 'intimidate' },
       { text: '3. Walk away', action: 'leave' }
     ];
-  } else if (npc.questGiver && !game.activeQuest && Math.random() > 0.4) {
-    text = dialogs.quest ? dialogs.quest[rand(0, dialogs.quest.length - 1)] : dialogs.idle[rand(0, dialogs.idle.length - 1)];
-    choices = [
-      { text: "1. What's the job?", action: 'accept_quest' },
-      { text: "2. Not right now.", action: 'leave' }
-    ];
-  } else if (npc.type === NPC_TYPES.BARTENDER && Math.random() > 0.5) {
-    const tipTemplates = dialogs.tip;
-    const randomNPC = game.npcs[rand(0, game.npcs.length - 1)];
-    const randomBuilding = game.buildings[rand(0, game.buildings.length - 1)];
-    text = tipTemplates[rand(0, tipTemplates.length - 1)]
-      .replace('{name}', randomNPC.name)
-      .replace('{place}', randomBuilding.name);
-    choices = [
-      { text: "1. Thanks for the tip.", action: 'leave' },
-      { text: "2. Buy a drink ($5)", action: 'buy_drink' }
-    ];
-  } else if (npc.type === NPC_TYPES.SHOPKEEPER) {
-    text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
-    choices = [
-      { text: '1. Buy Health Tonic ($25)', action: 'buy_health' },
-      { text: '2. Buy Ammo ($10)', action: 'buy_ammo' },
-      { text: '3. Just browsing.', action: 'leave' }
-    ];
   } else if (npc.type === NPC_TYPES.OUTLAW && !npc.hostile) {
-    const surrenderDialogs = dialogs.surrender;
+    var surrenderDialogs = dialogs.surrender;
     text = surrenderDialogs[rand(0, surrenderDialogs.length - 1)];
     choices = [
       { text: '1. "You\'re under arrest."', action: 'arrest' },
       { text: '2. "Get out of my town."', action: 'banish' },
       { text: '3. Accept bribe ($50)', action: 'bribe' }
     ];
+  } else if (npc.questGiver && !game.activeQuest && Math.random() > 0.4) {
+    text = dialogs.quest ? dialogs.quest[rand(0, dialogs.quest.length - 1)] : dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    choices = [
+      { text: "1. What's the job?", action: 'accept_quest' },
+      { text: "2. Not right now.", action: 'leave' }
+    ];
+  } else if (npc.type === NPC_TYPES.BARTENDER) {
+    if (Math.random() > 0.5 && dialogs.tip) {
+      var tipTemplates = dialogs.tip;
+      var randomNPC = game.npcs[rand(0, game.npcs.length - 1)];
+      var randomBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+      text = tipTemplates[rand(0, tipTemplates.length - 1)]
+        .replace('{name}', randomNPC.name)
+        .replace('{place}', randomBuilding.name);
+    } else {
+      text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    }
+    choices = [
+      { text: "1. Buy a drink ($5)", action: 'buy_drink' },
+      { text: '2. Play Poker ($10)', action: 'poker' },
+      { text: "3. Seen any trouble?", action: 'ask_trouble' }
+    ];
+  } else if (npc.type === NPC_TYPES.SHOPKEEPER) {
+    text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    if (repMod === 'low') {
+      text = "You got a lot of nerve showin' your face in here, Sheriff.";
+    } else if (repMod === 'high') {
+      text = "Sheriff! Always a pleasure. Got some special deals for you today.";
+    }
+    choices = [
+      { text: '1. Open Shop', action: 'shop' },
+      { text: '2. Buy Health Tonic ($25)', action: 'buy_health' },
+      { text: '3. Buy Ammo ($10)', action: 'buy_ammo' },
+    ];
+  } else if (npc.type === NPC_TYPES.PREACHER) {
+    text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    choices = [
+      { text: '1. Pray (+2 Rep)', action: 'pray' },
+      { text: '2. "Bless you, Father."', action: 'leave' }
+    ];
+  } else if (npc.type === NPC_TYPES.STRANGER) {
+    text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    if (repMod === 'low') {
+      text = "Heh. Heard you're not exactly a model lawman...";
+    }
+    choices = [
+      { text: '1. "Who are you?"', action: 'investigate' },
+      { text: '2. "Move along."', action: 'leave' },
+      { text: '3. Challenge to duel', action: 'duel' }
+    ];
+  } else if (npc.type === NPC_TYPES.BOUNTY) {
+    text = "You'll never take me alive!";
+    choices = [
+      { text: '1. "Surrender peacefully!"', action: 'intimidate' },
+      { text: '2. Draw! [Duel]', action: 'duel' },
+      { text: '3. "You\'re under arrest."', action: 'arrest' }
+    ];
   } else {
     text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    if (personality === 'grumpy') {
+      text = "What do you want? I'm busy.";
+    } else if (personality === 'friendly' && repMod === 'high') {
+      text = "Sheriff! You're the best thing that ever happened to this town!";
+    } else if (repMod === 'low') {
+      text = "I don't trust you much, Sheriff...";
+    }
     choices = [
       { text: '1. "Stay safe out there."', action: 'leave' },
       { text: '2. "Seen any trouble?"', action: 'ask_trouble' }
     ];
+    if (game.activeQuest && game.activeQuest.type === 'bounty') {
+      choices.push({ text: '3. Ask about bounty', action: 'investigate' });
+    }
   }
 
   textEl.textContent = text;
 
-  for (const choice of choices) {
-    const btn = document.createElement('button');
+  for (var ci = 0; ci < choices.length; ci++) {
+    var choice = choices[ci];
+    var btn = document.createElement('button');
     btn.className = 'dialog-choice';
     btn.textContent = choice.text;
-    btn.onclick = () => handleDialogChoice(choice.action, npc);
+    btn.setAttribute('data-action', choice.action);
+    btn.onclick = (function(act, n) { return function() { handleDialogChoice(act, n); }; })(choice.action, npc);
     choicesEl.appendChild(btn);
   }
 
   dialogEl.classList.remove('hidden');
   game.state = 'dialog';
-  game.dialogState = { npc };
+  game.dialogState = { npc: npc };
 }
 
 function handleDialogChoice(action, npc) {
-  const dialogEl = document.getElementById('dialog-box');
+  var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
 
   switch (action) {
     case 'leave':
@@ -1262,36 +3402,45 @@ function handleDialogChoice(action, npc) {
       break;
 
     case 'intimidate':
-      if (game.reputation >= 60 && Math.random() > 0.3) {
+      var successChance = game.reputation >= 60 ? 0.7 : (game.reputation >= 40 ? 0.4 : 0.15);
+      if (Math.random() < successChance) {
         npc.hostile = false;
         npc.surrendered = true;
         showNotification(npc.name + ' backs down! +3 Rep');
-        game.reputation = clamp(game.reputation + 3, 0, 100);
+        game.reputation = clamp(game.reputation + Math.round(3 * diff.repGainMult), 0, REPUTATION_MAX);
         audio.playDing();
+        closeDialog();
       } else {
         showNotification("They ain't scared of you!");
         closeDialog();
         startDuel(npc);
         return;
       }
-      closeDialog();
       break;
 
     case 'arrest':
       npc.state = 'arrested';
       npc.hostile = false;
-      game.reputation = clamp(game.reputation + 8, 0, 100);
+      game.reputation = clamp(game.reputation + Math.round(8 * diff.repGainMult), 0, REPUTATION_MAX);
       game.gold += 30;
+      game.totalGoldEarned += 30;
       game.outlawsArrested++;
-      showNotification(npc.name + ' arrested! +8 Rep, +$30');
+      if (npc.type === NPC_TYPES.BOUNTY) {
+        game.bountiesCaptured++;
+        game.gold += 70;
+        game.totalGoldEarned += 70;
+        showNotification(npc.name + ' captured! +8 Rep, +$100 bounty');
+      } else {
+        showNotification(npc.name + ' arrested! +8 Rep, +$30');
+      }
       audio.playDing();
-      addJournalEntry(`Arrested ${npc.name}.`);
+      addJournalEntry('Arrested ' + npc.name + '.');
       closeDialog();
       break;
 
     case 'banish':
-      npc.state = 'dead'; // remove from town
-      game.reputation = clamp(game.reputation + 2, 0, 100);
+      npc.state = 'dead';
+      game.reputation = clamp(game.reputation + Math.round(2 * diff.repGainMult), 0, REPUTATION_MAX);
       showNotification(npc.name + ' ran out of town. +2 Rep');
       closeDialog();
       break;
@@ -1299,7 +3448,9 @@ function handleDialogChoice(action, npc) {
     case 'bribe':
       npc.state = 'dead';
       game.gold += 50;
-      game.reputation = clamp(game.reputation - 10, 0, 100);
+      game.totalGoldEarned += 50;
+      game.reputation = clamp(game.reputation - Math.round(10 * diff.repLossMult), 0, REPUTATION_MAX);
+      game.bribesTaken++;
       showNotification('Took the bribe. +$50, -10 Rep');
       audio.playBad();
       addJournalEntry('Accepted bribe from ' + npc.name + '.');
@@ -1307,44 +3458,36 @@ function handleDialogChoice(action, npc) {
       break;
 
     case 'accept_quest':
-      const quest = QUEST_TEMPLATES[rand(0, QUEST_TEMPLATES.length - 1)];
-      game.activeQuest = { ...quest, visited: new Set(), startTime: game.time, startDay: game.dayCount };
-      game.questProgress = {};
+      var quest = QUEST_TEMPLATES[rand(0, QUEST_TEMPLATES.length - 1)];
+      game.activeQuest = {
+        name: quest.name,
+        desc: quest.desc,
+        type: quest.type,
+        repReward: quest.repReward,
+        goldReward: quest.goldReward,
+        targets: quest.targets.slice(),
+        visited: new Set(),
+        startTime: game.time,
+        startDay: game.dayCount,
+        startKills: game.outlawsKilled,
+        nightTime: 0
+      };
       showNotification('New Mission: ' + quest.name);
       addJournalEntry('Accepted mission: ' + quest.name);
       document.getElementById('quest-tracker').classList.remove('hidden');
       document.getElementById('quest-text').textContent = quest.desc;
+      if (!game.tutorialShown.quest) {
+        showTutorial('quest', 'You accepted a mission! Complete it for reputation and gold. Check your journal [J] for details.');
+      }
       closeDialog();
       break;
 
     case 'buy_drink':
       if (game.gold >= 5) {
         game.gold -= 5;
-        showNotification('Enjoyed a whiskey. -$5');
-        // Small rep boost for being social
-        game.reputation = clamp(game.reputation + 1, 0, 100);
-      } else {
-        showNotification("You can't afford that.");
-      }
-      closeDialog();
-      break;
-
-    case 'buy_health':
-      if (game.gold >= 25) {
-        game.gold -= 25;
-        game.player.hp = Math.min(game.player.hp + 2, game.player.maxHp);
-        showNotification('Health restored! -$25');
-        audio.playDing();
-      } else {
-        showNotification("You can't afford that.");
-      }
-      closeDialog();
-      break;
-
-    case 'buy_ammo':
-      if (game.gold >= 10) {
-        game.gold -= 10;
-        showNotification('Stocked up on ammo. -$10');
+        game.reputation = clamp(game.reputation + 1, 0, REPUTATION_MAX);
+        showNotification('Enjoyed a whiskey. -$5, +1 Rep');
+        if (typeof audio.playDrink === 'function') audio.playDrink();
       } else {
         showNotification("You can't afford that.");
       }
@@ -1355,7 +3498,78 @@ function handleDialogChoice(action, npc) {
       if (game.activeCrime) {
         showNotification('Heard about trouble near the ' + game.activeCrime.targetBuilding.name + '!');
       } else {
-        showNotification("All quiet for now, Sheriff.");
+        showNotification('All quiet for now, Sheriff.');
+      }
+      closeDialog();
+      break;
+
+    case 'buy_health':
+      var healthPrice = game.reputation < 20 ? 50 : (game.reputation > 80 ? 20 : 25);
+      if (game.gold >= healthPrice) {
+        game.gold -= healthPrice;
+        game.player.hp = Math.min(game.player.hp + TONIC_HEAL_AMOUNT, game.player.maxHp);
+        game.healthTonics++;
+        showNotification('Health restored! -$' + healthPrice);
+        audio.playDing();
+      } else {
+        showNotification("You can't afford that. ($" + healthPrice + ')');
+      }
+      closeDialog();
+      break;
+
+    case 'buy_ammo':
+      var ammoPrice = game.reputation < 20 ? 20 : (game.reputation > 80 ? 8 : 10);
+      if (game.gold >= ammoPrice) {
+        game.gold -= ammoPrice;
+        game.ammo = Math.min(game.ammo + 12, MAX_AMMO_CAP);
+        showNotification('Ammo restocked! -$' + ammoPrice);
+        if (typeof audio.playReload === 'function') audio.playReload();
+      } else {
+        showNotification("You can't afford that. ($" + ammoPrice + ')');
+      }
+      closeDialog();
+      break;
+
+    case 'pray':
+      if (!game.prayedToday) {
+        game.prayedToday = true;
+        game.reputation = clamp(game.reputation + 2, 0, REPUTATION_MAX);
+        showNotification('You pray for the town. +2 Rep');
+        audio.playDing();
+      } else {
+        showNotification("You've already prayed today.");
+      }
+      closeDialog();
+      break;
+
+    case 'poker':
+      closeDialog();
+      openPoker();
+      break;
+
+    case 'shop':
+      closeDialog();
+      if (npc.type === NPC_TYPES.SHOPKEEPER) {
+        openShop('general');
+      } else {
+        openShop('blacksmith');
+      }
+      break;
+
+    case 'investigate':
+      if (game.activeQuest && game.activeQuest.type === 'bounty') {
+        var dirs = ['north', 'south', 'east', 'west'];
+        showNotification('They say the outlaw was seen heading ' + dirs[rand(0, 3)] + ' of town.');
+      } else if (npc.type === NPC_TYPES.STRANGER) {
+        if (Math.random() < 0.3) {
+          npc.hostile = true;
+          showNotification(npc.name + ' draws a weapon!');
+          closeDialog();
+          return;
+        }
+        showNotification('"I told you, mind your own business."');
+      } else {
+        showNotification('Nothing suspicious here.');
       }
       closeDialog();
       break;
@@ -1364,51 +3578,380 @@ function handleDialogChoice(action, npc) {
 
 function closeDialog() {
   document.getElementById('dialog-box').classList.add('hidden');
-  game.state = 'playing';
+  if (game.state === 'dialog') game.state = 'playing';
   game.dialogState = null;
 }
 
-// ---- DUEL SYSTEM ----
+// ─────────────────────────────────────────────
+// §F  SHOP SYSTEM
+// ─────────────────────────────────────────────
+function openShop(type) {
+  game.shopOpen = true;
+  game.shopType = type;
+  game.state = 'shop';
+
+  var shopUI = document.getElementById('shop-ui');
+  var titleEl = document.getElementById('shop-title');
+  var itemsEl = document.getElementById('shop-items');
+
+  titleEl.textContent = type === 'general' ? 'GENERAL STORE' : 'BLACKSMITH';
+  shopUI.classList.remove('hidden');
+  itemsEl.innerHTML = '';
+
+  var items = SHOP_ITEMS[type] || [];
+  var priceMult = game.reputation < 20 ? 2 : (game.reputation > 80 ? 0.8 : 1);
+
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var adjustedPrice = Math.round(item.price * priceMult);
+    var alreadyOwned = false;
+    if (item.oneTime) {
+      if (item.id === 'vest' && game.hasVest) alreadyOwned = true;
+      if (item.id === 'speed_boots' && game.hasSpeedBoots) alreadyOwned = true;
+      if (item.id === 'shotgun' && game.hasShotgun) alreadyOwned = true;
+      if (item.id === 'rifle' && game.hasRifle) alreadyOwned = true;
+    }
+
+    var div = document.createElement('div');
+    div.className = 'shop-item';
+    var canAfford = game.gold >= adjustedPrice && !alreadyOwned;
+
+    div.innerHTML = '<span class="shop-icon">' + item.icon + '</span>' +
+      '<span class="shop-name">' + item.name + '</span>' +
+      '<span class="shop-desc">' + item.desc + '</span>' +
+      '<span class="shop-price' + (!canAfford ? ' too-expensive' : '') + '">$' + adjustedPrice +
+      (alreadyOwned ? ' (OWNED)' : '') + '</span>';
+
+    if (canAfford) {
+      var buyBtn = document.createElement('button');
+      buyBtn.className = 'menu-btn shop-buy';
+      buyBtn.textContent = 'BUY';
+      buyBtn.onclick = (function(itm, price) {
+        return function() { buyItem(itm, price); };
+      })(item, adjustedPrice);
+      div.appendChild(buyBtn);
+    }
+
+    itemsEl.appendChild(div);
+  }
+
+  if (!game.tutorialShown.shop) {
+    showTutorial('shop', 'Welcome to the shop! Buy supplies and equipment. Prices change based on your reputation.');
+  }
+}
+
+function buyItem(item, price) {
+  if (game.gold < price) {
+    showNotification("You can't afford that!");
+    return;
+  }
+  game.gold -= price;
+
+  switch (item.effect) {
+    case 'healHP':
+      game.player.hp = Math.min(game.player.hp + item.value, game.player.maxHp);
+      game.healthTonics++;
+      showNotification('Health restored!');
+      audio.playDing();
+      break;
+    case 'addAmmo':
+      game.ammo = Math.min(game.ammo + item.value, MAX_AMMO_CAP);
+      showNotification('+' + item.value + ' ammo!');
+      if (typeof audio.playReload === 'function') audio.playReload();
+      break;
+    case 'healHorse':
+      if (game.horse) {
+        game.horse.hp = Math.min(game.horse.hp + item.value, game.horse.maxHp);
+        showNotification('Horse healed!');
+      } else {
+        showNotification("You don't have a horse nearby.");
+        game.gold += price;
+        return;
+      }
+      break;
+    case 'repairGun':
+      game.gunDurability = 100;
+      showNotification('Gun repaired to full condition!');
+      break;
+    case 'addMaxHP':
+      game.player.maxHp += item.value;
+      game.player.hp += item.value;
+      if (game.player.maxHp > MAX_HP_CAP) game.player.maxHp = MAX_HP_CAP;
+      game.hasVest = true;
+      showNotification('Bulletproof vest equipped! +2 Max HP');
+      break;
+    case 'addSpeed':
+      game.hasSpeedBoots = true;
+      showNotification('Speed boots equipped! +15% speed');
+      break;
+    case 'unlockShotgun':
+      game.hasShotgun = true;
+      showNotification('Shotgun unlocked! Spread shot available.');
+      break;
+    case 'unlockRifle':
+      game.hasRifle = true;
+      showNotification('Rifle unlocked! Long range precision.');
+      break;
+  }
+
+  // Refresh shop display
+  openShop(game.shopType);
+}
+
+function closeShop() {
+  document.getElementById('shop-ui').classList.add('hidden');
+  game.shopOpen = false;
+  game.shopType = null;
+  game.state = 'playing';
+}
+
+// ─────────────────────────────────────────────
+// §G  POKER MINI-GAME
+// ─────────────────────────────────────────────
+var SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
+var RANK_NAMES = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+var SUIT_SYMBOLS = { hearts: '\u2665', diamonds: '\u2666', clubs: '\u2663', spades: '\u2660' };
+var SUIT_COLORS = { hearts: '#cc3030', diamonds: '#cc3030', clubs: '#222', spades: '#222' };
+
+function makeDeck() {
+  var deck = [];
+  for (var s = 0; s < 4; s++) {
+    for (var r = 0; r < 13; r++) {
+      deck.push({ suit: SUITS[s], rank: r, held: false });
+    }
+  }
+  // Shuffle
+  for (var i = deck.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;
+  }
+  return deck;
+}
+
+function openPoker() {
+  if (game.gold < 10) {
+    showNotification("You need $10 to play poker.");
+    return;
+  }
+  game.gold -= 10;
+  game.state = 'poker';
+
+  var deck = makeDeck();
+  var hand = deck.splice(0, 5);
+  game.pokerState = {
+    deck: deck,
+    hand: hand,
+    phase: 'hold', // hold, result
+    result: null,
+    payout: 0
+  };
+
+  renderPokerUI();
+  document.getElementById('poker-ui').classList.remove('hidden');
+  if (typeof audio.playPokerChip === 'function') audio.playPokerChip();
+}
+
+function renderPokerUI() {
+  var ps = game.pokerState;
+  if (!ps) return;
+  var content = document.getElementById('poker-content');
+  var html = '<div class="poker-hand">';
+
+  for (var i = 0; i < ps.hand.length; i++) {
+    var card = ps.hand[i];
+    var suitSym = SUIT_SYMBOLS[card.suit];
+    var suitCol = SUIT_COLORS[card.suit];
+    var rankStr = RANK_NAMES[card.rank];
+    var heldClass = card.held ? ' held' : '';
+
+    html += '<div class="poker-card' + heldClass + '" data-idx="' + i + '">';
+    html += '<span class="card-rank" style="color:' + suitCol + '">' + rankStr + '</span>';
+    html += '<span class="card-suit" style="color:' + suitCol + '">' + suitSym + '</span>';
+    if (card.held) html += '<span class="card-held-label">HELD</span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  if (ps.phase === 'hold') {
+    html += '<p class="poker-info">Click cards to hold, then draw.</p>';
+    html += '<button class="menu-btn" id="poker-draw-btn">DRAW</button>';
+    html += '<button class="menu-btn" id="poker-quit-btn">FOLD</button>';
+  } else {
+    html += '<p class="poker-result">' + (ps.result || 'No winning hand') + '</p>';
+    if (ps.payout > 0) {
+      html += '<p class="poker-payout">Won $' + ps.payout + '!</p>';
+    } else {
+      html += '<p class="poker-payout">Better luck next time.</p>';
+    }
+    html += '<button class="menu-btn" id="poker-again-btn">PLAY AGAIN ($10)</button>';
+    html += '<button class="menu-btn" id="poker-leave-btn">LEAVE TABLE</button>';
+  }
+
+  content.innerHTML = html;
+
+  // Attach card click handlers
+  var cards = content.querySelectorAll('.poker-card');
+  for (var c = 0; c < cards.length; c++) {
+    cards[c].addEventListener('click', (function(idx) {
+      return function() { toggleHold(idx); };
+    })(c));
+  }
+
+  // Attach button handlers
+  if (ps.phase === 'hold') {
+    var drawBtn = document.getElementById('poker-draw-btn');
+    if (drawBtn) drawBtn.addEventListener('click', drawCards);
+    var quitBtn = document.getElementById('poker-quit-btn');
+    if (quitBtn) quitBtn.addEventListener('click', closePoker);
+  } else {
+    var againBtn = document.getElementById('poker-again-btn');
+    if (againBtn) againBtn.addEventListener('click', function() {
+      closePoker();
+      openPoker();
+    });
+    var leaveBtn = document.getElementById('poker-leave-btn');
+    if (leaveBtn) leaveBtn.addEventListener('click', closePoker);
+  }
+}
+
+function toggleHold(index) {
+  if (!game.pokerState || game.pokerState.phase !== 'hold') return;
+  game.pokerState.hand[index].held = !game.pokerState.hand[index].held;
+  if (typeof audio.playPokerChip === 'function') audio.playPokerChip();
+  renderPokerUI();
+}
+
+function drawCards() {
+  var ps = game.pokerState;
+  if (!ps || ps.phase !== 'hold') return;
+
+  for (var i = 0; i < ps.hand.length; i++) {
+    if (!ps.hand[i].held && ps.deck.length > 0) {
+      ps.hand[i] = ps.deck.shift();
+    }
+  }
+
+  var eval_result = evaluateHand(ps.hand);
+  ps.result = eval_result.name;
+  ps.payout = eval_result.payout;
+  ps.phase = 'result';
+
+  if (ps.payout > 0) {
+    game.gold += ps.payout;
+    game.totalGoldEarned += ps.payout;
+    game.pokerWins++;
+    audio.playDing();
+  } else {
+    game.pokerLosses++;
+  }
+
+  renderPokerUI();
+}
+
+function evaluateHand(hand) {
+  var ranks = hand.map(function(c) { return c.rank; }).sort(function(a, b) { return a - b; });
+  var suits = hand.map(function(c) { return c.suit; });
+
+  // Count rank occurrences
+  var counts = {};
+  for (var i = 0; i < ranks.length; i++) {
+    counts[ranks[i]] = (counts[ranks[i]] || 0) + 1;
+  }
+  var vals = Object.values(counts).sort(function(a, b) { return b - a; });
+
+  // Check flush
+  var isFlush = suits.every(function(s) { return s === suits[0]; });
+
+  // Check straight
+  var isStraight = false;
+  var uniqueRanks = Object.keys(counts).map(Number).sort(function(a, b) { return a - b; });
+  if (uniqueRanks.length === 5) {
+    if (uniqueRanks[4] - uniqueRanks[0] === 4) {
+      isStraight = true;
+    }
+    // Ace-low straight: A,2,3,4,5
+    if (uniqueRanks[0] === 0 && uniqueRanks[1] === 1 && uniqueRanks[2] === 2 && uniqueRanks[3] === 3 && uniqueRanks[4] === 12) {
+      isStraight = true;
+    }
+  }
+
+  // Four of a kind
+  if (vals[0] === 4) return { name: 'Four of a Kind!', payout: 200 };
+  // Full house
+  if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House!', payout: 100 };
+  // Flush
+  if (isFlush) return { name: 'Flush!', payout: 80 };
+  // Straight
+  if (isStraight) return { name: 'Straight!', payout: 60 };
+  // Three of a kind
+  if (vals[0] === 3) return { name: 'Three of a Kind!', payout: 40 };
+  // Two pair
+  if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair!', payout: 25 };
+  // Pair
+  if (vals[0] === 2) return { name: 'Pair!', payout: 15 };
+
+  return { name: null, payout: 0 };
+}
+
+function closePoker() {
+  document.getElementById('poker-ui').classList.add('hidden');
+  game.pokerState = null;
+  game.state = 'playing';
+}
+
+// ─────────────────────────────────────────────
+// §H  DUEL SYSTEM
+// ─────────────────────────────────────────────
 function startDuel(npc) {
   game.state = 'duel';
+  var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+  var repBonus = Math.floor(game.reputation / 20) * 3;
+
   game.duelState = {
-    npc,
-    phase: 'staredown', // staredown, draw, result
+    npc: npc,
+    phase: 'staredown',
     timer: 0,
-    drawTime: rand(120, 240), // frames until "DRAW!" appears
+    drawTime: rand(120, 240),
     playerDrew: false,
     npcDrew: false,
     result: null,
-    reactionWindow: 45 // frames to react
+    reactionWindow: Math.floor(diff.duelWindow / 16.67) + repBonus
   };
 
   document.getElementById('duel-ui').classList.remove('hidden');
   document.getElementById('duel-prompt').textContent = 'STARE DOWN...';
   document.getElementById('duel-timer').textContent = 'Wait for it...';
+  document.getElementById('duel-instructions').textContent = '';
 
-  audio.playWesternRiff();
+  if (!game.tutorialShown.duel) {
+    showTutorial('duel', 'DUEL! Wait for "DRAW!" to appear, then press SPACE as fast as you can. Shooting early is dishonorable (-15 Rep)!');
+    game.tutorialShown.duel = true;
+  }
+
+  if (typeof audio.playWesternRiff === 'function') audio.playWesternRiff();
 }
 
 function updateDuel() {
-  const d = game.duelState;
+  var d = game.duelState;
   if (!d) return;
 
   d.timer++;
 
   if (d.phase === 'staredown') {
-    // Check if player shoots early (dishonorable)
     if (consumeKey('Space')) {
       d.phase = 'result';
       d.result = 'dishonorable';
       document.getElementById('duel-prompt').textContent = 'DISHONORABLE!';
       document.getElementById('duel-timer').textContent = 'You shot before the draw!';
-      game.reputation = clamp(game.reputation - 15, 0, 100);
+      var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+      game.reputation = clamp(game.reputation - Math.round(15 * diff.repLossMult), 0, REPUTATION_MAX);
       d.npc.state = 'dead';
       game.outlawsKilled++;
       audio.playGunshot();
       audio.playBad();
       showNotification('Dishonorable kill! -15 Rep');
-      setTimeout(() => endDuel(), 2000);
+      addJournalEntry('Dishonorably shot ' + d.npc.name + ' before the draw.');
+      setTimeout(endDuel, 2000);
       return;
     }
 
@@ -1423,32 +3966,38 @@ function updateDuel() {
     if (consumeKey('Space') && !d.playerDrew) {
       d.playerDrew = true;
       d.phase = 'result';
-      // Speed determines outcome
+      var reactionMs = Math.round(d.timer * 16.67);
+
       if (d.timer < d.reactionWindow) {
         d.result = 'win';
         document.getElementById('duel-prompt').textContent = 'YOU WIN!';
-        const speed = d.reactionWindow - d.timer;
-        document.getElementById('duel-timer').textContent = `Quick draw! ${Math.round(d.timer * 16.67)}ms`;
+        document.getElementById('duel-timer').textContent = 'Quick draw! ' + reactionMs + 'ms';
         d.npc.state = 'dead';
         d.npc.hostile = false;
-        game.reputation = clamp(game.reputation + 10, 0, 100);
+        var diff2 = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+        game.reputation = clamp(game.reputation + Math.round(10 * diff2.repGainMult), 0, REPUTATION_MAX);
         game.gold += 50;
+        game.totalGoldEarned += 50;
         game.outlawsKilled++;
+        game.duelsWon++;
+        if (reactionMs < game.quickDrawTime) game.quickDrawTime = reactionMs;
         audio.playGunshot();
-        setTimeout(() => audio.playVictory(), 300);
+        setTimeout(function() { audio.playVictory(); }, 300);
         showNotification('Duel won! +10 Rep, +$50');
-        addJournalEntry(`Won duel against ${d.npc.name}.`);
+        addJournalEntry('Won duel against ' + d.npc.name + ' (' + reactionMs + 'ms).');
       } else {
         d.result = 'lose';
         document.getElementById('duel-prompt').textContent = 'TOO SLOW!';
         document.getElementById('duel-timer').textContent = 'They got you...';
         game.player.hp -= 2;
+        game.noDamageToday = false;
         audio.playGunshot();
+        particles.emitBlood(game.player.x, game.player.y);
         if (game.player.hp <= 0) {
-          game.gameOverReason = `Killed in a duel by ${d.npc.name}.`;
+          game.gameOverReason = 'Killed in a duel by ' + d.npc.name + '.';
         }
       }
-      setTimeout(() => endDuel(), 2000);
+      setTimeout(endDuel, 2000);
     }
 
     if (d.timer >= d.reactionWindow && !d.playerDrew) {
@@ -1457,17 +4006,20 @@ function updateDuel() {
       document.getElementById('duel-prompt').textContent = 'TOO SLOW!';
       document.getElementById('duel-timer').textContent = 'They drew first!';
       game.player.hp -= 2;
+      game.noDamageToday = false;
       audio.playGunshot();
+      particles.emitBlood(game.player.x, game.player.y);
       if (game.player.hp <= 0) {
-        game.gameOverReason = `Killed in a duel by ${d.npc.name}.`;
+        game.gameOverReason = 'Killed in a duel by ' + d.npc.name + '.';
       }
-      setTimeout(() => endDuel(), 2000);
+      setTimeout(endDuel, 2000);
     }
   }
 }
 
 function endDuel() {
   document.getElementById('duel-ui').classList.add('hidden');
+  if (typeof audio.stopWesternRiff === 'function') audio.stopWesternRiff();
   game.duelState = null;
   if (game.player.hp <= 0) {
     game.state = 'gameover';
@@ -1476,185 +4028,328 @@ function endDuel() {
   }
 }
 
-// ---- JOURNAL ----
-function addJournalEntry(text) {
-  game.journalEntries.push({ text, day: game.dayCount, time: getTimeString(game.time) });
-}
+// ─────────────────────────────────────────────
+// §I  MELEE SYSTEM
+// ─────────────────────────────────────────────
+function playerMelee() {
+  if (game.player.meleeCooldown > 0) return;
+  game.player.meleeCooldown = Math.floor(MELEE_COOLDOWN / 16.67);
 
-function openJournal() {
-  game.state = 'journal';
-  const panel = document.getElementById('journal-panel');
-  const content = document.getElementById('journal-content');
-  panel.classList.remove('hidden');
+  audio.playMelee();
+  game.meleeFights++;
 
-  let html = '';
+  // Melee particles
+  var dirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
+  var dd = dirs[game.player.dir];
+  var mx = game.player.x + dd[0] * MELEE_RANGE;
+  var my = game.player.y + dd[1] * MELEE_RANGE;
+  particles.emitSpark(mx, my);
 
-  // Stats
-  html += '<div class="journal-section"><h4>STATS</h4>';
-  html += `<div class="journal-entry">Rank: ${game.rank}</div>`;
-  html += `<div class="journal-entry">Days Served: ${game.daysServed}</div>`;
-  html += `<div class="journal-entry">Reputation: ${game.reputation}/100</div>`;
-  html += `<div class="journal-entry">Gold: $${game.gold}</div>`;
-  html += `<div class="journal-entry">Outlaws Killed: ${game.outlawsKilled}</div>`;
-  html += `<div class="journal-entry">Outlaws Arrested: ${game.outlawsArrested}</div>`;
-  html += `<div class="journal-entry">Crimes Resolved: ${game.crimesResolved}</div>`;
-  html += '</div>';
+  // Check NPC hits in melee range
+  var hitAny = false;
+  for (var i = 0; i < game.npcs.length; i++) {
+    var npc = game.npcs[i];
+    if (npc.state === 'dead' || npc.state === 'arrested') continue;
+    var d = dist(game.player, npc);
+    if (d < MELEE_RANGE + 10) {
+      npc.hp--;
+      hitAny = true;
+      particles.emitBlood(npc.x, npc.y);
 
-  // Active quest
-  if (game.activeQuest) {
-    html += '<div class="journal-section"><h4>ACTIVE MISSION</h4>';
-    html += `<div class="journal-entry">${game.activeQuest.name}: ${game.activeQuest.desc}</div>`;
-    html += '</div>';
-  }
+      // Knockback
+      var angle = angleBetween(game.player, npc);
+      npc.x += Math.cos(angle) * 15;
+      npc.y += Math.sin(angle) * 15;
 
-  // Completed quests
-  if (game.completedQuests.length > 0) {
-    html += '<div class="journal-section"><h4>COMPLETED MISSIONS</h4>';
-    for (const q of game.completedQuests.slice(-10)) {
-      html += `<div class="journal-entry completed">${q.name}</div>`;
+      if (npc.hp <= 0) {
+        // If hostile or outlaw, auto-arrest at 0 HP via melee
+        if (npc.hostile || npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) {
+          npc.state = 'arrested';
+          npc.hostile = false;
+          game.outlawsArrested++;
+          game.reputation = clamp(game.reputation + 5, 0, REPUTATION_MAX);
+          game.gold += 20;
+          game.totalGoldEarned += 20;
+          if (npc.type === NPC_TYPES.BOUNTY) game.bountiesCaptured++;
+          showNotification(npc.name + ' knocked out and arrested! +5 Rep');
+          addJournalEntry('Melee arrested ' + npc.name + '.');
+        } else {
+          npc.state = 'dead';
+          game.reputation = clamp(game.reputation - 15, 0, REPUTATION_MAX);
+          showNotification('You knocked out an innocent! -15 Rep');
+          audio.playBad();
+        }
+      } else if (npc.hp === 1 && (npc.hostile || npc.type === NPC_TYPES.OUTLAW)) {
+        // Auto-arrest at 1 HP
+        npc.state = 'arrested';
+        npc.hostile = false;
+        game.outlawsArrested++;
+        game.reputation = clamp(game.reputation + 8, 0, REPUTATION_MAX);
+        game.gold += 30;
+        game.totalGoldEarned += 30;
+        if (npc.type === NPC_TYPES.BOUNTY) game.bountiesCaptured++;
+        showNotification(npc.name + ' subdued and arrested! +8 Rep');
+        addJournalEntry('Subdued and arrested ' + npc.name + '.');
+      }
+      break; // Hit one NPC per melee swing
     }
-    html += '</div>';
   }
-
-  // Log
-  if (game.journalEntries.length > 0) {
-    html += '<div class="journal-section"><h4>LOG</h4>';
-    for (const e of game.journalEntries.slice(-15).reverse()) {
-      html += `<div class="journal-entry">Day ${e.day}, ${e.time}: ${e.text}</div>`;
-    }
-    html += '</div>';
-  }
-
-  content.innerHTML = html;
 }
 
-function closeJournal() {
-  document.getElementById('journal-panel').classList.add('hidden');
-  game.state = 'playing';
-}
+// ─────────────────────────────────────────────
+// §J  UPDATE FUNCTIONS
+// ─────────────────────────────────────────────
 
-// ---- COLLISION ----
-function isSolid(tileX, tileY) {
-  if (tileX < 0 || tileX >= MAP_W || tileY < 0 || tileY >= MAP_H) return true;
-  const t = game.map[tileY][tileX];
-  return t === 3 || t === 5 || t === 6 || t === 7;
-}
-
-function canMove(x, y, r) {
-  const tiles = [
-    [Math.floor((x - r) / TILE), Math.floor((y - r) / TILE)],
-    [Math.floor((x + r) / TILE), Math.floor((y - r) / TILE)],
-    [Math.floor((x - r) / TILE), Math.floor((y + r) / TILE)],
-    [Math.floor((x + r) / TILE), Math.floor((y + r) / TILE)]
-  ];
-  return tiles.every(([tx, ty]) => !isSolid(tx, ty));
-}
-
-// ---- UPDATE SYSTEMS ----
-const particles = new ParticleSystem();
-const bullets = new BulletSystem();
-
+// J.1 - Update Player
 function updatePlayer(dt) {
-  const p = game.player;
-  let dx = 0, dy = 0;
+  var p = game.player;
+  var dx = 0, dy = 0;
 
-  if (keys['KeyW'] || keys['ArrowUp']) { dy = -1; p.dir = 1; }
-  if (keys['KeyS'] || keys['ArrowDown']) { dy = 1; p.dir = 0; }
-  if (keys['KeyA'] || keys['ArrowLeft']) { dx = -1; p.dir = 2; }
-  if (keys['KeyD'] || keys['ArrowRight']) { dx = 1; p.dir = 3; }
+  if (keys['KeyW'] || keys['ArrowUp'])    { dy = -1; p.dir = 1; }
+  if (keys['KeyS'] || keys['ArrowDown'])   { dy = 1;  p.dir = 0; }
+  if (keys['KeyA'] || keys['ArrowLeft'])   { dx = -1; p.dir = 2; }
+  if (keys['KeyD'] || keys['ArrowRight'])  { dx = 1;  p.dir = 3; }
 
   p.moving = dx !== 0 || dy !== 0;
 
+  // Speed calculation
+  var speed = PLAYER_SPEED;
+  if (game.hasSpeedBoots) speed *= 1.15;
+  if (game.mounted) speed = HORSE_SPEED;
+
   if (p.moving) {
-    const len = Math.hypot(dx, dy);
+    var len = Math.hypot(dx, dy);
     dx /= len; dy /= len;
-    const nx = p.x + dx * PLAYER_SPEED;
-    const ny = p.y + dy * PLAYER_SPEED;
+    var nx = p.x + dx * speed;
+    var ny = p.y + dy * speed;
 
     if (canMove(nx, p.y, 6)) p.x = nx;
     if (canMove(p.x, ny, 6)) p.y = ny;
 
     p.animTimer++;
     game.stepTimer++;
-    if (game.stepTimer >= 15) {
+
+    var stepInterval = game.mounted ? 8 : 15;
+    if (game.stepTimer >= stepInterval) {
       game.stepTimer = 0;
       particles.emitDust(p.x, p.y + 10);
-      audio.playStep();
+      if (game.mounted) {
+        if (typeof audio.playHorseGallop === 'function') audio.playHorseGallop();
+        // Galloping particles
+        particles.emit(p.x - dx * 10, p.y + 12, 3, PALETTE.dust, 1.5, 15);
+        game.tilesRidden++;
+      } else {
+        var tileType = tileAt(game.map, p.x, p.y);
+        if (typeof audio.playStep === 'function') {
+          audio.playStep(tileType);
+        }
+      }
+    }
+
+    // Update horse position when mounted
+    if (game.mounted && game.horse) {
+      game.horse.x = p.x;
+      game.horse.y = p.y;
+      game.horse.dir = p.dir;
+      game.horse.animTimer++;
     }
   }
 
   // Clamp to map
-  p.x = clamp(p.x, 8, MAP_W * TILE - 8);
-  p.y = clamp(p.y, 8, MAP_H * TILE - 8);
+  p.x = clamp(p.x, 8, WORLD_W - 8);
+  p.y = clamp(p.y, 8, WORLD_H - 8);
 
-  // Shoot
+  // Shooting
   if (p.shootCooldown > 0) p.shootCooldown--;
-  if (consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
-    bullets.fire(p.x, p.y, p.dir, true);
-    p.shootCooldown = 20;
+  if (p.justShot > 0) p.justShot--;
+  if (!game.mounted && consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
+    if (game.ammo > 0) {
+      game.ammo--;
+      game.totalShots++;
+      p.shootCooldown = 20;
+      p.justShot = 8;
+
+      // Weapon-specific shooting
+      if (game.currentWeapon === 'shotgun' && game.hasShotgun) {
+        // Spread shot: 3 bullets in a fan
+        for (var si = -1; si <= 1; si++) {
+          var spreadDir = game.player.dir;
+          bullets.fire(p.x, p.y, spreadDir, true);
+        }
+        game.ammo = Math.max(0, game.ammo - 1); // Extra ammo cost
+      } else if (game.currentWeapon === 'rifle' && game.hasRifle) {
+        bullets.fire(p.x, p.y, p.dir, true);
+        // Rifle bullets have longer range handled by bullet system
+      } else {
+        bullets.fire(p.x, p.y, p.dir, true);
+      }
+
+      // Gun durability
+      game.gunDurability = Math.max(0, game.gunDurability - 1);
+      if (game.gunDurability <= 20) {
+        showNotification('Gun is wearing out! Visit the blacksmith.');
+      }
+    } else {
+      showNotification('Out of ammo!');
+    }
+  }
+
+  // Melee
+  if (p.meleeCooldown > 0) p.meleeCooldown--;
+  if (!game.mounted && consumeKey('KeyF') && game.state === 'playing') {
+    playerMelee();
   }
 
   // Interact
   if (p.interactCooldown > 0) p.interactCooldown--;
-  if (consumeKey('KeyE') && p.interactCooldown <= 0) {
+  if (consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
     p.interactCooldown = 15;
-    // Find nearest NPC
-    let nearest = null, nearDist = 50;
-    for (const npc of game.npcs) {
-      if (npc.state === 'dead' || npc.state === 'arrested') continue;
-      const d = dist(p, npc);
-      if (d < nearDist) { nearest = npc; nearDist = d; }
+
+    if (game.shopOpen) {
+      closeShop();
+      return;
     }
-    if (nearest) {
-      openDialog(nearest);
-    } else {
-      // Check if near building door
-      const tx = Math.floor(p.x / TILE), ty = Math.floor((p.y + 10) / TILE);
-      if (game.map[ty]?.[tx] === 4) {
-        const building = game.buildings.find(b => b.doorX === tx && b.doorY === ty);
-        if (building) {
-          game.visitedBuildings.add(building.type);
-          showNotification('Entered ' + building.name);
-          // Quest progress
-          if (game.activeQuest && game.activeQuest.type === 'patrol') {
-            game.activeQuest.visited.add(building.type);
+
+    if (!game.mounted) {
+      // Find nearest NPC
+      var nearest = null, nearDist = INTERACT_RANGE;
+      for (var ni = 0; ni < game.npcs.length; ni++) {
+        var npc = game.npcs[ni];
+        if (npc.state === 'dead' || npc.state === 'arrested') continue;
+        var d = dist(p, npc);
+        if (d < nearDist) { nearest = npc; nearDist = d; }
+      }
+      if (nearest) {
+        openDialog(nearest);
+      } else {
+        // Check building door
+        var tx = Math.floor(p.x / TILE);
+        var ty = Math.floor((p.y + 10) / TILE);
+        if (game.map[ty] && game.map[ty][tx] === 4) {
+          var building = null;
+          for (var bi = 0; bi < game.buildings.length; bi++) {
+            if (game.buildings[bi].doorX === tx && game.buildings[bi].doorY === ty) {
+              building = game.buildings[bi];
+              break;
+            }
           }
-          if (game.activeQuest && game.activeQuest.type === 'visit') {
-            game.activeQuest.visited.add(building.type);
+          if (building) {
+            game.visitedBuildings.add(building.type);
+            showNotification('Entered ' + building.name);
+            if (typeof audio.playDoorOpen === 'function') audio.playDoorOpen();
+            // Quest progress
+            if (game.activeQuest && (game.activeQuest.type === 'patrol' || game.activeQuest.type === 'visit')) {
+              game.activeQuest.visited.add(building.type);
+            }
           }
         }
       }
     }
   }
+
+  // Mount/dismount horse
+  if (consumeKey('KeyH') && game.state === 'playing') {
+    if (game.mounted) {
+      dismountHorse();
+    } else {
+      mountHorse();
+    }
+  }
+
+  // Quick shop via TAB near store
+  if (consumeKey('Tab') && game.state === 'playing') {
+    // Check if near a shop building
+    for (var bsi = 0; bsi < game.buildings.length; bsi++) {
+      var b = game.buildings[bsi];
+      var bdist = Math.hypot(p.x - (b.x * TILE + b.w * TILE / 2), p.y - (b.y * TILE + b.h * TILE / 2));
+      if (bdist < INTERACT_RANGE * 2) {
+        if (b.type === BUILDING_TYPES.GENERAL) {
+          openShop('general');
+          return;
+        }
+        if (b.type === BUILDING_TYPES.BLACKSMITH) {
+          openShop('blacksmith');
+          return;
+        }
+      }
+    }
+    showNotification('No shop nearby. Walk closer to a store.');
+  }
+
+  // Weapon switch with number keys 4-6
+  if (consumeKey('Digit4')) { game.currentWeapon = 'revolver'; showNotification('Switched to Revolver'); }
+  if (consumeKey('Digit5') && game.hasShotgun) { game.currentWeapon = 'shotgun'; showNotification('Switched to Shotgun'); }
+  if (consumeKey('Digit6') && game.hasRifle) { game.currentWeapon = 'rifle'; showNotification('Switched to Rifle'); }
 }
 
+// J.2 - Update NPCs
 function updateNPCs(dt) {
-  for (const npc of game.npcs) {
+  var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+
+  for (var i = 0; i < game.npcs.length; i++) {
+    var npc = game.npcs[i];
     if (npc.state === 'dead' || npc.state === 'arrested') continue;
     if (npc.dialogCooldown > 0) npc.dialogCooldown--;
 
+    // Schedule system: NPCs move toward buildings at certain times
+    if (npc.building && npc.type !== NPC_TYPES.OUTLAW) {
+      // Night: go home
+      if (game.time > 0.85 || game.time < 0.2) {
+        if (npc.type === NPC_TYPES.TOWNSPERSON) {
+          var homeB = game.buildings.filter(function(b) { return b.type === BUILDING_TYPES.HOUSE; });
+          if (homeB.length > 0) {
+            var target = homeB[npc.id % homeB.length];
+            var tdx = (target.doorX * TILE) - npc.x;
+            var tdy = (target.doorY * TILE) - npc.y;
+            var tlen = Math.hypot(tdx, tdy);
+            if (tlen > 16) {
+              npc.x += (tdx / tlen) * npc.speed * 0.5;
+              npc.y += (tdy / tlen) * npc.speed * 0.5;
+              npc.state = 'walking';
+              npc.animTimer++;
+              continue;
+            }
+          }
+        }
+      }
+      // Morning: bartender goes to saloon, shopkeeper to store, etc.
+      if (game.time > 0.25 && game.time < 0.8) {
+        var homeDist = Math.hypot(npc.x - npc.homeX, npc.y - npc.homeY);
+        if (homeDist > 100) {
+          var hdx = npc.homeX - npc.x;
+          var hdy = npc.homeY - npc.y;
+          var hlen = Math.hypot(hdx, hdy);
+          npc.x += (hdx / hlen) * npc.speed;
+          npc.y += (hdy / hlen) * npc.speed;
+          npc.state = 'walking';
+          npc.animTimer++;
+          continue;
+        }
+      }
+    }
+
     // Hostile NPC behavior
     if (npc.hostile && game.state === 'playing') {
-      const d = dist(npc, game.player);
-      if (d < 200) {
-        // Move toward player
-        const dx = game.player.x - npc.x;
-        const dy = game.player.y - npc.y;
-        const len = Math.hypot(dx, dy);
-        if (len > 40) {
-          const nx = npc.x + (dx / len) * npc.speed;
-          const ny = npc.y + (dy / len) * npc.speed;
-          if (canMove(nx, npc.y, 5)) npc.x = nx;
-          if (canMove(npc.x, ny, 5)) npc.y = ny;
+      var playerDist = dist(npc, game.player);
+      if (playerDist < 200) {
+        var cdx = game.player.x - npc.x;
+        var cdy = game.player.y - npc.y;
+        var clen = Math.hypot(cdx, cdy);
+        if (clen > 40) {
+          var nnx = npc.x + (cdx / clen) * npc.speed;
+          var nny = npc.y + (cdy / clen) * npc.speed;
+          if (canMove(nnx, npc.y, 5)) npc.x = nnx;
+          if (canMove(npc.x, nny, 5)) npc.y = nny;
           npc.state = 'walking';
           npc.animTimer++;
         }
-        // Shoot at player occasionally
-        if (d < 150 && Math.random() < 0.015) {
-          const dir = Math.abs(dx) > Math.abs(dy)
-            ? (dx > 0 ? 3 : 2)
-            : (dy > 0 ? 0 : 1);
-          bullets.fire(npc.x, npc.y, dir, false);
+        // Shoot at player occasionally (difficulty-scaled accuracy)
+        var shootChance = 0.015 * diff.outlawDamageMult * (game.time > 0.8 || game.time < 0.2 ? diff.nightCrimeMult : 1);
+        if (playerDist < 150 && Math.random() < shootChance) {
+          var sdir = Math.abs(cdx) > Math.abs(cdy)
+            ? (cdx > 0 ? 3 : 2)
+            : (cdy > 0 ? 0 : 1);
+          bullets.fire(npc.x, npc.y, sdir, false);
         }
       }
       continue;
@@ -1674,23 +4369,23 @@ function updateNPCs(dt) {
     }
 
     if (npc.state === 'walking') {
-      const dirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
-      const [ddx, ddy] = dirs[npc.dir];
-      const nx = npc.x + ddx * npc.speed;
-      const ny = npc.y + ddy * npc.speed;
+      var wDirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
+      var wd = wDirs[npc.dir];
+      var wnx = npc.x + wd[0] * npc.speed;
+      var wny = npc.y + wd[1] * npc.speed;
 
-      if (canMove(nx, ny, 5) && nx > TILE && nx < (MAP_W - 1) * TILE && ny > TILE && ny < (MAP_H - 1) * TILE) {
-        npc.x = nx;
-        npc.y = ny;
+      if (canMove(wnx, wny, 5) && wnx > TILE && wnx < (MAP_W - 1) * TILE && wny > TILE && wny < (MAP_H - 1) * TILE) {
+        npc.x = wnx;
+        npc.y = wny;
       } else {
         npc.dir = rand(0, 3);
       }
       npc.animTimer++;
 
-      // If building-bound, don't stray too far
+      // Don't stray too far from home
       if (npc.building) {
-        const homeDist = Math.hypot(npc.x - npc.homeX, npc.y - npc.homeY);
-        if (homeDist > 80) {
+        var hd = Math.hypot(npc.x - npc.homeX, npc.y - npc.homeY);
+        if (hd > 80) {
           npc.dir = (npc.x > npc.homeX ? 2 : 3);
           if (Math.abs(npc.y - npc.homeY) > Math.abs(npc.x - npc.homeX)) {
             npc.dir = (npc.y > npc.homeY ? 1 : 0);
@@ -1699,34 +4394,40 @@ function updateNPCs(dt) {
       }
     }
 
-    // Flee from active crimes
+    // Flee from active crimes (townspeople)
     if (game.activeCrime && npc.type === NPC_TYPES.TOWNSPERSON) {
-      const crimeDist = dist(npc, { x: game.activeCrime.x, y: game.activeCrime.y });
+      var crimeDist = dist(npc, { x: game.activeCrime.x, y: game.activeCrime.y });
       if (crimeDist < 120) {
-        const dx = npc.x - game.activeCrime.x;
-        const dy = npc.y - game.activeCrime.y;
-        const len = Math.hypot(dx, dy) || 1;
-        npc.x += (dx / len) * 2;
-        npc.y += (dy / len) * 2;
+        var fdx = npc.x - game.activeCrime.x;
+        var fdy = npc.y - game.activeCrime.y;
+        var flen = Math.hypot(fdx, fdy) || 1;
+        npc.x += (fdx / flen) * 2;
+        npc.y += (fdy / flen) * 2;
         npc.state = 'walking';
       }
     }
   }
 }
 
+// J.3 - Update Crimes
 function updateCrimes(dt) {
+  var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
   game.crimeSpawnTimer -= dt;
 
-  if (game.crimeSpawnTimer <= 0 && !game.activeCrime) {
-    game.crimeSpawnTimer = rand(20, 45); // seconds between crimes
+  var ngMult = 1 + game.ngPlusLevel * 0.3;
+  var interval = rand(20, 45) / diff.crimeFreqMult / ngMult;
 
-    const crime = generateCrime(game.buildings, game);
+  if (game.crimeSpawnTimer <= 0 && !game.activeCrime) {
+    game.crimeSpawnTimer = interval;
+
+    var crime = generateCrime(game.buildings, game);
     game.activeCrime = crime;
+    game.crimeStartTime = Date.now();
 
     // Spawn outlaws for the crime
-    for (let i = 0; i < crime.outlawCount; i++) {
-      const name = NPC_NAMES.outlaw[rand(0, NPC_NAMES.outlaw.length - 1)];
-      const npc = createNPC(
+    for (var i = 0; i < crime.outlawCount; i++) {
+      var name = NPC_NAMES.outlaw[rand(0, NPC_NAMES.outlaw.length - 1)];
+      var npc = createNPC(
         game.npcs.length + i,
         NPC_TYPES.OUTLAW,
         name,
@@ -1735,33 +4436,114 @@ function updateCrimes(dt) {
         null
       );
       npc.hostile = true;
-      npc.hp = 2 + Math.floor(game.dayCount / 3);
+      npc.hp = Math.ceil((2 + Math.floor(game.dayCount / 3)) * diff.outlawHPMult * ngMult);
       crime.outlaws.push(npc);
       game.npcs.push(npc);
     }
 
+    // Crime-type specific setups
+    if (crime.name === 'Kidnapping') {
+      // Find a townsperson to be hostage
+      for (var hi = 0; hi < game.npcs.length; hi++) {
+        if (game.npcs[hi].type === NPC_TYPES.TOWNSPERSON && game.npcs[hi].state !== 'dead') {
+          game.hostageNPC = game.npcs[hi];
+          game.hostageNPC.state = 'hostage';
+          break;
+        }
+      }
+    }
+
+    if (crime.name === 'Arson') {
+      game.fireEffects.push({
+        x: crime.x,
+        y: crime.y,
+        life: crime.timer * 60,
+        radius: 30
+      });
+    }
+
     showNotification('CRIME: ' + crime.desc);
     addJournalEntry(crime.name + ' at ' + crime.targetBuilding.name + '!');
-    audio.playBad();
+    if (typeof audio.playBellAlarm === 'function') audio.playBellAlarm();
+    else audio.playBad();
+
+    if (!game.tutorialShown.crime) {
+      showTutorial('crime', 'A crime is in progress! Head to the red marker on your minimap. Deal with the outlaws to resolve it. Time is limited!');
+    }
   }
 
   // Update active crime
   if (game.activeCrime) {
-    const crime = game.activeCrime;
+    var crime = game.activeCrime;
     crime.timer -= dt;
 
+    // Update crime timer UI
+    document.getElementById('crime-timer').classList.remove('hidden');
+    document.getElementById('crime-timer-label').textContent = 'CRIME: ' + crime.name;
+    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(crime.timer)) + 's';
+
+    // Crime-specific mechanics
+    // Arson: fire spreads, damages nearby
+    if (crime.name === 'Arson') {
+      for (var fi = 0; fi < game.fireEffects.length; fi++) {
+        var fire = game.fireEffects[fi];
+        fire.life--;
+        particles.emit(fire.x + randF(-fire.radius, fire.radius), fire.y + randF(-fire.radius, fire.radius), 1, '#ff6600', 2, 20);
+        // Damage player if close
+        if (dist(game.player, fire) < fire.radius + 10) {
+          if (Math.random() < 0.01) {
+            game.player.hp--;
+            game.noDamageToday = false;
+            showNotification('Burned by the fire! -1 HP');
+          }
+        }
+      }
+    }
+
+    // Kidnapping: hostage slowly loses HP
+    if (crime.name === 'Kidnapping' && game.hostageNPC && game.hostageNPC.state === 'hostage') {
+      if (Math.random() < 0.002) {
+        game.hostageNPC.hp--;
+        if (game.hostageNPC.hp <= 0) {
+          game.hostageNPC.state = 'dead';
+          game.hostageNPC = null;
+          game.reputation = clamp(game.reputation - 15, 0, REPUTATION_MAX);
+          showNotification('The hostage was killed! -15 Rep');
+          audio.playBad();
+        }
+      }
+    }
+
     // Check if all outlaws dealt with
-    const outlawsRemaining = crime.outlaws.filter(o => o.state !== 'dead' && o.state !== 'arrested').length;
+    var outlawsRemaining = crime.outlaws.filter(function(o) {
+      return o.state !== 'dead' && o.state !== 'arrested';
+    }).length;
+
     if (outlawsRemaining === 0) {
       crime.resolved = true;
       crime.active = false;
       game.activeCrime = null;
       game.crimesResolved++;
-      game.reputation = clamp(game.reputation + crime.repGain, 0, 100);
-      game.gold += crime.goldReward;
-      showNotification(`Crime resolved! +${crime.repGain} Rep, +$${crime.goldReward}`);
+
+      var resolveTime = (Date.now() - game.crimeStartTime) / 1000;
+      if (resolveTime < game.speedResolveTime) game.speedResolveTime = resolveTime;
+
+      var goldReward = Math.round(crime.gold * diff.rewardMult);
+      game.reputation = clamp(game.reputation + Math.round(crime.repGain * diff.repGainMult), 0, REPUTATION_MAX);
+      game.gold += goldReward;
+      game.totalGoldEarned += goldReward;
+      showNotification('Crime resolved! +' + crime.repGain + ' Rep, +$' + goldReward);
       audio.playVictory();
-      addJournalEntry(`Resolved: ${crime.name}. Earned $${crime.goldReward}.`);
+      addJournalEntry('Resolved: ' + crime.name + '. Earned $' + goldReward + '.');
+
+      // Clean up
+      if (game.hostageNPC && game.hostageNPC.state === 'hostage') {
+        game.hostageNPC.state = 'idle';
+        game.hostageNPC = null;
+      }
+      game.fireEffects = [];
+
+      document.getElementById('crime-timer').classList.add('hidden');
       return;
     }
 
@@ -1770,36 +4552,43 @@ function updateCrimes(dt) {
       crime.active = false;
       game.activeCrime = null;
       game.crimesIgnored++;
-      game.reputation = clamp(game.reputation + crime.repLoss, 0, 100);
-      showNotification(`Crime went unresolved! ${crime.repLoss} Rep`);
+      game.reputation = clamp(game.reputation + Math.round(crime.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
+      showNotification('Crime went unresolved! ' + crime.repLoss + ' Rep');
       audio.playBad();
-      addJournalEntry(`Failed to resolve: ${crime.name}.`);
+      addJournalEntry('Failed to resolve: ' + crime.name + '.');
       // Remove crime outlaws
-      for (const o of crime.outlaws) {
-        if (o.state !== 'dead' && o.state !== 'arrested') o.state = 'dead';
+      for (var oi = 0; oi < crime.outlaws.length; oi++) {
+        if (crime.outlaws[oi].state !== 'dead' && crime.outlaws[oi].state !== 'arrested') {
+          crime.outlaws[oi].state = 'dead';
+        }
       }
+      if (game.hostageNPC) {
+        game.hostageNPC.state = 'idle';
+        game.hostageNPC = null;
+      }
+      game.fireEffects = [];
+      document.getElementById('crime-timer').classList.add('hidden');
     }
   }
 }
 
+// J.4 - Update Quests
 function updateQuests() {
   if (!game.activeQuest) return;
-  const q = game.activeQuest;
-
-  let complete = false;
+  var q = game.activeQuest;
+  var complete = false;
 
   switch (q.type) {
     case 'patrol':
     case 'visit':
-      if (q.targets.every(t => q.visited.has(t))) {
+      if (q.targets.every(function(t) { return q.visited.has(t); })) {
         complete = true;
       }
       document.getElementById('quest-text').textContent =
-        `${q.desc} (${q.visited.size}/${q.targets.length})`;
+        q.desc + ' (' + q.visited.size + '/' + q.targets.length + ')';
       break;
 
     case 'bounty':
-      // Check if any bounty NPC killed recently
       if (game.outlawsKilled > (q.startKills || 0)) {
         complete = true;
       }
@@ -1807,34 +4596,39 @@ function updateQuests() {
       break;
 
     case 'nightwatch':
-      // Complete after patrolling at night
       if (game.time > 0.8 || game.time < 0.2) {
         q.nightTime = (q.nightTime || 0) + 1;
-        if (q.nightTime > 300) complete = true;
+        if (q.nightTime > 300) {
+          complete = true;
+          game.nightWatchesCompleted++;
+        }
       }
       break;
 
     case 'escort':
-      // Simplified: just walk to church
-      const church = game.buildings.find(b => b.type === BUILDING_TYPES.CHURCH);
-      if (church && game.visitedBuildings.has(BUILDING_TYPES.CHURCH)) {
+      if (game.visitedBuildings.has(BUILDING_TYPES.CHURCH)) {
         complete = true;
       }
       break;
   }
 
   if (complete) {
-    game.reputation = clamp(game.reputation + q.repReward, 0, 100);
-    game.gold += q.goldReward;
-    showNotification(`Mission Complete: ${q.name}! +${q.repReward} Rep, +$${q.goldReward}`);
+    var diff = DIFFICULTY[game.difficulty] || DIFFICULTY.normal;
+    var repR = Math.round(q.repReward * diff.repGainMult);
+    var goldR = Math.round(q.goldReward * diff.rewardMult);
+    game.reputation = clamp(game.reputation + repR, 0, REPUTATION_MAX);
+    game.gold += goldR;
+    game.totalGoldEarned += goldR;
+    showNotification('Mission Complete: ' + q.name + '! +' + repR + ' Rep, +$' + goldR);
     audio.playVictory();
-    addJournalEntry(`Completed mission: ${q.name}.`);
+    addJournalEntry('Completed mission: ' + q.name + '.');
     game.completedQuests.push(q);
     game.activeQuest = null;
     document.getElementById('quest-tracker').classList.add('hidden');
   }
 }
 
+// J.5 - Update Time
 function updateTime(dt) {
   game.time += game.timeSpeed * dt * 60;
   if (game.time >= 1) {
@@ -1843,22 +4637,31 @@ function updateTime(dt) {
     game.daysServed++;
     addJournalEntry('A new day dawns.');
 
+    // Track no damage day
+    if (game.noDamageToday) {
+      game.noDamageDays++;
+    }
+    game.noDamageToday = true;
+    game.prayedToday = false;
+
     // Weekly salary
     game.salaryTimer++;
     if (game.salaryTimer >= 7) {
       game.salaryTimer = 0;
-      const salary = 50 + game.reputation;
+      var rankData = getRank(game.reputation);
+      var salary = Math.round((50 + game.reputation) * rankData.payBonus);
       game.gold += salary;
-      showNotification(`Weekly salary: $${salary}`);
-      addJournalEntry(`Received weekly salary: $${salary}.`);
+      game.totalGoldEarned += salary;
+      showNotification('Weekly salary: $' + salary);
+      addJournalEntry('Received weekly salary: $' + salary + '.');
     }
 
     // Heal overnight
     game.player.hp = Math.min(game.player.hp + 1, game.player.maxHp);
 
-    // Random events at dawn
+    // Random stranger arrival
     if (Math.random() > 0.7) {
-      const stranger = createNPC(
+      var stranger = createNPC(
         game.npcs.length, NPC_TYPES.STRANGER,
         NPC_NAMES.stranger[rand(0, NPC_NAMES.stranger.length - 1)],
         rand(5, MAP_W - 5), rand(5, MAP_H - 5), null
@@ -1866,13 +4669,23 @@ function updateTime(dt) {
       game.npcs.push(stranger);
       showNotification('A stranger has arrived in town...');
     }
+
+    // Refresh wanted list periodically
+    if (game.dayCount % 5 === 0) {
+      generateWantedList();
+    }
   }
 
   // Update rank
-  for (let i = RANKS.length - 1; i >= 0; i--) {
-    if (game.reputation >= RANKS[i].rep) {
-      game.rank = RANKS[i].name;
-      break;
+  var newRank = getRank(game.reputation);
+  if (newRank.name !== game.rank) {
+    var promoted = RANKS.findIndex(function(r) { return r.name === newRank.name; }) >
+                   RANKS.findIndex(function(r) { return r.name === game.rank; });
+    game.rank = newRank.name;
+    if (promoted) {
+      showNotification('Promoted to ' + game.rank + '!');
+      audio.playVictory();
+      addJournalEntry('Promoted to ' + game.rank + '.');
     }
   }
 
@@ -1883,16 +4696,109 @@ function updateTime(dt) {
   }
 }
 
+// J.6 - Update Achievements
+function updateAchievements() {
+  for (var i = 0; i < ACHIEVEMENTS.length; i++) {
+    var ach = ACHIEVEMENTS[i];
+    if (game.achievements.indexOf(ach.id) !== -1) continue;
+
+    var unlocked = false;
+
+    switch (ach.check) {
+      case 'checkDuelsWon':       unlocked = game.duelsWon >= ach.target; break;
+      case 'checkArrests':        unlocked = game.outlawsArrested >= ach.target; break;
+      case 'checkCrimesResolved': unlocked = game.crimesResolved >= ach.target; break;
+      case 'checkQuickDraw':      unlocked = game.quickDrawTime <= ach.target; break;
+      case 'checkPacifist':       unlocked = game.outlawsArrested >= ach.target && game.outlawsKilled === 0; break;
+      case 'checkWealth':         unlocked = game.gold >= ach.target; break;
+      case 'checkDaysSurvived':   unlocked = game.daysServed >= ach.target; break;
+      case 'checkMaxRank':        unlocked = game.reputation >= ach.target; break;
+      case 'checkNightWatches':   unlocked = game.nightWatchesCompleted >= ach.target; break;
+      case 'checkShotsHit':       unlocked = game.totalHits >= ach.target; break;
+      case 'checkMeleeWins':      unlocked = game.meleeFights >= ach.target; break;
+      case 'checkPokerWins':      unlocked = game.pokerWins >= ach.target; break;
+      case 'checkTilesRidden':    unlocked = game.tilesRidden >= ach.target; break;
+      case 'checkBribesAccepted': unlocked = game.bribesTaken >= ach.target; break;
+      case 'checkReputation':     unlocked = game.reputation >= ach.target; break;
+      case 'checkIncorruptible':  unlocked = game.bribesTaken === 0 && game.daysServed >= 10; break;
+      case 'checkAllBuildings':
+        var totalBuildingTypes = new Set();
+        for (var bi = 0; bi < game.buildings.length; bi++) {
+          totalBuildingTypes.add(game.buildings[bi].type);
+        }
+        unlocked = game.visitedBuildings.size >= totalBuildingTypes.size;
+        break;
+      case 'checkNpcsTalkedTo':   unlocked = game.npcstalkedTo.size >= ach.target; break;
+      case 'checkSurvivor':       unlocked = game.player && game.player.hp === 1 && game.daysServed > 0; break;
+      case 'checkBountiesCaptured': unlocked = game.bountiesCaptured >= ach.target; break;
+      case 'checkSpeedResolve':   unlocked = game.speedResolveTime <= ach.target; break;
+      case 'checkTotalEarnings':  unlocked = game.totalGoldEarned >= ach.target; break;
+      case 'checkTonicsBought':   unlocked = game.healthTonics >= ach.target; break;
+      case 'checkDaysSurvived50': unlocked = game.daysServed >= ach.target; break;
+      case 'checkNoDamageDay':    unlocked = game.noDamageDays >= 1; break;
+    }
+
+    if (unlocked) {
+      game.achievements.push(ach.id);
+      showNotification('Achievement Unlocked: ' + ach.icon + ' ' + ach.name);
+      audio.playVictory();
+      addJournalEntry('Earned badge: ' + ach.name + '.');
+    }
+  }
+}
+
+// J.7 - updateAmbientParticles defined in Part 5
+
+// J.8 - Update Camera
+function updateCamera() {
+  var target = game.player;
+  var shakeX = 0, shakeY = 0;
+  if (typeof screenShake !== 'undefined' && screenShake > 0) {
+    shakeX = randF(-screenShake, screenShake);
+    shakeY = randF(-screenShake, screenShake);
+  }
+  game.camera.x = lerp(game.camera.x, target.x - canvas.width / 2, 0.08) + shakeX;
+  game.camera.y = lerp(game.camera.y, target.y - canvas.height / 2, 0.08) + shakeY;
+}
+
+// ─────────────────────────────────────────────
+// §K  UI UPDATE
+// ─────────────────────────────────────────────
 function updateUI() {
   document.getElementById('rep-bar-inner').style.width = game.reputation + '%';
   document.getElementById('rep-value').textContent = game.reputation;
   document.getElementById('day-count').textContent = 'Day ' + game.dayCount;
   document.getElementById('clock').textContent = getTimeString(game.time);
+
+  var hpEl = document.getElementById('hp-display');
+  hpEl.textContent = 'HP: ' + game.player.hp + '/' + game.player.maxHp;
+  if (game.player.hp <= 2) {
+    hpEl.style.color = PALETTE.uiDanger;
+  } else {
+    hpEl.style.color = '';
+  }
+
+  var ammoEl = document.getElementById('ammo-display');
+  ammoEl.textContent = 'Ammo: ' + game.ammo;
+  if (game.ammo <= 6) {
+    ammoEl.style.color = PALETTE.uiDanger;
+  } else {
+    ammoEl.style.color = '';
+  }
+
   document.getElementById('gold-display').textContent = '$' + game.gold;
   document.getElementById('rank-display').textContent = game.rank;
 
+  // Crime timer UI
+  if (game.activeCrime) {
+    document.getElementById('crime-timer').classList.remove('hidden');
+    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(game.activeCrime.timer)) + 's';
+  } else {
+    document.getElementById('crime-timer').classList.add('hidden');
+  }
+
   // Notification timer
-  if (notifTimer > 0) {
+  if (typeof notifTimer !== 'undefined' && notifTimer > 0) {
     notifTimer--;
     if (notifTimer <= 0) {
       document.getElementById('notification').classList.add('hidden');
@@ -1900,124 +4806,180 @@ function updateUI() {
   }
 }
 
-function updateCamera() {
-  const target = game.player;
-  game.camera.x = lerp(game.camera.x, target.x - canvas.width / 2, 0.08);
-  game.camera.y = lerp(game.camera.y, target.y - canvas.height / 2, 0.08);
+// ─────────────────────────────────────────────
+// §L  JOURNAL SYSTEM
+// ─────────────────────────────────────────────
+function addJournalEntry(text) {
+  game.journalEntries.push({
+    text: text,
+    day: game.dayCount,
+    time: getTimeString(game.time)
+  });
 }
 
-// ---- MAIN RENDER ----
-function render() {
-  const camX = game.camera.x;
-  const camY = game.camera.y;
+function openJournal(tab) {
+  game.state = 'journal';
+  game.journalTab = tab || game.journalTab || 'stats';
 
-  // Sky
-  const skyColor = getSkyColor(game.time);
-  ctx.fillStyle = skyColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  var panel = document.getElementById('journal-panel');
+  var content = document.getElementById('journal-content');
+  panel.classList.remove('hidden');
 
-  // Tiles
-  const startX = Math.max(0, Math.floor(camX / TILE));
-  const startY = Math.max(0, Math.floor(camY / TILE));
-  const endX = Math.min(MAP_W, Math.ceil((camX + canvas.width) / TILE) + 1);
-  const endY = Math.min(MAP_H, Math.ceil((camY + canvas.height) / TILE) + 1);
-
-  for (let y = startY; y < endY; y++) {
-    for (let x = startX; x < endX; x++) {
-      drawTile(x, y, camX, camY, game.map[y][x], game.time);
+  // Update tab buttons
+  var tabs = document.querySelectorAll('.jtab');
+  for (var ti = 0; ti < tabs.length; ti++) {
+    tabs[ti].classList.remove('active');
+    if (tabs[ti].getAttribute('data-tab') === game.journalTab) {
+      tabs[ti].classList.add('active');
     }
   }
 
-  // Building roofs
-  for (const b of game.buildings) {
-    drawBuildingRoof(b, camX, camY);
+  var html = '';
+
+  switch (game.journalTab) {
+    case 'stats':
+      html += '<div class="journal-section">';
+      html += '<div class="journal-entry">Rank: ' + game.rank + '</div>';
+      html += '<div class="journal-entry">Days Served: ' + game.daysServed + '</div>';
+      html += '<div class="journal-entry">Reputation: ' + game.reputation + '/' + REPUTATION_MAX + '</div>';
+      html += '<div class="journal-entry">Gold: $' + game.gold + ' (Total earned: $' + game.totalGoldEarned + ')</div>';
+      html += '<div class="journal-entry">Outlaws Killed: ' + game.outlawsKilled + '</div>';
+      html += '<div class="journal-entry">Outlaws Arrested: ' + game.outlawsArrested + '</div>';
+      html += '<div class="journal-entry">Crimes Resolved: ' + game.crimesResolved + '</div>';
+      html += '<div class="journal-entry">Crimes Failed: ' + game.crimesIgnored + '</div>';
+      html += '<div class="journal-entry">Duels Won: ' + game.duelsWon + '</div>';
+      html += '<div class="journal-entry">Shots Fired: ' + game.totalShots + ' | Hits: ' + game.totalHits + '</div>';
+      html += '<div class="journal-entry">Melee Fights: ' + game.meleeFights + '</div>';
+      html += '<div class="journal-entry">Poker: ' + game.pokerWins + 'W / ' + game.pokerLosses + 'L</div>';
+      html += '<div class="journal-entry">Bribes Taken: ' + game.bribesTaken + '</div>';
+      html += '<div class="journal-entry">NPCs Talked To: ' + game.npcstalkedTo.size + '</div>';
+      html += '<div class="journal-entry">Ammo: ' + game.ammo + '</div>';
+      html += '<div class="journal-entry">Weapon: ' + game.currentWeapon + '</div>';
+      if (game.ngPlusLevel > 0) {
+        html += '<div class="journal-entry">NG+ Level: ' + game.ngPlusLevel + '</div>';
+      }
+      html += '</div>';
+      break;
+
+    case 'missions':
+      html += '<div class="journal-section"><h4>ACTIVE MISSION</h4>';
+      if (game.activeQuest) {
+        html += '<div class="journal-entry">' + game.activeQuest.name + ': ' + game.activeQuest.desc + '</div>';
+      } else {
+        html += '<div class="journal-entry dim">No active mission. Talk to the Mayor or Bartender.</div>';
+      }
+      html += '</div>';
+      if (game.completedQuests.length > 0) {
+        html += '<div class="journal-section"><h4>COMPLETED</h4>';
+        for (var qi = game.completedQuests.length - 1; qi >= Math.max(0, game.completedQuests.length - 10); qi--) {
+          html += '<div class="journal-entry completed">' + game.completedQuests[qi].name + '</div>';
+        }
+        html += '</div>';
+      }
+      break;
+
+    case 'wanted':
+      html += '<div class="journal-section"><h4>WANTED LIST</h4>';
+      if (game.wantedList.length === 0) {
+        html += '<div class="journal-entry dim">No active bounties.</div>';
+      }
+      for (var wi = 0; wi < game.wantedList.length; wi++) {
+        var w = game.wantedList[wi];
+        html += '<div class="journal-entry wanted-entry">';
+        html += '<strong>' + w.name + '</strong><br>';
+        html += '<span class="wanted-desc">' + w.desc + '</span><br>';
+        html += '<span class="wanted-bounty">Bounty: $' + w.bounty + '</span>';
+        if (w.captured) html += ' <span class="captured">[CAPTURED]</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+      break;
+
+    case 'achievements':
+      html += '<div class="journal-section"><h4>BADGES (' + game.achievements.length + '/' + ACHIEVEMENTS.length + ')</h4>';
+      for (var ai = 0; ai < ACHIEVEMENTS.length; ai++) {
+        var ach = ACHIEVEMENTS[ai];
+        var unlocked = game.achievements.indexOf(ach.id) !== -1;
+        html += '<div class="journal-entry achievement-entry' + (unlocked ? ' unlocked' : ' locked') + '">';
+        html += '<span class="ach-icon">' + (unlocked ? ach.icon : '?') + '</span> ';
+        html += '<span class="ach-name">' + (unlocked ? ach.name : '???') + '</span>';
+        html += '<span class="ach-desc">' + (unlocked ? ach.desc : 'Keep playing to unlock') + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+      break;
+
+    case 'log':
+      html += '<div class="journal-section"><h4>SHERIFF\'S LOG</h4>';
+      if (game.journalEntries.length === 0) {
+        html += '<div class="journal-entry dim">No entries yet.</div>';
+      }
+      var logEntries = game.journalEntries.slice(-20).reverse();
+      for (var li = 0; li < logEntries.length; li++) {
+        var e = logEntries[li];
+        html += '<div class="journal-entry">Day ' + e.day + ', ' + e.time + ': ' + e.text + '</div>';
+      }
+      html += '</div>';
+      break;
   }
 
-  // Crime indicator
-  if (game.activeCrime) {
-    const cx = game.activeCrime.x - camX;
-    const cy = game.activeCrime.y - camY;
-    ctx.strokeStyle = Date.now() % 500 < 250 ? '#ff0000' : '#ff000044';
-    ctx.lineWidth = 2;
-    const pulse = 20 + Math.sin(Date.now() / 200) * 10;
-    ctx.beginPath();
-    ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Arrow pointing to crime if offscreen
-    if (cx < 0 || cx > canvas.width || cy < 0 || cy > canvas.height) {
-      const angle = Math.atan2(cy - canvas.height / 2, cx - canvas.width / 2);
-      const arrowX = canvas.width / 2 + Math.cos(angle) * 200;
-      const arrowY = canvas.height / 2 + Math.sin(angle) * 150;
-      ctx.fillStyle = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(arrowX, arrowY, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('!', arrowX, arrowY + 4);
-    }
-  }
-
-  // NPCs (sort by Y for depth)
-  const sortedNPCs = [...game.npcs].sort((a, b) => a.y - b.y);
-  for (const npc of sortedNPCs) {
-    drawNPC(npc, camX, camY);
-  }
-
-  // Player
-  drawPlayer(game.player, camX, camY);
-
-  // Bullets
-  bullets.draw(ctx, camX, camY);
-
-  // Particles
-  particles.draw(ctx, camX, camY);
-
-  // Floating texts
-  for (let i = floatingTexts.length - 1; i >= 0; i--) {
-    const ft = floatingTexts[i];
-    ft.y -= 0.5;
-    ft.life--;
-    ctx.globalAlpha = ft.life / 60;
-    ctx.fillStyle = ft.color;
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(ft.text, ft.x - camX, ft.y - camY);
-    ctx.globalAlpha = 1;
-    if (ft.life <= 0) floatingTexts.splice(i, 1);
-  }
-
-  // Day/night overlay
-  drawDayNightOverlay(game.time);
-
-  // Minimap
-  drawMinimap();
+  content.innerHTML = html;
 }
 
-function getSkyColor(t) {
-  if (t < 0.2) return '#1a1020';
-  if (t < 0.25) return lerpColor('#1a1020', '#c06838', (t - 0.2) / 0.05);
-  if (t < 0.3) return lerpColor('#c06838', '#d4a050', (t - 0.25) / 0.05);
-  if (t < 0.7) return '#d4a050';
-  if (t < 0.75) return lerpColor('#d4a050', '#c06838', (t - 0.7) / 0.05);
-  if (t < 0.8) return lerpColor('#c06838', '#2a1830', (t - 0.75) / 0.05);
-  return '#1a1020';
+function closeJournal() {
+  document.getElementById('journal-panel').classList.add('hidden');
+  game.state = 'playing';
 }
 
-function lerpColor(c1, c2, t) {
-  const r1 = parseInt(c1.slice(1, 3), 16), g1 = parseInt(c1.slice(3, 5), 16), b1 = parseInt(c1.slice(5, 7), 16);
-  const r2 = parseInt(c2.slice(1, 3), 16), g2 = parseInt(c2.slice(3, 5), 16), b2 = parseInt(c2.slice(5, 7), 16);
-  const r = Math.round(lerp(r1, r2, t));
-  const g = Math.round(lerp(g1, g2, t));
-  const b = Math.round(lerp(b1, b2, t));
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+// Tab switching
+(function() {
+  var jtabs = document.querySelectorAll('.jtab');
+  for (var i = 0; i < jtabs.length; i++) {
+    jtabs[i].addEventListener('click', function() {
+      var tab = this.getAttribute('data-tab');
+      game.journalTab = tab;
+      openJournal(tab);
+    });
+  }
+})();
+
+// ─────────────────────────────────────────────
+// §M  TUTORIAL SYSTEM
+// ─────────────────────────────────────────────
+function showTutorial(key, text) {
+  if (game.tutorialShown[key]) return;
+  game.tutorialShown[key] = true;
+
+  var overlay = document.getElementById('tutorial-overlay');
+  var textEl = document.getElementById('tutorial-text');
+  textEl.textContent = text;
+  overlay.classList.remove('hidden');
+
+  var dismissBtn = document.getElementById('tutorial-dismiss');
+  var dismiss = function() {
+    overlay.classList.add('hidden');
+    dismissBtn.removeEventListener('click', dismiss);
+    document.removeEventListener('keydown', dismissKey);
+  };
+  var dismissKey = function(e) {
+    dismiss();
+  };
+
+  dismissBtn.addEventListener('click', dismiss);
+  document.addEventListener('keydown', dismissKey, { once: true });
 }
 
-// ---- SAVE / LOAD ----
+// ─────────────────────────────────────────────
+// §N  SAVE / LOAD
+// ─────────────────────────────────────────────
 function saveGame() {
-  const data = {
+  var npcstalkedArr = [];
+  game.npcstalkedTo.forEach(function(v) { npcstalkedArr.push(v); });
+
+  var visitedArr = [];
+  game.visitedBuildings.forEach(function(v) { visitedArr.push(v); });
+
+  var data = {
     reputation: game.reputation,
     gold: game.gold,
     dayCount: game.dayCount,
@@ -2027,21 +4989,53 @@ function saveGame() {
     outlawsArrested: game.outlawsArrested,
     crimesResolved: game.crimesResolved,
     crimesIgnored: game.crimesIgnored,
-    completedQuests: game.completedQuests.map(q => q.name),
+    completedQuests: game.completedQuests.map(function(q) { return q.name; }),
     journalEntries: game.journalEntries,
     playerX: game.player.x,
     playerY: game.player.y,
-    playerHp: game.player.hp
+    playerHp: game.player.hp,
+    playerMaxHp: game.player.maxHp,
+    difficulty: game.difficulty,
+    ammo: game.ammo,
+    totalGoldEarned: game.totalGoldEarned,
+    totalShots: game.totalShots,
+    totalHits: game.totalHits,
+    meleeFights: game.meleeFights,
+    pokerWins: game.pokerWins,
+    pokerLosses: game.pokerLosses,
+    healthTonics: game.healthTonics,
+    bribesTaken: game.bribesTaken,
+    npcstalkedTo: npcstalkedArr,
+    achievements: game.achievements,
+    hasVest: game.hasVest,
+    hasSpeedBoots: game.hasSpeedBoots,
+    hasShotgun: game.hasShotgun,
+    hasRifle: game.hasRifle,
+    gunDurability: game.gunDurability,
+    currentWeapon: game.currentWeapon,
+    ngPlusLevel: game.ngPlusLevel,
+    duelsWon: game.duelsWon,
+    quickDrawTime: game.quickDrawTime,
+    nightWatchesCompleted: game.nightWatchesCompleted,
+    tilesRidden: game.tilesRidden,
+    bountiesCaptured: game.bountiesCaptured,
+    speedResolveTime: game.speedResolveTime,
+    noDamageDays: game.noDamageDays,
+    tutorialShown: game.tutorialShown,
+    visitedBuildings: visitedArr,
+    rank: game.rank
   };
-  localStorage.setItem('sheriff_save', JSON.stringify(data));
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  showNotification('Game saved!');
 }
 
 function loadGame() {
-  const raw = localStorage.getItem('sheriff_save');
+  var raw = localStorage.getItem(SAVE_KEY);
   if (!raw) return false;
   try {
-    const data = JSON.parse(raw);
-    initGame();
+    var data = JSON.parse(raw);
+    initGame(data.difficulty || 'normal', false);
+
     game.reputation = data.reputation;
     game.gold = data.gold;
     game.dayCount = data.dayCount;
@@ -2055,29 +5049,95 @@ function loadGame() {
     game.player.x = data.playerX;
     game.player.y = data.playerY;
     game.player.hp = data.playerHp;
+    game.player.maxHp = data.playerMaxHp || 5;
+    game.ammo = data.ammo || STARTING_AMMO;
+    game.totalGoldEarned = data.totalGoldEarned || 0;
+    game.totalShots = data.totalShots || 0;
+    game.totalHits = data.totalHits || 0;
+    game.meleeFights = data.meleeFights || 0;
+    game.pokerWins = data.pokerWins || 0;
+    game.pokerLosses = data.pokerLosses || 0;
+    game.healthTonics = data.healthTonics || 0;
+    game.bribesTaken = data.bribesTaken || 0;
+    game.achievements = data.achievements || [];
+    game.hasVest = data.hasVest || false;
+    game.hasSpeedBoots = data.hasSpeedBoots || false;
+    game.hasShotgun = data.hasShotgun || false;
+    game.hasRifle = data.hasRifle || false;
+    game.gunDurability = data.gunDurability || 100;
+    game.currentWeapon = data.currentWeapon || 'revolver';
+    game.ngPlusLevel = data.ngPlusLevel || 0;
+    game.duelsWon = data.duelsWon || 0;
+    game.quickDrawTime = data.quickDrawTime || Infinity;
+    game.nightWatchesCompleted = data.nightWatchesCompleted || 0;
+    game.tilesRidden = data.tilesRidden || 0;
+    game.bountiesCaptured = data.bountiesCaptured || 0;
+    game.speedResolveTime = data.speedResolveTime || Infinity;
+    game.noDamageDays = data.noDamageDays || 0;
+    game.tutorialShown = data.tutorialShown || {};
+    game.rank = data.rank || 'Deputy';
+
+    if (data.npcstalkedTo) {
+      game.npcstalkedTo = new Set(data.npcstalkedTo);
+    }
+    if (data.visitedBuildings) {
+      game.visitedBuildings = new Set(data.visitedBuildings);
+    }
+
     return true;
   } catch (e) {
     return false;
   }
 }
 
-// ---- GAME INIT ----
-function initGame() {
-  const { map, buildings } = generateTown();
-  game.map = map;
-  game.buildings = buildings;
+// ─────────────────────────────────────────────
+// §O  WANTED LIST GENERATION (uses WANTED_OUTLAWS from Part 2)
+// ─────────────────────────────────────────────
+
+function generateWantedList() {
+  game.wantedList = [];
+  var count = Math.min(3 + game.ngPlusLevel, WANTED_OUTLAWS.length);
+  var shuffled = WANTED_OUTLAWS.slice().sort(function() { return Math.random() - 0.5; });
+  for (var i = 0; i < count; i++) {
+    game.wantedList.push({
+      name: shuffled[i].name,
+      desc: shuffled[i].desc,
+      bounty: Math.round(shuffled[i].bounty * (1 + game.ngPlusLevel * 0.5)),
+      captured: false
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+// §P  GAME INIT
+// ─────────────────────────────────────────────
+function initGame(difficulty, ngPlus) {
+  var diff = DIFFICULTY[difficulty || 'normal'] || DIFFICULTY.normal;
+  game.difficulty = difficulty || 'normal';
+
+  var townData = generateTown();
+  game.map = townData.map;
+  game.buildings = townData.buildings;
 
   // Player starts at sheriff office door
-  const sheriffOffice = buildings.find(b => b.type === BUILDING_TYPES.SHERIFF);
+  var sheriffOffice = null;
+  for (var i = 0; i < game.buildings.length; i++) {
+    if (game.buildings[i].type === BUILDING_TYPES.SHERIFF) {
+      sheriffOffice = game.buildings[i];
+      break;
+    }
+  }
   game.player = createPlayer(sheriffOffice.doorX, sheriffOffice.doorY + 1);
+  game.player.hp = diff.playerHP;
+  game.player.maxHp = diff.playerHP;
 
-  game.npcs = generateNPCs(buildings);
-  game.crimes = [];
+  game.npcs = generateNPCs(game.buildings);
   game.activeCrime = null;
   game.activeQuest = null;
   game.completedQuests = [];
   game.reputation = 50;
-  game.gold = 20;
+  game.gold = diff.startingMoney;
+  game.ammo = diff.startingAmmo;
   game.time = 0.25;
   game.dayCount = 1;
   game.daysServed = 0;
@@ -2089,6 +5149,84 @@ function initGame() {
   game.salaryTimer = 0;
   game.journalEntries = [];
   game.visitedBuildings = new Set();
+  game.dialogState = null;
+  game.duelState = null;
+  game.showMinimap = true;
+  game.stepTimer = 0;
+  game.totalGoldEarned = 0;
+  game.totalShots = 0;
+  game.totalHits = 0;
+  game.meleeFights = 0;
+  game.pokerWins = 0;
+  game.pokerLosses = 0;
+  game.healthTonics = 0;
+  game.bribesTaken = 0;
+  game.npcstalkedTo = new Set();
+  game.noDamageToday = true;
+  game.noDamageDays = 0;
+  game.duelsWon = 0;
+  game.quickDrawTime = Infinity;
+  game.nightWatchesCompleted = 0;
+  game.tilesRidden = 0;
+  game.bountiesCaptured = 0;
+  game.speedResolveTime = Infinity;
+  game.gameOverReason = '';
+  game.fireEffects = [];
+  game.hostageNPC = null;
+  game.waveCount = 0;
+  game.ambientParticles = [];
+  game.prayedToday = false;
+  game.crimeStartTime = 0;
+  game.shopOpen = false;
+  game.shopType = null;
+  game.pokerState = null;
+
+  // NG+ carry-overs
+  if (ngPlus && ngPlus.level) {
+    game.ngPlusLevel = ngPlus.level;
+    game.rank = ngPlus.rank || 'Deputy';
+    game.gold = Math.floor((ngPlus.gold || 0) * 0.3);
+    game.totalGoldEarned = game.gold;
+    game.hasVest = ngPlus.hasVest || false;
+    game.hasSpeedBoots = ngPlus.hasSpeedBoots || false;
+    game.hasShotgun = ngPlus.hasShotgun || false;
+    game.hasRifle = ngPlus.hasRifle || false;
+    game.achievements = ngPlus.achievements || [];
+    game.tutorialShown = ngPlus.tutorialShown || {};
+    if (game.hasVest) {
+      game.player.maxHp += 2;
+      game.player.hp = game.player.maxHp;
+    }
+  } else {
+    game.ngPlusLevel = 0;
+    game.achievements = [];
+    game.hasVest = false;
+    game.hasSpeedBoots = false;
+    game.hasShotgun = false;
+    game.hasRifle = false;
+    game.tutorialShown = {};
+  }
+
+  game.gunDurability = 100;
+  game.currentWeapon = 'revolver';
+  game.mounted = false;
+
+  // Spawn horse at stables
+  var stable = null;
+  for (var si = 0; si < game.buildings.length; si++) {
+    if (game.buildings[si].type === BUILDING_TYPES.STABLE) {
+      stable = game.buildings[si];
+      break;
+    }
+  }
+  if (stable) {
+    spawnHorse(stable.doorX + 2, stable.doorY + 1);
+  }
+
+  // Generate wanted list
+  generateWantedList();
+
+  // Set camera
   game.camera.x = game.player.x - canvas.width / 2;
   game.camera.y = game.player.y - canvas.height / 2;
 
@@ -2099,57 +5237,751 @@ function initGame() {
   floatingTexts.length = 0;
 }
 
-// ---- GAME OVER ----
+// ─────────────────────────────────────────────
+// §Q  GAME OVER & NG+
+// ─────────────────────────────────────────────
 function showGameOver() {
-  const screen = document.getElementById('game-over-screen');
+  var screen = document.getElementById('game-over-screen');
   screen.classList.remove('hidden');
+
   document.getElementById('go-title').textContent =
     game.player.hp <= 0 ? 'YOU DIED' : 'GAME OVER';
   document.getElementById('go-reason').textContent = game.gameOverReason;
-  document.getElementById('go-stats').innerHTML = `
-    Days Served: ${game.daysServed}<br>
-    Final Rank: ${game.rank}<br>
-    Outlaws Killed: ${game.outlawsKilled}<br>
-    Outlaws Arrested: ${game.outlawsArrested}<br>
-    Crimes Resolved: ${game.crimesResolved}<br>
-    Gold Earned: $${game.gold}
-  `;
+
+  var accuracy = game.totalShots > 0 ? Math.round((game.totalHits / game.totalShots) * 100) : 0;
+  document.getElementById('go-stats').innerHTML =
+    'Days Served: ' + game.daysServed + '<br>' +
+    'Final Rank: ' + game.rank + '<br>' +
+    'Reputation: ' + game.reputation + '<br>' +
+    'Outlaws Killed: ' + game.outlawsKilled + '<br>' +
+    'Outlaws Arrested: ' + game.outlawsArrested + '<br>' +
+    'Crimes Resolved: ' + game.crimesResolved + '<br>' +
+    'Duels Won: ' + game.duelsWon + '<br>' +
+    'Accuracy: ' + accuracy + '%<br>' +
+    'Total Gold Earned: $' + game.totalGoldEarned + '<br>' +
+    'Badges Earned: ' + game.achievements.length + '/' + ACHIEVEMENTS.length + '<br>' +
+    (game.ngPlusLevel > 0 ? 'NG+ Level: ' + game.ngPlusLevel + '<br>' : '');
+
+  // NG+ button
+  var ngBtn = document.getElementById('btn-ng-plus');
+  if (game.reputation >= 50 || game.daysServed >= 10) {
+    ngBtn.classList.remove('hidden');
+    ngBtn.style.display = '';
+    ngBtn.onclick = function() {
+      screen.classList.add('hidden');
+      var ngData = {
+        level: game.ngPlusLevel + 1,
+        rank: game.rank,
+        gold: game.gold,
+        hasVest: game.hasVest,
+        hasSpeedBoots: game.hasSpeedBoots,
+        hasShotgun: game.hasShotgun,
+        hasRifle: game.hasRifle,
+        achievements: game.achievements.slice(),
+        tutorialShown: Object.assign({}, game.tutorialShown)
+      };
+      initGame(game.difficulty, ngData);
+      game.state = 'playing';
+      showNotification('New Game+ (Level ' + game.ngPlusLevel + ') - Outlaws are tougher!');
+      addJournalEntry('Started New Game+ level ' + game.ngPlusLevel + '.');
+    };
+  } else {
+    ngBtn.classList.add('hidden');
+    ngBtn.style.display = 'none';
+  }
 }
 
-// ---- MAIN LOOP ----
+// ─────────────────────────────────────────────
+// §R  HELPER: getTimeString (shared)
+// ─────────────────────────────────────────────
+function getTimeString(t) {
+  var totalMinutes = t * 24 * 60;
+  var hours = Math.floor(totalMinutes / 60);
+  var minutes = Math.floor(totalMinutes % 60);
+  var ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return hours + ':' + minutes.toString().padStart(2, '0') + ' ' + ampm;
+}
+
+// === END PART 4 ===// === PART 5: MAIN LOOP ===
+
+// ─────────────────────────────────────────────
+// §A  AMBIENT PARTICLE STORAGE
+// ─────────────────────────────────────────────
+// ambientParticles already declared in Part 3
+const bloodDecalList = (typeof bloodDecals !== 'undefined') ? bloodDecals : [];
+const screenShakeState = (typeof screenShake !== 'undefined') ? screenShake : { x: 0, y: 0, intensity: 0, update() { this.intensity *= 0.9; this.x = (Math.random() - 0.5) * this.intensity; this.y = (Math.random() - 0.5) * this.intensity; } };
+
+// Seed initial ambient particles
+function seedAmbientParticles() {
+  // Tumbleweeds
+  for (let i = 0; i < 4; i++) {
+    ambientParticles.push({
+      type: 'tumbleweed',
+      x: Math.random() * MAP_W * TILE,
+      y: Math.random() * MAP_H * TILE,
+      vx: 0.3 + Math.random() * 0.6,
+      vy: Math.sin(Math.random() * Math.PI * 2) * 0.15,
+      size: 6 + Math.random() * 6,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: 0.02 + Math.random() * 0.03,
+      life: Infinity
+    });
+  }
+  // Dust motes
+  for (let i = 0; i < 30; i++) {
+    ambientParticles.push({
+      type: 'dust',
+      x: Math.random() * MAP_W * TILE,
+      y: Math.random() * MAP_H * TILE,
+      vx: 0.1 + Math.random() * 0.3,
+      vy: -0.05 + Math.random() * 0.1,
+      size: 1 + Math.random() * 2,
+      alpha: 0.15 + Math.random() * 0.25,
+      life: Infinity,
+      drift: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function updateAmbientParticles() {
+  const isNight = game.time < 0.2 || game.time > 0.8;
+
+  for (let i = ambientParticles.length - 1; i >= 0; i--) {
+    const p = ambientParticles[i];
+
+    if (p.type === 'tumbleweed') {
+      p.x += p.vx;
+      p.y += p.vy + Math.sin(Date.now() * 0.001 + p.rotation) * 0.1;
+      p.rotation += p.rotSpeed;
+      // Wrap around map
+      if (p.x > MAP_W * TILE + 50) p.x = -50;
+      if (p.x < -50) p.x = MAP_W * TILE + 50;
+      if (p.y < 0) p.y = MAP_H * TILE;
+      if (p.y > MAP_H * TILE) p.y = 0;
+    } else if (p.type === 'dust') {
+      p.drift += 0.01;
+      p.x += p.vx + Math.sin(p.drift) * 0.1;
+      p.y += p.vy + Math.cos(p.drift * 0.7) * 0.05;
+      if (p.x > MAP_W * TILE + 20) p.x = -20;
+      if (p.x < -20) p.x = MAP_W * TILE + 20;
+      if (p.y < -20) p.y = MAP_H * TILE + 20;
+      if (p.y > MAP_H * TILE + 20) p.y = -20;
+    } else if (p.type === 'firefly') {
+      p.drift += 0.03;
+      p.x += Math.sin(p.drift) * 0.4;
+      p.y += Math.cos(p.drift * 1.3) * 0.3;
+      p.alpha = 0.3 + Math.sin(Date.now() * 0.005 + p.phase) * 0.3;
+      if (!isNight) {
+        ambientParticles.splice(i, 1);
+        continue;
+      }
+    } else if (p.type === 'star') {
+      p.alpha = 0.4 + Math.sin(Date.now() * 0.002 + p.phase) * 0.35;
+      if (!isNight) {
+        ambientParticles.splice(i, 1);
+        continue;
+      }
+    }
+  }
+
+  // Spawn fireflies at night
+  if (isNight) {
+    const fireflyCount = ambientParticles.filter(p => p.type === 'firefly').length;
+    if (fireflyCount < 20 && Math.random() < 0.05) {
+      ambientParticles.push({
+        type: 'firefly',
+        x: game.camera.x + Math.random() * canvas.width,
+        y: game.camera.y + Math.random() * canvas.height,
+        size: 2,
+        alpha: 0.5,
+        phase: Math.random() * Math.PI * 2,
+        drift: Math.random() * Math.PI * 2,
+        life: Infinity
+      });
+    }
+    // Spawn stars
+    const starCount = ambientParticles.filter(p => p.type === 'star').length;
+    if (starCount < 40) {
+      for (let i = starCount; i < 40; i++) {
+        ambientParticles.push({
+          type: 'star',
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height * 0.5,
+          size: 0.5 + Math.random() * 1.5,
+          alpha: 0.4 + Math.random() * 0.5,
+          phase: Math.random() * Math.PI * 2,
+          life: Infinity,
+          screenFixed: true
+        });
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §A  MAIN RENDER FUNCTION
+// ─────────────────────────────────────────────
+function render() {
+  // 1. Camera with screen shake offset
+  screenShakeState.update();
+  const camX = game.camera.x + screenShakeState.x;
+  const camY = game.camera.y + screenShakeState.y;
+
+  // 2. Sky background
+  const skyColor = getSkyColor(game.time);
+  ctx.fillStyle = skyColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw stars at night (screen-fixed, drawn before world)
+  const isNight = game.time < 0.2 || game.time > 0.8;
+  if (isNight) {
+    for (const p of ambientParticles) {
+      if (p.type === 'star' && p.screenFixed) {
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = '#ffffee';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 3. Calculate visible tile range
+  const startX = Math.max(0, Math.floor(camX / TILE));
+  const startY = Math.max(0, Math.floor(camY / TILE));
+  const endX = Math.min(MAP_W, Math.ceil((camX + canvas.width) / TILE) + 1);
+  const endY = Math.min(MAP_H, Math.ceil((camY + canvas.height) / TILE) + 1);
+
+  // 4. Draw all visible tiles
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
+      drawTile(x, y, camX, camY, game.map[y][x], game.time);
+    }
+  }
+
+  // 5. Draw blood decals on ground
+  for (const decal of bloodDecalList) {
+    const sx = decal.x - camX;
+    const sy = decal.y - camY;
+    if (sx < -20 || sx > canvas.width + 20 || sy < -20 || sy > canvas.height + 20) continue;
+    ctx.globalAlpha = decal.alpha || 0.4;
+    ctx.fillStyle = '#5a0000';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, decal.size || 6, (decal.size || 6) * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Splatter details
+    for (let s = 0; s < 3; s++) {
+      const angle = (decal.seed || 0) + s * 2.1;
+      const dist2 = (decal.size || 6) * 0.8;
+      ctx.fillRect(
+        sx + Math.cos(angle) * dist2 - 1,
+        sy + Math.sin(angle) * dist2 * 0.5 - 1,
+        2, 2
+      );
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 6. Draw building roofs
+  for (const b of game.buildings) {
+    drawBuildingRoof(b, camX, camY);
+  }
+
+  // 7. Crime indicator (pulsing red circle + offscreen arrow)
+  if (game.activeCrime) {
+    const cx = game.activeCrime.x - camX;
+    const cy = game.activeCrime.y - camY;
+    const now = Date.now();
+    const pulse = 20 + Math.sin(now / 200) * 10;
+    const pulseAlpha = 0.5 + Math.sin(now / 150) * 0.3;
+
+    // Outer glow
+    ctx.strokeStyle = `rgba(255, 0, 0, ${pulseAlpha * 0.3})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pulse + 8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner ring
+    ctx.strokeStyle = `rgba(255, 0, 0, ${pulseAlpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner fill
+    ctx.fillStyle = `rgba(255, 0, 0, ${pulseAlpha * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crime timer text
+    if (game.activeCrime.timer > 0) {
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.ceil(game.activeCrime.timer) + 's', cx, cy - pulse - 8);
+    }
+
+    // Arrow pointing to crime if offscreen
+    if (cx < 0 || cx > canvas.width || cy < 0 || cy > canvas.height) {
+      const angle = Math.atan2(cy - canvas.height / 2, cx - canvas.width / 2);
+      const edgeDist = 60;
+      const arrowX = clamp(
+        canvas.width / 2 + Math.cos(angle) * (canvas.width / 2 - edgeDist),
+        edgeDist, canvas.width - edgeDist
+      );
+      const arrowY = clamp(
+        canvas.height / 2 + Math.sin(angle) * (canvas.height / 2 - edgeDist),
+        edgeDist, canvas.height - edgeDist
+      );
+
+      // Pulsing arrow background
+      ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + Math.sin(now / 200) * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(arrowX, arrowY, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Arrow triangle pointing toward crime
+      ctx.fillStyle = '#ffffff';
+      ctx.save();
+      ctx.translate(arrowX, arrowY);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-4, -5);
+      ctx.lineTo(-4, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // Distance text
+      const crimeDist = Math.round(Math.hypot(
+        game.activeCrime.x - game.player.x,
+        game.activeCrime.y - game.player.y
+      ) / TILE);
+      ctx.fillStyle = '#ff4444';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(crimeDist + 'm', arrowX, arrowY + 22);
+    }
+  }
+
+  // 8. Quest target indicators on buildings (pulsing gold)
+  if (game.activeQuest && game.activeQuest.targets) {
+    const now = Date.now();
+    for (const targetType of game.activeQuest.targets) {
+      if (game.activeQuest.visited && game.activeQuest.visited.has(targetType)) continue;
+      const building = game.buildings.find(b => b.type === targetType);
+      if (!building) continue;
+
+      const bx = building.x * TILE + (building.w * TILE) / 2 - camX;
+      const by = building.y * TILE - 20 - camY;
+      const qPulse = 0.5 + Math.sin(now / 300) * 0.4;
+
+      // Gold diamond marker
+      ctx.fillStyle = `rgba(255, 215, 0, ${qPulse})`;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.restore();
+
+      // Glow ring
+      ctx.strokeStyle = `rgba(255, 215, 0, ${qPulse * 0.5})`;
+      ctx.lineWidth = 1.5;
+      const qRing = 10 + Math.sin(now / 250) * 4;
+      ctx.beginPath();
+      ctx.arc(bx, by, qRing, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Exclamation
+      ctx.fillStyle = `rgba(255, 215, 0, ${qPulse})`;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', bx, by + 4);
+    }
+  }
+
+  // 9. Sort and draw all NPCs by Y position (depth sort)
+  const sortedNPCs = [];
+  for (let i = 0; i < game.npcs.length; i++) {
+    const npc = game.npcs[i];
+    // Cull offscreen NPCs
+    const sx = npc.x - camX;
+    const sy = npc.y - camY;
+    if (sx > -60 && sx < canvas.width + 60 && sy > -60 && sy < canvas.height + 60) {
+      sortedNPCs.push(npc);
+    }
+  }
+  sortedNPCs.sort((a, b) => a.y - b.y);
+
+  // Interleave player into NPC draw order by Y
+  let playerDrawn = false;
+  for (const npc of sortedNPCs) {
+    if (!playerDrawn && game.player.y < npc.y) {
+      // 10. Draw horse if exists and not mounted
+      if (game.horse && !game.horse.mounted) {
+        drawHorse(game.horse, camX, camY);
+      }
+      // 11. Draw player
+      drawPlayer(game.player, camX, camY);
+      playerDrawn = true;
+    }
+    drawNPC(npc, camX, camY);
+  }
+  if (!playerDrawn) {
+    if (game.horse && !game.horse.mounted) {
+      drawHorse(game.horse, camX, camY);
+    }
+    drawPlayer(game.player, camX, camY);
+  }
+
+  // 12. Draw bullets
+  bullets.draw(ctx, camX, camY);
+
+  // 13. Draw particles
+  particles.draw(ctx, camX, camY);
+
+  // 14. Draw floating texts (fade up + shrink)
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y -= 0.5;
+    ft.life--;
+    const lifeRatio = ft.life / 60;
+    ctx.globalAlpha = lifeRatio;
+    const fontSize = Math.max(8, Math.round(12 * (0.6 + lifeRatio * 0.4)));
+    ctx.fillStyle = ft.color;
+    ctx.font = `bold ${fontSize}px monospace`;
+    ctx.textAlign = 'center';
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(ft.text, ft.x - camX + 1, ft.y - camY + 1);
+    ctx.fillStyle = ft.color;
+    ctx.fillText(ft.text, ft.x - camX, ft.y - camY);
+    ctx.globalAlpha = 1;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+
+  // 15. Draw ambient particles (tumbleweeds, dust, fireflies)
+  for (const p of ambientParticles) {
+    if (p.screenFixed) continue; // Already drawn (stars)
+
+    const sx = p.type === 'star' ? p.x : p.x - camX;
+    const sy = p.type === 'star' ? p.y : p.y - camY;
+
+    if (sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) continue;
+
+    if (p.type === 'tumbleweed') {
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.rotation);
+      // Draw tumbleweed as a rough circle of lines
+      ctx.strokeStyle = '#a89060';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      for (let a = 0; a < Math.PI * 2; a += 0.5) {
+        const r = p.size * (0.7 + Math.sin(a * 3.7) * 0.3);
+        if (a === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // Internal strands
+      ctx.beginPath();
+      ctx.moveTo(-p.size * 0.5, 0);
+      ctx.lineTo(p.size * 0.5, 0);
+      ctx.moveTo(0, -p.size * 0.5);
+      ctx.lineTo(0, p.size * 0.5);
+      ctx.moveTo(-p.size * 0.3, -p.size * 0.3);
+      ctx.lineTo(p.size * 0.3, p.size * 0.3);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    } else if (p.type === 'dust') {
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = '#c4a55a';
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (p.type === 'firefly') {
+      ctx.globalAlpha = p.alpha;
+      // Glow
+      const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, 8);
+      gradient.addColorStop(0, 'rgba(200, 255, 100, 0.6)');
+      gradient.addColorStop(0.3, 'rgba(180, 255, 50, 0.2)');
+      gradient.addColorStop(1, 'rgba(180, 255, 50, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(sx - 8, sy - 8, 16, 16);
+      // Core
+      ctx.fillStyle = '#ccff66';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 16. Fire effects if arson crime active
+  if (game.activeCrime && game.activeCrime.name === 'Arson') {
+    const fireX = game.activeCrime.x - camX;
+    const fireY = game.activeCrime.y - camY;
+    const now = Date.now();
+    const building = game.activeCrime.targetBuilding;
+    const bw = building ? building.w * TILE : 64;
+    const bh = building ? building.h * TILE : 48;
+    const bsx = building ? building.x * TILE - camX : fireX - 32;
+    const bsy = building ? building.y * TILE - camY : fireY - 24;
+
+    // Draw multiple fire particles across the building
+    for (let f = 0; f < 35; f++) {
+      const fx = bsx + Math.random() * bw;
+      const baseY = bsy + bh * 0.3 + Math.random() * bh * 0.7;
+      const flicker = Math.sin(now * 0.01 + f * 1.7) * 0.3;
+      const height = 15 + Math.random() * 25 + Math.sin(now * 0.008 + f) * 8;
+      const width = 4 + Math.random() * 8;
+
+      // Flame gradient from yellow to orange to red
+      const lifePhase = (Math.sin(now * 0.006 + f * 2.3) + 1) / 2;
+      let r, g, b;
+      if (lifePhase < 0.3) {
+        // Red base
+        r = 200 + Math.random() * 55;
+        g = 20 + Math.random() * 40;
+        b = 0;
+      } else if (lifePhase < 0.7) {
+        // Orange middle
+        r = 255;
+        g = 100 + Math.random() * 80;
+        b = 0;
+      } else {
+        // Yellow tip
+        r = 255;
+        g = 200 + Math.random() * 55;
+        b = 50 + Math.random() * 50;
+      }
+
+      const alpha = 0.5 + flicker * 0.3;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+
+      // Draw flame tongue shape
+      ctx.beginPath();
+      ctx.moveTo(fx - width / 2, baseY);
+      ctx.quadraticCurveTo(
+        fx - width * 0.3 + Math.sin(now * 0.005 + f) * 3,
+        baseY - height * 0.5,
+        fx + Math.sin(now * 0.007 + f * 1.1) * 4,
+        baseY - height
+      );
+      ctx.quadraticCurveTo(
+        fx + width * 0.3 + Math.sin(now * 0.006 + f + 1) * 3,
+        baseY - height * 0.5,
+        fx + width / 2,
+        baseY
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Ember particles floating up
+    for (let e = 0; e < 15; e++) {
+      const ex = bsx + Math.random() * bw;
+      const ey = bsy + Math.random() * bh * 0.5;
+      const emberOff = (now * 0.003 + e * 37) % 60;
+      const emberY = ey - emberOff;
+      const emberAlpha = 1 - (emberOff / 60);
+      ctx.globalAlpha = emberAlpha * 0.8;
+      ctx.fillStyle = Math.random() > 0.5 ? '#ffaa00' : '#ff4400';
+      ctx.fillRect(
+        ex + Math.sin(now * 0.004 + e * 2) * 6,
+        emberY,
+        1.5, 1.5
+      );
+    }
+
+    // Fire glow on surrounding area
+    ctx.globalAlpha = 0.12 + Math.sin(now * 0.004) * 0.05;
+    const glowGrad = ctx.createRadialGradient(
+      bsx + bw / 2, bsy + bh / 2, 10,
+      bsx + bw / 2, bsy + bh / 2, bw * 1.5
+    );
+    glowGrad.addColorStop(0, 'rgba(255, 120, 0, 0.4)');
+    glowGrad.addColorStop(0.5, 'rgba(255, 60, 0, 0.15)');
+    glowGrad.addColorStop(1, 'rgba(255, 30, 0, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(bsx - bw, bsy - bh, bw * 3, bh * 3);
+
+    // Smoke rising above fire
+    ctx.globalAlpha = 1;
+    for (let s = 0; s < 12; s++) {
+      const sx2 = bsx + bw * 0.2 + Math.random() * bw * 0.6;
+      const smokeOff = (now * 0.002 + s * 29) % 80;
+      const smokeY = bsy - smokeOff;
+      const smokeAlpha = (1 - smokeOff / 80) * 0.25;
+      const smokeSize = 4 + smokeOff * 0.3;
+      ctx.globalAlpha = smokeAlpha;
+      ctx.fillStyle = '#444444';
+      ctx.beginPath();
+      ctx.arc(
+        sx2 + Math.sin(now * 0.001 + s) * 10,
+        smokeY,
+        smokeSize, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 17. Day/night overlay
+  drawDayNightOverlay(game.time);
+
+  // 18. Draw minimap
+  drawMinimap();
+
+  // Draw crime timer in HUD if active
+  if (game.activeCrime) {
+    const timerEl = document.getElementById('crime-timer');
+    if (timerEl) {
+      timerEl.classList.remove('hidden');
+      const valueEl = document.getElementById('crime-timer-value');
+      if (valueEl) valueEl.textContent = Math.ceil(game.activeCrime.timer) + 's';
+    }
+  } else {
+    const timerEl = document.getElementById('crime-timer');
+    if (timerEl) timerEl.classList.add('hidden');
+  }
+
+  // Draw HP display
+  if (game.player) {
+    const hpEl = document.getElementById('hp-display');
+    if (hpEl) hpEl.textContent = `HP: ${game.player.hp}/${game.player.maxHp}`;
+  }
+}
+
+// Fallback drawHorse if not defined elsewhere
+if (typeof drawHorse === 'undefined') {
+  var drawHorse = function(horse, camX, camY) {
+    const sx = horse.x - camX;
+    const sy = horse.y - camY;
+    const bob = Math.sin(Date.now() * 0.003) * 1;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(sx - 14, sy + 14, 28, 6);
+
+    // Body
+    ctx.fillStyle = '#6a4a2a';
+    ctx.fillRect(sx - 12, sy - 4 + bob, 24, 14);
+
+    // Head/neck
+    ctx.fillStyle = '#7a5a3a';
+    ctx.fillRect(sx + 10, sy - 14 + bob, 8, 14);
+    ctx.fillRect(sx + 14, sy - 18 + bob, 8, 10);
+
+    // Legs
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(sx - 10, sy + 8 + bob, 3, 8);
+    ctx.fillRect(sx - 4, sy + 8 + bob, 3, 8);
+    ctx.fillRect(sx + 4, sy + 8 + bob, 3, 8);
+    ctx.fillRect(sx + 10, sy + 8 + bob, 3, 8);
+
+    // Tail
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(sx - 14, sy - 2 + bob, 4, 8);
+
+    // Mane
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(sx + 10, sy - 16 + bob, 3, 10);
+
+    // Eye
+    ctx.fillStyle = '#1a1008';
+    ctx.fillRect(sx + 18, sy - 16 + bob, 2, 2);
+
+    // Saddle
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(sx - 4, sy - 6 + bob, 12, 4);
+
+    // Interaction hint if player is close
+    if (game.player) {
+      const d = Math.hypot(game.player.x - horse.x, game.player.y - horse.y);
+      if (d < 50) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('[H] Mount', sx, sy - 24);
+      }
+    }
+  };
+}
+
+// ─────────────────────────────────────────────
+// §B  MAIN GAME LOOP
+// ─────────────────────────────────────────────
 let lastTime = 0;
+let loopStarted = false;
+
 function gameLoop(timestamp) {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;
 
-  // Clear keys just pressed at end of frame
-  const frameClear = () => { for (const k in keysJustPressed) keysJustPressed[k] = false; };
-
   switch (game.state) {
     case 'playing':
+      // Run all update systems
       updatePlayer(dt);
       updateNPCs(dt);
       updateCrimes(dt);
       updateQuests();
       updateTime(dt);
+      if (typeof updateAchievements === 'function') updateAchievements();
+      updateAmbientParticles();
       bullets.update(game.npcs, game.player, particles, game);
       particles.update();
       updateCamera();
       updateUI();
       render();
 
-      // Pause
+      // Escape -> pause
       if (consumeKey('Escape')) {
         game.state = 'paused';
         document.getElementById('pause-screen').classList.remove('hidden');
       }
-      // Journal
+      // J -> journal
       if (consumeKey('KeyJ')) {
         openJournal();
       }
-      // Minimap toggle
+      // M -> minimap toggle
       if (consumeKey('KeyM')) {
         game.showMinimap = !game.showMinimap;
+      }
+      // TAB -> shop if near a store building
+      if (consumeKey('Tab')) {
+        if (typeof openShop === 'function') {
+          const p = game.player;
+          const tx = Math.floor(p.x / TILE);
+          const ty = Math.floor((p.y + 10) / TILE);
+          let nearShop = null;
+          for (const b of game.buildings) {
+            if (b.type === BUILDING_TYPES.GENERAL || b.type === BUILDING_TYPES.BLACKSMITH) {
+              const bCenterX = b.x + b.w / 2;
+              const bCenterY = b.y + b.h / 2;
+              const d = Math.hypot(tx - bCenterX, ty - bCenterY);
+              if (d < 8) {
+                nearShop = b;
+                break;
+              }
+            }
+          }
+          if (nearShop) {
+            openShop(nearShop.type === BUILDING_TYPES.BLACKSMITH ? 'blacksmith' : 'general');
+          } else {
+            showNotification('No shop nearby. Walk closer to a store.');
+          }
+        }
       }
       break;
 
@@ -2166,17 +5998,17 @@ function gameLoop(timestamp) {
       if (consumeKey('Escape') || consumeKey('KeyE')) {
         closeDialog();
       }
-      // Number keys for choices
+      // Number keys for dialog choices
       if (consumeKey('Digit1')) {
-        const btn = document.querySelector('.dialog-choice:nth-child(1)');
+        const btn = document.querySelector('#dialog-choices .dialog-choice:nth-child(1)');
         if (btn) btn.click();
       }
       if (consumeKey('Digit2')) {
-        const btn = document.querySelector('.dialog-choice:nth-child(2)');
+        const btn = document.querySelector('#dialog-choices .dialog-choice:nth-child(2)');
         if (btn) btn.click();
       }
       if (consumeKey('Digit3')) {
-        const btn = document.querySelector('.dialog-choice:nth-child(3)');
+        const btn = document.querySelector('#dialog-choices .dialog-choice:nth-child(3)');
         if (btn) btn.click();
       }
       break;
@@ -2193,78 +6025,350 @@ function gameLoop(timestamp) {
       }
       break;
 
+    case 'shop':
+      render();
+      if (consumeKey('Escape') || consumeKey('KeyE') || consumeKey('Tab')) {
+        if (typeof closeShop === 'function') closeShop();
+      }
+      break;
+
+    case 'poker':
+      render();
+      // Poker input: number keys for actions, escape to quit
+      if (consumeKey('Escape')) {
+        if (typeof closePoker === 'function') closePoker();
+      }
+      if (consumeKey('Digit1')) {
+        const pokerBtn = document.querySelector('#poker-content button:nth-child(1)');
+        if (pokerBtn) pokerBtn.click();
+      }
+      if (consumeKey('Digit2')) {
+        const pokerBtn = document.querySelector('#poker-content button:nth-child(2)');
+        if (pokerBtn) pokerBtn.click();
+      }
+      if (consumeKey('Digit3')) {
+        const pokerBtn = document.querySelector('#poker-content button:nth-child(3)');
+        if (pokerBtn) pokerBtn.click();
+      }
+      break;
+
     case 'gameover':
       render();
       showGameOver();
       break;
 
     case 'title':
-      // Title screen handled by HTML
+      // Title screen handled entirely by HTML/CSS
       break;
   }
 
-  frameClear();
+  // Clear keysJustPressed at end of frame
+  for (const k in keysJustPressed) {
+    keysJustPressed[k] = false;
+  }
+
   requestAnimationFrame(gameLoop);
 }
 
-// ---- UI EVENTS ----
-document.getElementById('btn-new').addEventListener('click', () => {
-  audio.init();
-  initGame();
-  game.state = 'playing';
-  document.getElementById('title-screen').classList.add('hidden');
-  audio.playAmbientWind();
-  audio.playWesternRiff();
-});
+// ─────────────────────────────────────────────
+// §C  UI EVENT HANDLERS
+// ─────────────────────────────────────────────
 
-document.getElementById('btn-continue').addEventListener('click', () => {
-  audio.init();
-  if (loadGame()) {
+// 1. New game button -> show difficulty select
+document.getElementById('btn-new').addEventListener('click', function() {
+  const diffSelect = document.getElementById('difficulty-select');
+  const titleMenu = document.getElementById('title-menu');
+  if (diffSelect && titleMenu) {
+    diffSelect.classList.remove('hidden');
+    titleMenu.classList.add('hidden');
+  } else {
+    // Fallback: no difficulty select, start directly
+    audio.init();
+    initGame();
     game.state = 'playing';
     document.getElementById('title-screen').classList.add('hidden');
     audio.playAmbientWind();
-  } else {
-    showNotification('No save found!');
+    audio.playWesternRiff();
+    seedAmbientParticles();
   }
 });
 
-document.getElementById('btn-controls').addEventListener('click', () => {
-  document.getElementById('controls-panel').classList.toggle('hidden');
-  document.getElementById('title-menu').classList.toggle('hidden');
+// 2. Difficulty button clicks
+document.querySelectorAll('.diff-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    const selectedDiff = this.getAttribute('data-diff') || 'normal';
+    audio.init();
+    if (typeof initGame === 'function') {
+      if (initGame.length >= 1) {
+        initGame(selectedDiff);
+      } else {
+        initGame();
+        // Apply difficulty settings manually if initGame doesn't accept params
+        if (typeof DIFFICULTY !== 'undefined' && DIFFICULTY[selectedDiff]) {
+          const diff = DIFFICULTY[selectedDiff];
+          if (diff.playerHP) game.player.hp = diff.playerHP;
+          if (diff.playerHP) game.player.maxHp = diff.playerHP;
+          if (diff.startingMoney) game.gold = diff.startingMoney;
+        }
+      }
+    }
+    game.state = 'playing';
+    game.difficulty = selectedDiff;
+    document.getElementById('title-screen').classList.add('hidden');
+    audio.playAmbientWind();
+    audio.playWesternRiff();
+    seedAmbientParticles();
+
+    // Show tutorial on first game
+    if (typeof showTutorial === 'function') {
+      showTutorial();
+    }
+  });
 });
 
-document.getElementById('btn-back').addEventListener('click', () => {
+// 3. Continue button
+document.getElementById('btn-continue').addEventListener('click', function() {
+  audio.init();
+  if (typeof loadGame === 'function' && loadGame()) {
+    game.state = 'playing';
+    document.getElementById('title-screen').classList.add('hidden');
+    audio.playAmbientWind();
+    seedAmbientParticles();
+  } else {
+    showNotification('No save data found!');
+  }
+});
+
+// 4. Controls / Back toggle
+document.getElementById('btn-controls').addEventListener('click', function() {
+  const controlsPanel = document.getElementById('controls-panel');
+  const titleMenu = document.getElementById('title-menu');
+  const diffSelect = document.getElementById('difficulty-select');
+  controlsPanel.classList.remove('hidden');
+  titleMenu.classList.add('hidden');
+  if (diffSelect) diffSelect.classList.add('hidden');
+});
+
+document.getElementById('btn-back').addEventListener('click', function() {
   document.getElementById('controls-panel').classList.add('hidden');
   document.getElementById('title-menu').classList.remove('hidden');
 });
 
-document.getElementById('btn-resume').addEventListener('click', () => {
+// 5. Resume from pause
+document.getElementById('btn-resume').addEventListener('click', function() {
   game.state = 'playing';
   document.getElementById('pause-screen').classList.add('hidden');
 });
 
-document.getElementById('btn-save').addEventListener('click', () => {
-  saveGame();
+// 6. Save & Quit
+document.getElementById('btn-save').addEventListener('click', function() {
+  if (typeof saveGame === 'function') saveGame();
   game.state = 'title';
   document.getElementById('pause-screen').classList.add('hidden');
   document.getElementById('title-screen').classList.remove('hidden');
   document.getElementById('game-over-screen').classList.add('hidden');
 });
 
-document.getElementById('btn-restart').addEventListener('click', () => {
+// 7. Restart after game over
+document.getElementById('btn-restart').addEventListener('click', function() {
   document.getElementById('game-over-screen').classList.add('hidden');
-  initGame();
+  if (typeof initGame === 'function') {
+    if (game.difficulty) {
+      initGame(game.difficulty);
+    } else {
+      initGame();
+    }
+  }
   game.state = 'playing';
+  seedAmbientParticles();
 });
 
-document.getElementById('journal-close').addEventListener('click', () => {
+// 8. New Game+ button
+var ngPlusBtn = document.getElementById('btn-ng-plus');
+if (ngPlusBtn) {
+  ngPlusBtn.addEventListener('click', function() {
+    document.getElementById('game-over-screen').classList.add('hidden');
+    var ngLevel = (game.ngPlusLevel || 0) + 1;
+    if (typeof initGame === 'function') {
+      if (initGame.length >= 2) {
+        initGame(game.difficulty || 'normal', ngLevel);
+      } else {
+        initGame(game.difficulty || 'normal');
+      }
+    }
+    game.ngPlusLevel = ngLevel;
+    game.state = 'playing';
+    seedAmbientParticles();
+    showNotification('New Game+ (Level ' + ngLevel + ') started!');
+  });
+}
+
+// 9. Journal close
+document.getElementById('journal-close').addEventListener('click', function() {
   closeJournal();
 });
 
-// Show continue button if save exists
+// 10. Journal tab clicks
+document.querySelectorAll('.jtab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    // Remove active from all tabs
+    document.querySelectorAll('.jtab').forEach(function(t) {
+      t.classList.remove('active');
+    });
+    this.classList.add('active');
+
+    var tabName = this.getAttribute('data-tab');
+    var content = document.getElementById('journal-content');
+    var html = '';
+
+    switch (tabName) {
+      case 'stats':
+        html += '<div class="journal-section"><h4>STATS</h4>';
+        html += '<div class="journal-entry">Rank: ' + game.rank + '</div>';
+        html += '<div class="journal-entry">Days Served: ' + game.daysServed + '</div>';
+        html += '<div class="journal-entry">Reputation: ' + game.reputation + '/100</div>';
+        html += '<div class="journal-entry">Gold: $' + game.gold + '</div>';
+        html += '<div class="journal-entry">Outlaws Killed: ' + game.outlawsKilled + '</div>';
+        html += '<div class="journal-entry">Outlaws Arrested: ' + game.outlawsArrested + '</div>';
+        html += '<div class="journal-entry">Crimes Resolved: ' + game.crimesResolved + '</div>';
+        html += '<div class="journal-entry">Crimes Ignored: ' + game.crimesIgnored + '</div>';
+        if (game.ngPlusLevel) {
+          html += '<div class="journal-entry">NG+ Level: ' + game.ngPlusLevel + '</div>';
+        }
+        html += '</div>';
+        break;
+
+      case 'missions':
+        if (game.activeQuest) {
+          html += '<div class="journal-section"><h4>ACTIVE MISSION</h4>';
+          html += '<div class="journal-entry">' + game.activeQuest.name + ': ' + game.activeQuest.desc + '</div>';
+          html += '</div>';
+        }
+        if (game.completedQuests.length > 0) {
+          html += '<div class="journal-section"><h4>COMPLETED MISSIONS (' + game.completedQuests.length + ')</h4>';
+          for (var i = game.completedQuests.length - 1; i >= Math.max(0, game.completedQuests.length - 15); i--) {
+            html += '<div class="journal-entry completed">' + game.completedQuests[i].name + '</div>';
+          }
+          html += '</div>';
+        }
+        if (!game.activeQuest && game.completedQuests.length === 0) {
+          html += '<div class="journal-section"><p>No missions yet. Talk to the Mayor or Bartender.</p></div>';
+        }
+        break;
+
+      case 'wanted':
+        html += '<div class="journal-section"><h4>WANTED OUTLAWS</h4>';
+        var outlaws = game.npcs.filter(function(n) {
+          return (n.type === NPC_TYPES.OUTLAW || n.type === NPC_TYPES.BOUNTY) && n.state !== 'dead' && n.state !== 'arrested';
+        });
+        if (outlaws.length > 0) {
+          for (var j = 0; j < outlaws.length; j++) {
+            var status = outlaws[j].hostile ? ' (HOSTILE)' : ' (At large)';
+            html += '<div class="journal-entry">' + outlaws[j].name + status + '</div>';
+          }
+        } else {
+          html += '<div class="journal-entry">No known outlaws in town.</div>';
+        }
+        html += '</div>';
+        break;
+
+      case 'achievements':
+        html += '<div class="journal-section"><h4>BADGES</h4>';
+        if (typeof ACHIEVEMENTS !== 'undefined') {
+          for (var k = 0; k < ACHIEVEMENTS.length; k++) {
+            var ach = ACHIEVEMENTS[k];
+            var unlocked = game.achievements && game.achievements[ach.id];
+            var cls = unlocked ? 'journal-entry completed' : 'journal-entry';
+            var icon = unlocked ? ach.icon : '?';
+            html += '<div class="' + cls + '">' + icon + ' ' + ach.name + ' — ' + ach.desc + (unlocked ? ' [UNLOCKED]' : '') + '</div>';
+          }
+        } else {
+          html += '<div class="journal-entry">No badges defined.</div>';
+        }
+        html += '</div>';
+        break;
+
+      case 'log':
+        html += '<div class="journal-section"><h4>LOG</h4>';
+        if (game.journalEntries.length > 0) {
+          var entries = game.journalEntries.slice(-20).reverse();
+          for (var m = 0; m < entries.length; m++) {
+            html += '<div class="journal-entry">Day ' + entries[m].day + ', ' + entries[m].time + ': ' + entries[m].text + '</div>';
+          }
+        } else {
+          html += '<div class="journal-entry">No entries yet.</div>';
+        }
+        html += '</div>';
+        break;
+    }
+
+    content.innerHTML = html;
+  });
+});
+
+// 11. Shop close
+var shopCloseBtn = document.getElementById('shop-close');
+if (shopCloseBtn) {
+  shopCloseBtn.addEventListener('click', function() {
+    if (typeof closeShop === 'function') closeShop();
+  });
+}
+
+// 12. Tutorial dismiss
+var tutorialDismissBtn = document.getElementById('tutorial-dismiss');
+if (tutorialDismissBtn) {
+  tutorialDismissBtn.addEventListener('click', function() {
+    document.getElementById('tutorial-overlay').classList.add('hidden');
+    game.state = 'playing';
+  });
+}
+
+// 13. Volume sliders
+var volMaster = document.getElementById('vol-master');
+if (volMaster) {
+  volMaster.addEventListener('input', function() {
+    if (audio.master) {
+      audio.master.gain.setValueAtTime(this.value / 100, audio.ctx.currentTime);
+    }
+  });
+}
+
+var volMusic = document.getElementById('vol-music');
+if (volMusic) {
+  volMusic.addEventListener('input', function() {
+    if (audio.musicGain) {
+      audio.musicGain.gain.setValueAtTime(this.value / 100, audio.ctx.currentTime);
+    }
+  });
+}
+
+var volSfx = document.getElementById('vol-sfx');
+if (volSfx) {
+  volSfx.addEventListener('input', function() {
+    if (audio.sfxGain) {
+      audio.sfxGain.gain.setValueAtTime(this.value / 100, audio.ctx.currentTime);
+    }
+  });
+}
+
+// 14. Show continue button if save data exists
 if (localStorage.getItem('sheriff_save')) {
   document.getElementById('btn-continue').classList.remove('hidden');
 }
 
-// Start the loop
-requestAnimationFrame(gameLoop);
+// Prevent default on Tab key so it doesn't shift focus
+document.addEventListener('keydown', function(e) {
+  if (e.code === 'Tab' && game.state !== 'title') {
+    e.preventDefault();
+  }
+});
+
+// ─────────────────────────────────────────────
+// §D  START THE LOOP
+// ─────────────────────────────────────────────
+if (!loopStarted) {
+  loopStarted = true;
+  requestAnimationFrame(gameLoop);
+}
+
+// === END PART 5 ===
