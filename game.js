@@ -1172,6 +1172,7 @@ function createNPC(id, type, name, tileX, tileY, building) {
     animFrame: 0,
     animTimer: 0,
     hp: type === NPC_TYPES.OUTLAW || type === NPC_TYPES.BOUNTY ? 4 : 3,
+    maxHp: type === NPC_TYPES.OUTLAW || type === NPC_TYPES.BOUNTY ? 4 : 3,
     hostile: false,
     surrendered: false,
     speed: type === NPC_TYPES.OUTLAW ? OUTLAW_SPEED : NPC_SPEED,
@@ -1205,6 +1206,7 @@ function generateNPCs(buildings) {
   const saloon = buildings.find(b => b.type === BUILDING_TYPES.SALOON);
   if (saloon) {
     const npc = createNPC(npcId++, NPC_TYPES.BARTENDER, 'Barkeep Bill', saloon.x + 3, saloon.y + 2, saloon);
+    npc.questGiver = true;
     npc.schedule = [
       { startHour: 8, endHour: 2, buildingType: BUILDING_TYPES.SALOON },
     ];
@@ -1266,6 +1268,7 @@ function generateNPCs(buildings) {
   const hotel = buildings.find(b => b.type === BUILDING_TYPES.HOTEL);
   if (hotel) {
     const npc = createNPC(npcId++, NPC_TYPES.MAYOR, 'Mayor Whitfield', hotel.x + 3, hotel.y + 3, hotel);
+    npc.questGiver = true;
     npc.schedule = [
       { startHour: 9, endHour: 12, buildingType: BUILDING_TYPES.HOTEL },
       { startHour: 12, endHour: 17, buildingType: BUILDING_TYPES.SHERIFF },
@@ -1483,8 +1486,8 @@ function generateCrime(buildings, gameState) {
   return {
     type: crime,
     building: targetBuilding,
-    x: crimeX,
-    y: crimeY,
+    x: crimeX * TILE + TILE / 2,
+    y: crimeY * TILE + TILE / 2,
     outlawNames: outlaws,
     outlawNPCs: [], // filled when spawned
     timeLimit: timeLimit,
@@ -1916,36 +1919,27 @@ class BulletSystem {
       if (b.fromPlayer) {
         let hit = false;
         for (const npc of npcs) {
-          if (npc.dead || npc.arrested) continue;
+          if (npc.state === 'dead' || npc.state === 'arrested') continue;
           if (dist(b, npc) < 14) {
             npc.hp = (npc.hp || 3) - b.damage;
             particles.emitBlood(npc.x, npc.y);
             hit = true;
             if (npc.hp <= 0) {
-              npc.dead = true;
-              npc.deathTime = Date.now();
+              npc.state = 'dead';
               if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY || npc.hostile) {
-                const reward = Math.floor((10 + rand(5, 20)) * (gameState.difficulty ? gameState.difficulty.rewardMult || 1 : 1));
-                gameState.money = (gameState.money || 0) + reward;
+                const reward = Math.floor((10 + rand(5, 20)));
+                gameState.gold = (gameState.gold || 0) + reward;
+                gameState.totalGoldEarned = (gameState.totalGoldEarned || 0) + reward;
                 gameState.reputation = clamp((gameState.reputation || 50) + 3, 0, REPUTATION_MAX);
-                gameState.stats = gameState.stats || {};
-                gameState.stats.outlawsKilled = (gameState.stats.outlawsKilled || 0) + 1;
-                gameState.stats.shotsHit = (gameState.stats.shotsHit || 0) + 1;
-                if (typeof addFloatingText === 'function') {
-                  addFloatingText(npc.x, npc.y - 20, '+$' + reward, PALETTE.gold);
-                  addFloatingText(npc.x, npc.y - 36, '+3 REP', '#44ff44');
-                }
+                gameState.outlawsKilled = (gameState.outlawsKilled || 0) + 1;
+                gameState.totalHits = (gameState.totalHits || 0) + 1;
+                addFloatingText(npc.x, npc.y - 20, '+$' + reward, PALETTE.gold);
+                addFloatingText(npc.x, npc.y - 36, '+3 REP', '#44ff44');
               } else {
                 // Killed an innocent
                 gameState.reputation = clamp((gameState.reputation || 50) - 15, 0, REPUTATION_MAX);
-                gameState.stats = gameState.stats || {};
-                gameState.stats.innocentsKilled = (gameState.stats.innocentsKilled || 0) + 1;
-                if (typeof addFloatingText === 'function') {
-                  addFloatingText(npc.x, npc.y - 20, '-15 REP', '#ff4444');
-                }
-                if (typeof showNotification === 'function') {
-                  showNotification('You killed an innocent!', 'bad');
-                }
+                addFloatingText(npc.x, npc.y - 20, '-15 REP', '#ff4444');
+                showNotification('You killed an innocent!', 'bad');
               }
             } else {
               gameState.stats = gameState.stats || {};
@@ -2641,7 +2635,7 @@ function drawNPC(npc, camX, camY, playerDist) {
   ctx.save();
   ctx.translate(sx, sy);
 
-  if (npc.dead) {
+  if (npc.state === 'dead' || npc.dead) {
     // Body on ground
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
@@ -2667,7 +2661,7 @@ function drawNPC(npc, camX, camY, playerDist) {
     return;
   }
 
-  if (npc.arrested) {
+  if (npc.state === 'arrested' || npc.arrested) {
     // Sitting with hands bound
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
@@ -3256,7 +3250,7 @@ function openDialog(npc) {
   pCtx.fillRect(0, 0, 64, 64);
   pCtx.fillStyle = npc.colors.skin;
   pCtx.fillRect(20, 20, 24, 24);
-  pCtx.fillStyle = npc.colors.body;
+  pCtx.fillStyle = npc.colors.shirt || npc.colors.body || '#6a4a2a';
   pCtx.fillRect(16, 44, 32, 20);
   if (npc.colors.hat) {
     pCtx.fillStyle = npc.colors.hat;
@@ -3306,8 +3300,8 @@ function openDialog(npc) {
       { text: "2. Not right now.", action: 'leave' }
     ];
   } else if (npc.type === NPC_TYPES.BARTENDER) {
-    if (Math.random() > 0.5 && dialogs.tip) {
-      var tipTemplates = dialogs.tip;
+    if (Math.random() > 0.5 && dialogs.tips) {
+      var tipTemplates = dialogs.tips;
       var randomNPC = game.npcs[rand(0, game.npcs.length - 1)];
       var randomBuilding = game.buildings[rand(0, game.buildings.length - 1)];
       text = tipTemplates[rand(0, tipTemplates.length - 1)]
@@ -3468,7 +3462,7 @@ function handleDialogChoice(action, npc) {
         type: quest.type,
         repReward: quest.repReward,
         goldReward: quest.goldReward,
-        targets: quest.targets.slice(),
+        targets: quest.targets,
         visited: new Set(),
         startTime: game.time,
         startDay: game.dayCount,
@@ -3499,7 +3493,7 @@ function handleDialogChoice(action, npc) {
 
     case 'ask_trouble':
       if (game.activeCrime) {
-        showNotification('Heard about trouble near the ' + game.activeCrime.targetBuilding.name + '!');
+        showNotification('Heard about trouble near the ' + (game.activeCrime.building ? game.activeCrime.building.name : 'streets') + '!');
       } else {
         showNotification('All quiet for now, Sheriff.');
       }
@@ -4172,20 +4166,20 @@ function updatePlayer(dt) {
       p.shootCooldown = 20;
       p.justShot = 8;
 
+      // Convert cardinal dir (0=down,1=up,2=left,3=right) to radians
+      var dirToRad = [Math.PI / 2, -Math.PI / 2, Math.PI, 0];
+      var aimRad = dirToRad[p.dir] || 0;
+
       // Weapon-specific shooting
       if (game.currentWeapon === 'shotgun' && game.hasShotgun) {
-        // Spread shot: 3 bullets in a fan
-        for (var si = -1; si <= 1; si++) {
-          var spreadDir = game.player.dir;
-          bullets.fire(p.x, p.y, spreadDir, true);
-        }
+        bullets.fire(p.x, p.y, aimRad, true, 'shotgun');
         game.ammo = Math.max(0, game.ammo - 1); // Extra ammo cost
       } else if (game.currentWeapon === 'rifle' && game.hasRifle) {
-        bullets.fire(p.x, p.y, p.dir, true);
-        // Rifle bullets have longer range handled by bullet system
+        bullets.fire(p.x, p.y, aimRad, true, 'rifle');
       } else {
-        bullets.fire(p.x, p.y, p.dir, true);
+        bullets.fire(p.x, p.y, aimRad, true, 'revolver');
       }
+      p.lastShotTime = Date.now();
 
       // Gun durability
       game.gunDurability = Math.max(0, game.gunDurability - 1);
@@ -4349,10 +4343,8 @@ function updateNPCs(dt) {
         // Shoot at player occasionally (difficulty-scaled accuracy)
         var shootChance = 0.015 * diff.outlawDamageMult * (game.time > 0.8 || game.time < 0.2 ? diff.nightCrimeMult : 1);
         if (playerDist < 150 && Math.random() < shootChance) {
-          var sdir = Math.abs(cdx) > Math.abs(cdy)
-            ? (cdx > 0 ? 3 : 2)
-            : (cdy > 0 ? 0 : 1);
-          bullets.fire(npc.x, npc.y, sdir, false);
+          var shootAngle = Math.atan2(cdy, cdx);
+          bullets.fire(npc.x, npc.y, shootAngle, false);
         }
       }
       continue;
@@ -4428,7 +4420,7 @@ function updateCrimes(dt) {
     game.crimeStartTime = Date.now();
 
     // Spawn outlaws for the crime
-    for (var i = 0; i < crime.outlawCount; i++) {
+    for (var i = 0; i < crime.type.outlawCount; i++) {
       var name = NPC_NAMES.outlaw[rand(0, NPC_NAMES.outlaw.length - 1)];
       var npc = createNPC(
         game.npcs.length + i,
@@ -4439,13 +4431,15 @@ function updateCrimes(dt) {
         null
       );
       npc.hostile = true;
-      npc.hp = Math.ceil((2 + Math.floor(game.dayCount / 3)) * diff.outlawHPMult * ngMult);
-      crime.outlaws.push(npc);
+      var hpVal = Math.ceil((2 + Math.floor(game.dayCount / 3)) * diff.outlawHPMult * ngMult);
+      npc.hp = hpVal;
+      npc.maxHp = hpVal;
+      crime.outlawNPCs.push(npc);
       game.npcs.push(npc);
     }
 
     // Crime-type specific setups
-    if (crime.name === 'Kidnapping') {
+    if (crime.type.name === 'Kidnapping') {
       // Find a townsperson to be hostage
       for (var hi = 0; hi < game.npcs.length; hi++) {
         if (game.npcs[hi].type === NPC_TYPES.TOWNSPERSON && game.npcs[hi].state !== 'dead') {
@@ -4456,17 +4450,17 @@ function updateCrimes(dt) {
       }
     }
 
-    if (crime.name === 'Arson') {
+    if (crime.type.name === 'Arson') {
       game.fireEffects.push({
         x: crime.x,
         y: crime.y,
-        life: crime.timer * 60,
+        life: crime.timeRemaining * 60,
         radius: 30
       });
     }
 
-    showNotification('CRIME: ' + crime.desc);
-    addJournalEntry(crime.name + ' at ' + crime.targetBuilding.name + '!');
+    showNotification('CRIME: ' + crime.type.desc);
+    addJournalEntry(crime.type.name + ' at ' + (crime.building ? crime.building.name : 'the streets') + '!');
     if (typeof audio.playBellAlarm === 'function') audio.playBellAlarm();
     else audio.playBad();
 
@@ -4478,16 +4472,16 @@ function updateCrimes(dt) {
   // Update active crime
   if (game.activeCrime) {
     var crime = game.activeCrime;
-    crime.timer -= dt;
+    crime.timeRemaining -= dt;
 
     // Update crime timer UI
     document.getElementById('crime-timer').classList.remove('hidden');
-    document.getElementById('crime-timer-label').textContent = 'CRIME: ' + crime.name;
-    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(crime.timer)) + 's';
+    document.getElementById('crime-timer-label').textContent = 'CRIME: ' + crime.type.name;
+    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(crime.timeRemaining)) + 's';
 
     // Crime-specific mechanics
     // Arson: fire spreads, damages nearby
-    if (crime.name === 'Arson') {
+    if (crime.type.name === 'Arson') {
       for (var fi = 0; fi < game.fireEffects.length; fi++) {
         var fire = game.fireEffects[fi];
         fire.life--;
@@ -4504,7 +4498,7 @@ function updateCrimes(dt) {
     }
 
     // Kidnapping: hostage slowly loses HP
-    if (crime.name === 'Kidnapping' && game.hostageNPC && game.hostageNPC.state === 'hostage') {
+    if (crime.type.name === 'Kidnapping' && game.hostageNPC && game.hostageNPC.state === 'hostage') {
       if (Math.random() < 0.002) {
         game.hostageNPC.hp--;
         if (game.hostageNPC.hp <= 0) {
@@ -4518,26 +4512,25 @@ function updateCrimes(dt) {
     }
 
     // Check if all outlaws dealt with
-    var outlawsRemaining = crime.outlaws.filter(function(o) {
+    var outlawsRemaining = crime.outlawNPCs.filter(function(o) {
       return o.state !== 'dead' && o.state !== 'arrested';
     }).length;
 
     if (outlawsRemaining === 0) {
       crime.resolved = true;
-      crime.active = false;
       game.activeCrime = null;
       game.crimesResolved++;
 
       var resolveTime = (Date.now() - game.crimeStartTime) / 1000;
       if (resolveTime < game.speedResolveTime) game.speedResolveTime = resolveTime;
 
-      var goldReward = Math.round(crime.gold * diff.rewardMult);
-      game.reputation = clamp(game.reputation + Math.round(crime.repGain * diff.repGainMult), 0, REPUTATION_MAX);
+      var goldReward = Math.round(crime.type.goldReward * diff.rewardMult);
+      game.reputation = clamp(game.reputation + Math.round(crime.type.repGain * diff.repGainMult), 0, REPUTATION_MAX);
       game.gold += goldReward;
       game.totalGoldEarned += goldReward;
-      showNotification('Crime resolved! +' + crime.repGain + ' Rep, +$' + goldReward);
+      showNotification('Crime resolved! +' + crime.type.repGain + ' Rep, +$' + goldReward);
       audio.playVictory();
-      addJournalEntry('Resolved: ' + crime.name + '. Earned $' + goldReward + '.');
+      addJournalEntry('Resolved: ' + crime.type.name + '. Earned $' + goldReward + '.');
 
       // Clean up
       if (game.hostageNPC && game.hostageNPC.state === 'hostage') {
@@ -4551,18 +4544,17 @@ function updateCrimes(dt) {
     }
 
     // Time ran out
-    if (crime.timer <= 0) {
-      crime.active = false;
+    if (crime.timeRemaining <= 0) {
       game.activeCrime = null;
       game.crimesIgnored++;
-      game.reputation = clamp(game.reputation + Math.round(crime.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
-      showNotification('Crime went unresolved! ' + crime.repLoss + ' Rep');
+      game.reputation = clamp(game.reputation + Math.round(crime.type.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
+      showNotification('Crime went unresolved! ' + crime.type.repLoss + ' Rep');
       audio.playBad();
-      addJournalEntry('Failed to resolve: ' + crime.name + '.');
+      addJournalEntry('Failed to resolve: ' + crime.type.name + '.');
       // Remove crime outlaws
-      for (var oi = 0; oi < crime.outlaws.length; oi++) {
-        if (crime.outlaws[oi].state !== 'dead' && crime.outlaws[oi].state !== 'arrested') {
-          crime.outlaws[oi].state = 'dead';
+      for (var oi = 0; oi < crime.outlawNPCs.length; oi++) {
+        if (crime.outlawNPCs[oi].state !== 'dead' && crime.outlawNPCs[oi].state !== 'arrested') {
+          crime.outlawNPCs[oi].state = 'dead';
         }
       }
       if (game.hostageNPC) {
@@ -4584,11 +4576,25 @@ function updateQuests() {
   switch (q.type) {
     case 'patrol':
     case 'visit':
-      if (q.targets.every(function(t) { return q.visited.has(t); })) {
+    case 'collect_taxes':
+      if (q.visited.size >= q.targets) {
         complete = true;
       }
       document.getElementById('quest-text').textContent =
-        q.desc + ' (' + q.visited.size + '/' + q.targets.length + ')';
+        q.desc + ' (' + q.visited.size + '/' + q.targets + ')';
+      break;
+    case 'investigation':
+      if (q.visited.size >= q.targets) {
+        complete = true;
+      }
+      document.getElementById('quest-text').textContent =
+        q.desc + ' (' + q.visited.size + '/' + q.targets + ' witnesses)';
+      break;
+    case 'defend':
+      if ((game.waveCount || 0) >= q.targets) complete = true;
+      break;
+    case 'poker_tournament':
+      if ((game.pokerWins || 0) >= q.targets) complete = true;
       break;
 
     case 'bounty':
@@ -4795,7 +4801,7 @@ function updateUI() {
   // Crime timer UI
   if (game.activeCrime) {
     document.getElementById('crime-timer').classList.remove('hidden');
-    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(game.activeCrime.timer)) + 's';
+    document.getElementById('crime-timer-value').textContent = Math.max(0, Math.ceil(game.activeCrime.timeRemaining)) + 's';
   } else {
     document.getElementById('crime-timer').classList.add('hidden');
   }
@@ -5521,11 +5527,11 @@ function render() {
     ctx.fill();
 
     // Crime timer text
-    if (game.activeCrime.timer > 0) {
+    if (game.activeCrime.timeRemaining > 0) {
       ctx.fillStyle = '#ff4444';
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(Math.ceil(game.activeCrime.timer) + 's', cx, cy - pulse - 8);
+      ctx.fillText(Math.ceil(game.activeCrime.timeRemaining) + 's', cx, cy - pulse - 8);
     }
 
     // Arrow pointing to crime if offscreen
@@ -5626,7 +5632,7 @@ function render() {
   for (const npc of sortedNPCs) {
     if (!playerDrawn && game.player.y < npc.y) {
       // 10. Draw horse if exists and not mounted
-      if (game.horse && !game.horse.mounted) {
+      if (game.horse && !game.mounted) {
         drawHorse(game.horse, camX, camY);
       }
       // 11. Draw player
@@ -5636,7 +5642,7 @@ function render() {
     drawNPC(npc, camX, camY);
   }
   if (!playerDrawn) {
-    if (game.horse && !game.horse.mounted) {
+    if (game.horse && !game.mounted) {
       drawHorse(game.horse, camX, camY);
     }
     drawPlayer(game.player, camX, camY);
@@ -5730,11 +5736,11 @@ function render() {
   }
 
   // 16. Fire effects if arson crime active
-  if (game.activeCrime && game.activeCrime.name === 'Arson') {
+  if (game.activeCrime && game.activeCrime.type && game.activeCrime.type.name === 'Arson') {
     const fireX = game.activeCrime.x - camX;
     const fireY = game.activeCrime.y - camY;
     const now = Date.now();
-    const building = game.activeCrime.targetBuilding;
+    const building = game.activeCrime.building;
     const bw = building ? building.w * TILE : 64;
     const bh = building ? building.h * TILE : 48;
     const bsx = building ? building.x * TILE - camX : fireX - 32;
@@ -5844,7 +5850,7 @@ function render() {
   drawDayNightOverlay(game.time);
 
   // 18. Draw minimap
-  drawMinimap();
+  drawMinimap(game);
 
   // Draw crime timer in HUD if active
   if (game.activeCrime) {
@@ -5852,7 +5858,7 @@ function render() {
     if (timerEl) {
       timerEl.classList.remove('hidden');
       const valueEl = document.getElementById('crime-timer-value');
-      if (valueEl) valueEl.textContent = Math.ceil(game.activeCrime.timer) + 's';
+      if (valueEl) valueEl.textContent = Math.ceil(game.activeCrime.timeRemaining) + 's';
     }
   } else {
     const timerEl = document.getElementById('crime-timer');
@@ -5942,7 +5948,7 @@ function gameLoop(timestamp) {
       updateTime(dt);
       if (typeof updateAchievements === 'function') updateAchievements();
       updateAmbientParticles();
-      bullets.update(game.npcs, game.player, particles, game);
+      bullets.update(game.npcs, game.player, particles, game, game.map);
       particles.update();
       updateCamera();
       updateUI();
@@ -6124,7 +6130,7 @@ document.querySelectorAll('.diff-btn').forEach(function(btn) {
 
     // Show tutorial on first game
     if (typeof showTutorial === 'function') {
-      showTutorial();
+      showTutorial('intro', 'Welcome, Sheriff! Use WASD to move, E to interact with NPCs, SPACE to shoot, F for melee. Keep the peace and build your reputation!');
     }
   });
 });
@@ -6280,7 +6286,7 @@ document.querySelectorAll('.jtab').forEach(function(tab) {
         if (typeof ACHIEVEMENTS !== 'undefined') {
           for (var k = 0; k < ACHIEVEMENTS.length; k++) {
             var ach = ACHIEVEMENTS[k];
-            var unlocked = game.achievements && game.achievements[ach.id];
+            var unlocked = game.achievements && game.achievements.indexOf(ach.id) !== -1;
             var cls = unlocked ? 'journal-entry completed' : 'journal-entry';
             var icon = unlocked ? ach.icon : '?';
             html += '<div class="' + cls + '">' + icon + ' ' + ach.name + ' — ' + ach.desc + (unlocked ? ' [UNLOCKED]' : '') + '</div>';
@@ -6355,7 +6361,7 @@ if (volSfx) {
 }
 
 // 14. Show continue button if save data exists
-if (localStorage.getItem('sheriff_save')) {
+if (localStorage.getItem(SAVE_KEY)) {
   document.getElementById('btn-continue').classList.remove('hidden');
 }
 
