@@ -4992,9 +4992,14 @@ function closeJournal() {
 // ─────────────────────────────────────────────
 // §M  TUTORIAL SYSTEM
 // ─────────────────────────────────────────────
+var _preTutorialState = null;
+
 function showTutorial(key, text) {
   if (game.tutorialShown[key]) return;
   game.tutorialShown[key] = true;
+
+  // Save current state so we can restore it on dismiss
+  _preTutorialState = game.state;
 
   var overlay = document.getElementById('tutorial-overlay');
   var textEl = document.getElementById('tutorial-text');
@@ -6789,7 +6794,9 @@ var tutorialDismissBtn = document.getElementById('tutorial-dismiss');
 if (tutorialDismissBtn) {
   tutorialDismissBtn.addEventListener('click', function() {
     document.getElementById('tutorial-overlay').classList.add('hidden');
-    game.state = 'playing';
+    // Restore the state that was active before the tutorial popped up
+    game.state = _preTutorialState || 'playing';
+    _preTutorialState = null;
   });
 }
 
