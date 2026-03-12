@@ -188,7 +188,7 @@ function updateFeatures(dt) {
     if (f.dodgeTimer <= 0) { f.dodgeActive = false; }
     f.footstepDust.push({ x: p.x, y: p.y + 8, life: 15, size: 4 });
   }
-  if (consumeKey('KeyQ') && !f.dodgeActive && f.dodgeCooldown <= 0) {
+  if (!f.dodgeActive && f.dodgeCooldown <= 0 && game.state === 'playing' && consumeKey('KeyQ')) {
     f.dodgeActive = true;
     f.dodgeTimer = 0.2;
     f.dodgeCooldown = 2;
@@ -216,7 +216,7 @@ function updateFeatures(dt) {
       f.dynamiteActive.splice(di, 1);
     }
   }
-  if (consumeKey('Digit3') && f.dynamiteCount > 0 && game.state === 'playing') {
+  if (f.dynamiteCount > 0 && game.state === 'playing' && consumeKey('Digit3')) {
     f.dynamiteCount--;
     var throwDist = 100;
     var dirs2 = [[0, 1], [0, -1], [-1, 0], [1, 0]];
@@ -239,7 +239,7 @@ function updateFeatures(dt) {
       f.lassoTarget = null;
     }
   }
-  if (consumeKey('KeyR') && !f.lassoActive && game.state === 'playing') {
+  if (!f.lassoActive && game.state === 'playing' && consumeKey('KeyR')) {
     // Find nearest hostile NPC
     var nearest = null, nearDist = 150;
     for (var li = 0; li < game.npcs.length; li++) {
@@ -263,7 +263,7 @@ function updateFeatures(dt) {
     f.smokeActive[si].life -= dt;
     if (f.smokeActive[si].life <= 0) f.smokeActive.splice(si, 1);
   }
-  if (consumeKey('Digit4') && f.smokeBombs > 0 && game.state === 'playing') {
+  if (f.smokeBombs > 0 && game.state === 'playing' && consumeKey('Digit4')) {
     f.smokeBombs--;
     f.smokeActive.push({ x: p.x, y: p.y, life: 5, radius: 60 });
     showNotification('Smoke bomb! (' + f.smokeBombs + ' left)');
@@ -739,16 +739,21 @@ function updateFeatures(dt) {
   }
 
   // 99. Jail Break attempts
-  if (game.prisoners && game.prisoners.length > 0) {
+  var prisonerList = (typeof office !== 'undefined' && office.prisoners && office.prisoners.length > 0) ? office.prisoners : game.prisoners;
+  if (prisonerList && prisonerList.length > 0) {
     f.jailBreakTimer += dt;
     if (f.jailBreakTimer > 90 && Math.random() < 0.02) {
       f.jailBreakTimer = 0;
-      var escapee = game.prisoners[rand(0, game.prisoners.length - 1)];
-      showNotification('JAIL BREAK! ' + escapee.name + ' is trying to escape!');
+      var escapee = prisonerList[rand(0, prisonerList.length - 1)];
+      showNotification('JAIL BREAK! ' + (escapee.name || 'A prisoner') + ' is trying to escape!');
       game.reputation = clamp(game.reputation - 3, 0, REPUTATION_MAX);
-      // Remove prisoner
-      var idx2 = game.prisoners.indexOf(escapee);
-      if (idx2 !== -1) game.prisoners.splice(idx2, 1);
+      // Remove prisoner from both lists
+      var idx2 = prisonerList.indexOf(escapee);
+      if (idx2 !== -1) prisonerList.splice(idx2, 1);
+      if (prisonerList !== game.prisoners) {
+        var idx3 = game.prisoners.indexOf(escapee);
+        if (idx3 !== -1) game.prisoners.splice(idx3, 1);
+      }
     }
   }
 
@@ -786,7 +791,7 @@ function updateFeatures(dt) {
   }
 
   // ── Skill Tree toggle (K key) ──
-  if (consumeKey('KeyK') && game.state === 'playing') {
+  if (game.state === 'playing' && consumeKey('KeyK')) {
     var panel = document.getElementById('skill-tree-panel');
     if (panel.classList.contains('hidden')) {
       openSkillTree();
@@ -884,6 +889,8 @@ function renderFeaturesOverlay() {
   var f = game._features;
   var w = gameCanvas.width;
   var h = gameCanvas.height;
+  var camX = game.camera ? game.camera.x : 0;
+  var camY = game.camera ? game.camera.y : 0;
 
   // ── Weather Effects ──
 
@@ -1009,6 +1016,8 @@ function renderFeaturesOverlay() {
     var gnx = gn.x - camX;
     var gny = gn.y - camY;
     if (gnx < -20 || gnx > w + 20 || gny < -20 || gny > h + 20) continue;
+    // Bobbing
+    gny += Math.sin(Date.now() * 0.005 + gni) * 2;
     // Gold nugget
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
@@ -1016,8 +1025,6 @@ function renderFeaturesOverlay() {
     ctx.fill();
     ctx.fillStyle = '#fff8c0';
     ctx.fillRect(gnx - 1, gny - 1, 2, 2);
-    // Bobbing
-    gny += Math.sin(Date.now() * 0.005 + gni) * 2;
   }
 
   // ── Campfires ──

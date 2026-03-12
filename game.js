@@ -2464,8 +2464,9 @@ function drawPlayer(player, camX, camY) {
 
   const now = Date.now();
   const bobOffset = player.moving ? Math.sin(now * 0.01) * 2 : 0;
-  const dir = player.dir || 0; // angle in radians
-  const facingRight = Math.cos(dir) >= 0;
+  const dirToRadMap = [Math.PI / 2, -Math.PI / 2, Math.PI, 0]; // 0=down,1=up,2=left,3=right
+  const dir = dirToRadMap[player.dir] || 0;
+  const facingRight = player.dir === 0 || player.dir === 3 || player.dir === undefined;
 
   ctx.save();
   ctx.translate(sx, sy);
@@ -2697,7 +2698,7 @@ function drawNPC(npc, camX, camY, playerDist) {
     return;
   }
 
-  const bobOffset = npc.moving ? Math.sin(now * 0.008 + npc.x) * 1.5 : 0;
+  const bobOffset = (npc.moving || npc.state === 'walking') ? Math.sin(now * 0.008 + npc.x) * 1.5 : 0;
   const isOutlaw = npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY;
   const isShopkeeper = npc.type === NPC_TYPES.SHOPKEEPER || npc.type === NPC_TYPES.BARTENDER || npc.type === NPC_TYPES.BANKER;
   const facingRight = npc.facingRight !== undefined ? npc.facingRight : true;
@@ -2710,7 +2711,7 @@ function drawNPC(npc, camX, camY, playerDist) {
 
   // Boots
   ctx.fillStyle = isOutlaw ? '#222222' : '#5a3a1a';
-  const lBob = npc.moving ? Math.sin(now * 0.008 + npc.x) * 2 : 0;
+  const lBob = (npc.moving || npc.state === 'walking') ? Math.sin(now * 0.008 + npc.x) * 2 : 0;
   ctx.fillRect(-3, 7 + bobOffset - lBob, 3, 3);
   ctx.fillRect(1, 7 + bobOffset + lBob, 3, 3);
 
@@ -3904,6 +3905,8 @@ function evaluateHand(hand) {
   if (vals[0] === 4) return { name: 'Four of a Kind!', payout: 200 };
   // Full house
   if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House!', payout: 100 };
+  // Straight flush
+  if (isFlush && isStraight) return { name: 'Straight Flush!', payout: 500 };
   // Flush
   if (isFlush) return { name: 'Flush!', payout: 80 };
   // Straight
@@ -4612,8 +4615,8 @@ function updateCrimes(dt) {
     if (crime.timeRemaining <= 0) {
       game.activeCrime = null;
       game.crimesIgnored++;
-      game.reputation = clamp(game.reputation + Math.round(crime.type.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
-      showNotification('Crime went unresolved! ' + crime.type.repLoss + ' Rep');
+      game.reputation = clamp(game.reputation - Math.round(crime.type.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
+      showNotification('Crime went unresolved! -' + crime.type.repLoss + ' Rep');
       audio.playBad();
       addJournalEntry('Failed to resolve: ' + crime.type.name + '.');
       // Remove crime outlaws
@@ -5238,6 +5241,7 @@ function initGame(difficulty, ngPlus) {
   game.showMinimap = true;
   game.stepTimer = 0;
   game.totalGoldEarned = 0;
+  game._gameOverShown = false;
   game.totalShots = 0;
   game.totalHits = 0;
   game.meleeFights = 0;
@@ -6519,7 +6523,7 @@ function gameLoop(timestamp) {
 
     case 'gameover':
       render();
-      showGameOver();
+      if (!game._gameOverShown) { game._gameOverShown = true; showGameOver(); }
       break;
 
     case 'office':
@@ -6704,14 +6708,20 @@ if (ngPlusBtn) {
   ngPlusBtn.addEventListener('click', function() {
     document.getElementById('game-over-screen').classList.add('hidden');
     var ngLevel = (game.ngPlusLevel || 0) + 1;
+    var ngData = {
+      level: ngLevel,
+      rank: game.rank,
+      gold: game.gold,
+      hasVest: game.hasVest,
+      hasSpeedBoots: game.hasSpeedBoots,
+      hasShotgun: game.hasShotgun,
+      hasRifle: game.hasRifle,
+      achievements: game.achievements ? game.achievements.slice() : [],
+      tutorialShown: Object.assign({}, game.tutorialShown)
+    };
     if (typeof initGame === 'function') {
-      if (initGame.length >= 2) {
-        initGame(game.difficulty || 'normal', ngLevel);
-      } else {
-        initGame(game.difficulty || 'normal');
-      }
+      initGame(game.difficulty || 'normal', ngData);
     }
-    game.ngPlusLevel = ngLevel;
     game.state = 'playing';
     seedAmbientParticles();
     showNotification('New Game+ (Level ' + ngLevel + ') started!');

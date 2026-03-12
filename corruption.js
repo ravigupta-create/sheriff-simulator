@@ -485,7 +485,7 @@ function _updateBodyguards(dt) {
   }
 
   // Buy bodyguard cooldown
-  if (_buyBodyguardCooldown > 0) _buyBodyguardCooldown -= realDt;
+  if (_buyBodyguardCooldown > 0) _buyBodyguardCooldown -= dt;
 
   // Move bodyguards to follow player
   var p = game.player;
@@ -525,13 +525,15 @@ function _updateBodyguards(dt) {
         // Shoot at hostile NPC
         if (typeof bullets !== 'undefined' && bullets.fire) {
           var angle = Math.atan2(npc.y - bg.y, npc.x - bg.x);
-          bullets.fire(bg.x, bg.y, angle, 'bodyguard');
-        }
-        npc.hp--;
-        if (npc.hp <= 0) {
-          npc.state = 'dead';
-          npc.dead = true;
-          particles.emitBlood(npc.x, npc.y);
+          bullets.fire(bg.x, bg.y, angle, true, 'bodyguard');
+        } else {
+          // Fallback direct damage if bullet system unavailable
+          npc.hp--;
+          if (npc.hp <= 0) {
+            npc.state = 'dead';
+            npc.dead = true;
+            if (particles.emitBlood) particles.emitBlood(npc.x, npc.y);
+          }
         }
         bg.shootCooldown = 1.0;
         bg.lastShotTime = Date.now();
@@ -546,11 +548,11 @@ function _updateBodyguards(dt) {
         if (!hostileNPC.hostile || hostileNPC.state === 'dead' || hostileNPC.dead) continue;
         if (dist(bg, hostileNPC) < 30 && Math.random() < 0.01) {
           bg.hp--;
-          particles.emitBlood(bg.x, bg.y);
+          if (particles.emitBlood) particles.emitBlood(bg.x, bg.y);
           if (bg.hp <= 0) {
             bg.dead = true;
             showNotification('A bodyguard was killed!', 'bad');
-            particles.emitBlood(bg.x, bg.y);
+            if (particles.emitBlood) particles.emitBlood(bg.x, bg.y);
             break;
           }
         }
