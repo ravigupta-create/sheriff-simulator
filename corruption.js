@@ -40,6 +40,8 @@ var _bountyHunterInterval = 120; // seconds between bounty hunter spawns
 var _revoltTriggered = false;
 var _marshalSpawned = false;
 var _bodyguardRespawnTimer = 0;
+var _maxBodyguards = 2;
+var _buyBodyguardCooldown = 0;
 var _lastCorruptionTier = '';
 var _corruptionParticleTimer = 0;
 var _cowerCheckTimer = 0;
@@ -95,6 +97,9 @@ function updateCorruption(dt) {
 
   // G key interactions
   _handleGKeyActions();
+
+  // B key — buy bodyguards
+  _handleBuyBodyguard();
 
   // Update bodyguards
   _updateBodyguards(realDt);
@@ -465,19 +470,22 @@ function _updateBodyguards(dt) {
     if (!game.bodyguards[i].dead) aliveCount++;
   }
 
-  if (aliveCount < 2) {
+  if (aliveCount < _maxBodyguards) {
     _bodyguardRespawnTimer += dt;
     // Respawn after ~1 game day (DAY_LENGTH seconds)
     if (_bodyguardRespawnTimer >= 180 || game.bodyguards.length === 0) {
       _bodyguardRespawnTimer = 0;
       // Clear dead bodyguards
       game.bodyguards = game.bodyguards.filter(function(bg) { return !bg.dead; });
-      // Spawn up to 2
-      while (game.bodyguards.length < 2) {
+      // Spawn up to max
+      while (game.bodyguards.length < _maxBodyguards) {
         _spawnBodyguard(game.bodyguards.length);
       }
     }
   }
+
+  // Buy bodyguard cooldown
+  if (_buyBodyguardCooldown > 0) _buyBodyguardCooldown -= realDt;
 
   // Move bodyguards to follow player
   var p = game.player;
@@ -553,9 +561,13 @@ function _updateBodyguards(dt) {
   }
 }
 
+var _bodyguardNames = ['Bruno', 'Vince', 'Rocco', 'Sal', 'Knuckles', 'Big Tony', 'The Hammer', 'Grim', 'Ox', 'Blade'];
+
 function _spawnBodyguard(index) {
   var p = game.player;
-  var offsetAngle = (index === 0) ? -2.3 : -0.8;
+  // Spread bodyguards in a fan behind the player
+  var angleStep = Math.PI / (Math.max(_maxBodyguards, 2) + 1);
+  var offsetAngle = Math.PI + angleStep * (index + 1) - (Math.PI / 2);
   var bg = {
     x: p.x + Math.cos(offsetAngle) * 45,
     y: p.y + Math.sin(offsetAngle) * 45,
@@ -567,7 +579,7 @@ function _spawnBodyguard(index) {
     animTimer: 0,
     shootCooldown: 0,
     lastShotTime: 0,
-    name: index === 0 ? 'Bruno' : 'Vince',
+    name: _bodyguardNames[index % _bodyguardNames.length],
   };
   game.bodyguards.push(bg);
   showNotification('Bodyguard ' + bg.name + ' has arrived.');
@@ -1332,4 +1344,55 @@ function onCorruptionLoad() {
   _bountyHunterTimer = 0;
   // Restore bodyguards array if not present
   if (!game.bodyguards) game.bodyguards = [];
+  _maxBodyguards = game._maxBodyguards || 2;
+}
+
+// ─────────────────────────────────────────────
+// §24  BUY BODYGUARDS (B key)
+// ─────────────────────────────────────────────
+function _handleBuyBodyguard() {
+  if (!consumeKey('KeyB')) return;
+  if (game.state !== 'playing') return;
+
+  var corruption = game.corruption || 0;
+  if (corruption < 21) {
+    showNotification('You need corruption 21+ to hire bodyguards. (Press G near NPCs to build corruption)');
+    return;
+  }
+
+  if (_buyBodyguardCooldown > 0) {
+    showNotification('Wait before hiring another bodyguard.');
+    return;
+  }
+
+  var aliveCount = 0;
+  for (var i = 0; i < game.bodyguards.length; i++) {
+    if (!game.bodyguards[i].dead) aliveCount++;
+  }
+
+  // Pricing: each additional bodyguard costs more
+  var baseCost = 100;
+  var cost = baseCost + (_maxBodyguards - 2) * 75;
+  var maxCap = 10;
+
+  if (_maxBodyguards >= maxCap) {
+    showNotification('Maximum bodyguards reached (' + maxCap + '). You have an army!');
+    return;
+  }
+
+  if (game.gold < cost) {
+    showNotification('Need $' + cost + ' to hire a bodyguard. You have $' + game.gold + '.');
+    return;
+  }
+
+  game.gold -= cost;
+  _maxBodyguards++;
+  game._maxBodyguards = _maxBodyguards;
+  _spawnBodyguard(game.bodyguards.length);
+  _buyBodyguardCooldown = 3;
+
+  var nextCost = baseCost + (_maxBodyguards - 2) * 75;
+  showNotification('Hired bodyguard #' + _maxBodyguards + '! -$' + cost + ' (Next: $' + nextCost + ')');
+  addJournalEntry('Hired bodyguard #' + _maxBodyguards + ' for $' + cost + '.');
+  if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
 }
