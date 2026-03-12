@@ -5212,6 +5212,10 @@ function initGame(difficulty, ngPlus) {
   game.shopOpen = false;
   game.shopType = null;
   game.pokerState = null;
+  game.corruption = 0;
+  game.bodyguards = [];
+  game.prisoners = [];
+  game.mounted = game.mounted || false;
 
   // NG+ carry-overs
   if (ngPlus && ngPlus.level) {
@@ -6317,6 +6321,7 @@ function gameLoop(timestamp) {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;
 
+  try {
   switch (game.state) {
     case 'playing':
       // Run all update systems
@@ -6334,7 +6339,15 @@ function gameLoop(timestamp) {
       particles.update();
       updateCamera();
       updateUI();
+      // Update extension systems
+      if (typeof updateOffice === 'function') updateOffice(dt);
+      if (typeof updateCorruption === 'function') updateCorruption(dt);
+      if (typeof updateFeatures === 'function') updateFeatures(dt);
       render();
+      // Render extension systems
+      if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
+      if (typeof renderCorruptionOverlay === 'function') renderCorruptionOverlay();
+      if (typeof renderFeaturesOverlay === 'function') renderFeaturesOverlay();
 
       // Escape -> pause
       if (consumeKey('Escape')) {
@@ -6448,10 +6461,18 @@ function gameLoop(timestamp) {
       showGameOver();
       break;
 
+    case 'office':
+      if (typeof updateOffice === 'function') updateOffice(dt);
+      render();
+      if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
+      if (consumeKey('Escape')) { game.state = 'playing'; }
+      break;
+
     case 'title':
       // Title screen handled entirely by HTML/CSS
       break;
   }
+  } catch (e) { console.error('Game loop error:', e); }
 
   // Clear keysJustPressed at end of frame
   for (const k in keysJustPressed) {

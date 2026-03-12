@@ -357,6 +357,118 @@ body {
 #daily-text { font-size: 11px; color: #e8d5a3; line-height: 1.3; }
 #daily-progress { font-size: 10px; color: #ffd700; margin-top: 3px; }
 
+/* Corruption HUD */
+#corruption-hud {
+  position: absolute; top: 50px; left: 12px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 9px; letter-spacing: 1px; color: #cc66ff;
+}
+#corruption-bar-outer {
+  width: 120px; height: 6px; background: #1a0a2a;
+  border: 1px solid #6a3a8a; border-radius: 3px; overflow: hidden;
+}
+#corruption-bar-inner {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #8844aa, #cc3333);
+  transition: width 0.4s ease;
+}
+#corruption-tier {
+  font-size: 10px; color: #e8a8ff; font-style: italic;
+}
+
+/* Office overlay */
+#office-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 6, 2, 0.95);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 50;
+}
+#office-interior {
+  width: 90%; max-width: 700px; min-height: 300px;
+  background: #2a1a0a; border: 2px solid #5a3a18;
+  padding: 20px; position: relative;
+}
+#case-panel {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80%; max-width: 500px; background: rgba(20, 12, 4, 0.95);
+  border: 2px solid #ffd700; padding: 20px; z-index: 55;
+}
+#case-title { color: #ffd700; font-size: 16px; margin-bottom: 10px; letter-spacing: 1px; }
+#case-text { color: #e8d5a3; font-size: 13px; line-height: 1.5; margin-bottom: 15px; font-family: 'Courier New', monospace; }
+#case-choices { display: flex; flex-direction: column; gap: 8px; }
+#case-choices button {
+  background: #3a2a14; border: 1px solid #8a6a38; color: #e8d5a3;
+  padding: 8px 12px; cursor: pointer; font-family: inherit; font-size: 12px;
+  text-align: left; transition: background 0.2s;
+}
+#case-choices button:hover { background: #5a4a24; border-color: #ffd700; }
+
+#jail-panel {
+  width: 80%; max-width: 500px; background: rgba(20, 12, 4, 0.95);
+  border: 2px solid #444; padding: 15px; margin-top: 10px;
+}
+#jail-panel h3 { color: #888; font-size: 14px; margin-bottom: 8px; }
+#jail-inmates { display: flex; flex-direction: column; gap: 6px; }
+.inmate-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; background: #1a1208; border: 1px solid #333;
+}
+.inmate-name { color: #e8d5a3; font-size: 12px; }
+.inmate-actions { display: flex; gap: 6px; }
+.inmate-actions button {
+  background: #3a2a14; border: 1px solid #5a3a18; color: #ccc;
+  padding: 3px 8px; cursor: pointer; font-size: 10px;
+}
+.inmate-actions button:hover { background: #5a4a24; }
+
+#office-exit { margin-top: 15px; }
+
+/* Weather overlay */
+#weather-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 5;
+}
+
+/* Newspaper */
+#newspaper-popup {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80%; max-width: 400px; background: #f4e8c8; border: 3px solid #3a2a14;
+  padding: 20px; z-index: 60; color: #1a1208;
+}
+#newspaper-popup h3 {
+  font-size: 18px; text-align: center; border-bottom: 2px solid #3a2a14;
+  padding-bottom: 8px; margin-bottom: 10px; color: #1a1208; letter-spacing: 2px;
+}
+#newspaper-content {
+  font-size: 12px; line-height: 1.5; color: #2a1a08; font-family: 'Georgia', serif;
+}
+#newspaper-close { margin-top: 12px; display: block; margin-left: auto; margin-right: auto; }
+
+/* Skill tree */
+#skill-tree-panel {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 85%; max-width: 600px; max-height: 80vh; overflow-y: auto;
+  background: rgba(20, 12, 4, 0.95); border: 2px solid #5a3a18;
+  padding: 20px; z-index: 55;
+}
+#skill-tree-panel h3 { color: #ffd700; text-align: center; margin-bottom: 15px; }
+#skill-tree-content { display: flex; flex-direction: column; gap: 8px; }
+.skill-branch { margin-bottom: 12px; }
+.skill-branch h4 { color: #cc8844; font-size: 12px; margin-bottom: 6px; letter-spacing: 1px; }
+.skill-node {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; background: #1a1208; border: 1px solid #3a2a14; margin-bottom: 4px;
+}
+.skill-node.unlocked { border-color: #ffd700; background: #2a2a08; }
+.skill-name { color: #e8d5a3; font-size: 11px; }
+.skill-cost { color: #ffd700; font-size: 10px; }
+.skill-node button {
+  background: #5a4a24; border: 1px solid #8a6a38; color: #ffd700;
+  padding: 3px 10px; cursor: pointer; font-size: 10px;
+}
+.skill-node button:hover { background: #7a6a34; }
+.skill-node button:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .hidden { display: none !important; }
 
 ::-webkit-scrollbar { width: 5px; }

@@ -96,8 +96,37 @@
       <p id="daily-text"></p>
       <div id="daily-progress"></div>
     </div>
+    <div id="corruption-hud" class="hidden">
+      <span id="corruption-label">CORRUPTION</span>
+      <div id="corruption-bar-outer"><div id="corruption-bar-inner"></div></div>
+      <span id="corruption-tier">Clean</span>
+    </div>
+    <div id="office-overlay" class="hidden">
+      <div id="office-interior"></div>
+      <div id="case-panel" class="hidden">
+        <h3 id="case-title"></h3>
+        <p id="case-text"></p>
+        <div id="case-choices"></div>
+      </div>
+      <div id="jail-panel" class="hidden">
+        <h3>JAIL CELLS</h3>
+        <div id="jail-inmates"></div>
+      </div>
+      <button id="office-exit" class="menu-btn">Leave Office [ESC]</button>
+    </div>
+    <div id="weather-overlay"></div>
+    <div id="newspaper-popup" class="hidden">
+      <h3>THE FRONTIER GAZETTE</h3>
+      <div id="newspaper-content"></div>
+      <button id="newspaper-close" class="menu-btn">Close</button>
+    </div>
+    <div id="skill-tree-panel" class="hidden">
+      <h3>SKILL TREE</h3>
+      <div id="skill-tree-content"></div>
+      <button id="skill-tree-close" class="menu-btn">Close [K]</button>
+    </div>
     <div id="controls-hint">
-      WASD: Move | E: Interact | SPACE: Shoot | F: Melee | J: Journal | M: Map | H: Mount/Dismount | TAB: Shop
+      WASD: Move | E: Interact | SPACE: Shoot | F: Melee | G: Special | J: Journal | M: Map | H: Mount | Q: Dodge | R: Lasso | K: Skills
     </div>
   </div>
   <div id="title-screen">
@@ -153,5 +182,8 @@
   </div>
 </div>
 <script src="game.js"></script>
+<script src="office.js"></script>
+<script src="corruption.js"></script>
+<script src="features.js"></script>
 </body>
 </html>
