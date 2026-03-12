@@ -1999,6 +1999,9 @@ class BulletSystem {
   }
 }
 
+const particles = new ParticleSystem();
+const bullets = new BulletSystem();
+
 // ─────────────────────────────────────────────
 // §D  BLOOD DECAL SYSTEM
 // ─────────────────────────────────────────────
