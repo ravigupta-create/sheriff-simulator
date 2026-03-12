@@ -79,6 +79,23 @@
         <button id="tutorial-dismiss" class="menu-btn">GOT IT</button>
       </div>
     </div>
+    <div id="combo-display" class="hidden">
+      <span id="combo-count">x2</span>
+      <span id="combo-label">COMBO</span>
+    </div>
+    <div id="streak-display" class="hidden">
+      <span id="streak-icon"></span>
+      <span id="streak-text"></span>
+    </div>
+    <div id="xp-bar-container" class="hidden">
+      <span id="level-display">Lv.1</span>
+      <div id="xp-bar-outer"><div id="xp-bar-inner"></div></div>
+    </div>
+    <div id="daily-challenge" class="hidden">
+      <h4>DAILY BOUNTY</h4>
+      <p id="daily-text"></p>
+      <div id="daily-progress"></div>
+    </div>
     <div id="controls-hint">
       WASD: Move | E: Interact | SPACE: Shoot | F: Melee | J: Journal | M: Map | H: Mount/Dismount | TAB: Shop
     </div>
@@ -87,6 +104,9 @@
     <div id="title-content">
       <h1>SHERIFF<br>SIMULATOR</h1>
       <p class="subtitle">A Spaghetti Western Adventure</p>
+      <div id="cheat-box">
+        <input type="text" id="cheat-input" placeholder="Enter code..." autocomplete="off" spellcheck="false">
+      </div>
       <div id="title-menu">
         <button class="menu-btn" id="btn-new">NEW GAME</button>
         <button class="menu-btn hidden" id="btn-continue">CONTINUE</button>

@@ -4646,6 +4646,11 @@ function updateTime(dt) {
     game.daysServed++;
     addJournalEntry('A new day dawns.');
 
+    // Streaks & daily challenge
+    checkDayStreaks();
+    generateDailyChallenge();
+    initDailyChallengeTracking();
+
     // Track no damage day
     if (game.noDamageToday) {
       game.noDamageDays++;
@@ -5239,12 +5244,367 @@ function initGame(difficulty, ngPlus) {
   game.camera.x = game.player.x - canvas.width / 2;
   game.camera.y = game.player.y - canvas.height / 2;
 
+  // XP/Level system init
+  game.xp = 0;
+  game.level = 1;
+
+  // Daily challenge
+  generateDailyChallenge();
+  initDailyChallengeTracking();
+
+  // Combo reset
+  combo.count = 0;
+  combo.timer = 0;
+  combo.maxCombo = 0;
+  streak.crimeDays = 0;
+  streak.noDamageDays = 0;
+
   addJournalEntry('Pinned on the badge. Time to keep the peace.');
 
   particles.particles = [];
   bullets.bullets = [];
   floatingTexts.length = 0;
+
+  // Apply cheat code if activated
+  if (cheatActivated) {
+    applyCheatCode();
+    cheatActivated = false;
+  }
+
+  updateXPBar();
 }
+
+// ─────────────────────────────────────────────
+// §ADDICTION  COMBO, STREAKS, XP, DAILY CHALLENGES
+// ─────────────────────────────────────────────
+
+// --- Cheat code ---
+var cheatActivated = false;
+
+function applyCheatCode() {
+  game.reputation = 100;
+  game.gold = 9999;
+  game.totalGoldEarned = 9999;
+  game.ammo = 999;
+  game.player.hp = 99;
+  game.player.maxHp = 99;
+  game.hasVest = true;
+  game.hasSpeedBoots = true;
+  game.hasShotgun = true;
+  game.hasRifle = true;
+  game.gunDurability = 100;
+  game.xp = 0;
+  game.level = 50;
+  game.rank = 'Wyatt Earp';
+  showNotification('CHEAT ACTIVATED: Max everything!', 'good');
+  addJournalEntry('A mysterious power surges through you...');
+}
+
+// --- Combo System ---
+// Chaining kills/arrests within a time window multiplies rewards
+var combo = {
+  count: 0,
+  timer: 0, // frames remaining
+  window: 180, // 3 seconds at 60fps
+  maxCombo: 0,
+  display: false
+};
+
+function addCombo() {
+  combo.count++;
+  combo.timer = combo.window;
+  combo.display = true;
+  if (combo.count > combo.maxCombo) combo.maxCombo = combo.count;
+
+  var el = document.getElementById('combo-display');
+  var countEl = document.getElementById('combo-count');
+  if (el && countEl && combo.count >= 2) {
+    el.classList.remove('hidden');
+    countEl.textContent = 'x' + combo.count;
+    // Re-trigger animation
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+
+    if (combo.count >= 5) {
+      countEl.style.color = '#ff0000';
+      countEl.style.fontSize = '56px';
+    } else if (combo.count >= 3) {
+      countEl.style.color = '#ff6600';
+      countEl.style.fontSize = '48px';
+    } else {
+      countEl.style.color = '#ffaa00';
+      countEl.style.fontSize = '44px';
+    }
+  }
+
+  // Combo bonus
+  var bonus = Math.floor(combo.count * 5);
+  game.gold += bonus;
+  game.totalGoldEarned += bonus;
+  addFloatingText(game.player.x, game.player.y - 40, 'COMBO x' + combo.count + ' +$' + bonus, '#ff6600');
+
+  if (combo.count === 3) audio.playDing();
+  if (combo.count === 5) { audio.playVictory(); showNotification('KILLING SPREE!', 'good'); }
+  if (combo.count === 10) { showNotification('UNSTOPPABLE!', 'good'); triggerShake(6, 15); }
+}
+
+function updateCombo() {
+  if (combo.timer > 0) {
+    combo.timer--;
+    if (combo.timer <= 0) {
+      combo.count = 0;
+      combo.display = false;
+      var el = document.getElementById('combo-display');
+      if (el) el.classList.add('hidden');
+    }
+  }
+}
+
+function getComboMultiplier() {
+  if (combo.count < 2) return 1;
+  return 1 + (combo.count - 1) * 0.25; // x1.25, x1.5, x1.75, x2...
+}
+
+// --- Streak System ---
+// Track consecutive days with good performance
+var streak = {
+  crimeDays: 0, // consecutive days resolving at least 1 crime
+  noDamageDays: 0,
+  active: null, // current streak type displayed
+  timer: 0
+};
+
+function checkDayStreaks() {
+  if (game.crimesResolved > (game._lastDayCrimes || 0)) {
+    streak.crimeDays++;
+    game._lastDayCrimes = game.crimesResolved;
+    if (streak.crimeDays >= 3) {
+      showStreak('CRIME STREAK', streak.crimeDays + ' days!');
+      var streakBonus = streak.crimeDays * 10;
+      game.gold += streakBonus;
+      game.totalGoldEarned += streakBonus;
+      showNotification(streak.crimeDays + '-day crime streak! +$' + streakBonus, 'good');
+    }
+  } else {
+    streak.crimeDays = 0;
+  }
+
+  if (game.noDamageToday) {
+    streak.noDamageDays++;
+    if (streak.noDamageDays >= 2) {
+      showStreak('UNTOUCHABLE', streak.noDamageDays + ' days!');
+      game.reputation = clamp(game.reputation + streak.noDamageDays, 0, REPUTATION_MAX);
+    }
+  } else {
+    streak.noDamageDays = 0;
+  }
+  game.noDamageToday = true;
+}
+
+function showStreak(icon, text) {
+  var el = document.getElementById('streak-display');
+  var iconEl = document.getElementById('streak-icon');
+  var textEl = document.getElementById('streak-text');
+  if (el && iconEl && textEl) {
+    iconEl.textContent = icon;
+    textEl.textContent = text;
+    el.classList.remove('hidden');
+    streak.timer = 240; // 4 seconds
+  }
+}
+
+function updateStreak() {
+  if (streak.timer > 0) {
+    streak.timer--;
+    if (streak.timer <= 0) {
+      var el = document.getElementById('streak-display');
+      if (el) el.classList.add('hidden');
+    }
+  }
+}
+
+// --- XP & Level System ---
+// Earn XP from everything, level up for permanent bonuses
+var XP_PER_LEVEL = 100;
+var LEVEL_CAP = 50;
+
+function addXP(amount) {
+  if (!game.xp) game.xp = 0;
+  if (!game.level) game.level = 1;
+
+  game.xp += Math.floor(amount * getComboMultiplier());
+
+  while (game.xp >= xpForLevel(game.level) && game.level < LEVEL_CAP) {
+    game.xp -= xpForLevel(game.level);
+    game.level++;
+    onLevelUp();
+  }
+
+  updateXPBar();
+}
+
+function xpForLevel(level) {
+  return XP_PER_LEVEL + (level - 1) * 20; // 100, 120, 140, 160...
+}
+
+function onLevelUp() {
+  showNotification('LEVEL UP! Now level ' + game.level, 'good');
+  audio.playVictory();
+  triggerShake(4, 10);
+  addFloatingText(game.player.x, game.player.y - 50, 'LEVEL ' + game.level, '#88ccff');
+
+  // Permanent bonuses every few levels
+  if (game.level % 5 === 0) {
+    game.player.maxHp++;
+    game.player.hp = game.player.maxHp;
+    showNotification('+1 Max HP!', 'good');
+  }
+  if (game.level % 3 === 0) {
+    game.ammo += 6;
+    showNotification('+6 Ammo!', 'good');
+  }
+  if (game.level % 10 === 0) {
+    var goldBonus = game.level * 10;
+    game.gold += goldBonus;
+    game.totalGoldEarned += goldBonus;
+    showNotification('Level ' + game.level + ' bonus: +$' + goldBonus, 'good');
+  }
+}
+
+function updateXPBar() {
+  var container = document.getElementById('xp-bar-container');
+  var levelEl = document.getElementById('level-display');
+  var barInner = document.getElementById('xp-bar-inner');
+  if (container && levelEl && barInner) {
+    container.classList.remove('hidden');
+    levelEl.textContent = 'Lv.' + (game.level || 1);
+    var needed = xpForLevel(game.level || 1);
+    var pct = Math.min(100, ((game.xp || 0) / needed) * 100);
+    barInner.style.width = pct + '%';
+  }
+}
+
+// --- Daily Challenge System ---
+var DAILY_CHALLENGES = [
+  { desc: 'Kill 3 outlaws', type: 'kill', target: 3, reward: 50, repReward: 5 },
+  { desc: 'Arrest 2 outlaws', type: 'arrest', target: 2, reward: 40, repReward: 8 },
+  { desc: 'Resolve 2 crimes', type: 'crimes', target: 2, reward: 60, repReward: 6 },
+  { desc: 'Win a duel', type: 'duel', target: 1, reward: 40, repReward: 5 },
+  { desc: 'Talk to 5 NPCs', type: 'talk', target: 5, reward: 25, repReward: 3 },
+  { desc: 'Win 3 poker hands', type: 'poker', target: 3, reward: 45, repReward: 2 },
+  { desc: 'Earn $100', type: 'gold', target: 100, reward: 30, repReward: 4 },
+  { desc: 'Survive until night', type: 'night', target: 1, reward: 35, repReward: 5 },
+  { desc: 'Visit all buildings', type: 'explore', target: 8, reward: 50, repReward: 6 },
+  { desc: 'Get a 3x combo', type: 'combo', target: 3, reward: 40, repReward: 4 },
+  { desc: 'Take no damage today', type: 'nodamage', target: 1, reward: 60, repReward: 8 },
+  { desc: 'Melee 3 outlaws', type: 'melee', target: 3, reward: 35, repReward: 3 },
+];
+
+function generateDailyChallenge() {
+  var idx = (game.dayCount - 1) % DAILY_CHALLENGES.length;
+  game.dailyChallenge = {
+    desc: DAILY_CHALLENGES[idx].desc,
+    type: DAILY_CHALLENGES[idx].type,
+    target: DAILY_CHALLENGES[idx].target,
+    reward: DAILY_CHALLENGES[idx].reward,
+    repReward: DAILY_CHALLENGES[idx].repReward,
+    progress: 0,
+    completed: false,
+    day: game.dayCount
+  };
+
+  var el = document.getElementById('daily-challenge');
+  var textEl = document.getElementById('daily-text');
+  if (el && textEl) {
+    el.classList.remove('hidden');
+    textEl.textContent = game.dailyChallenge.desc;
+  }
+}
+
+function updateDailyChallenge() {
+  var dc = game.dailyChallenge;
+  if (!dc || dc.completed) return;
+
+  var prev = dc.progress;
+
+  switch (dc.type) {
+    case 'kill': dc.progress = game.outlawsKilled - (dc._startKills || 0); break;
+    case 'arrest': dc.progress = game.outlawsArrested - (dc._startArrests || 0); break;
+    case 'crimes': dc.progress = game.crimesResolved - (dc._startCrimes || 0); break;
+    case 'duel': dc.progress = game.duelsWon - (dc._startDuels || 0); break;
+    case 'talk': dc.progress = game.npcstalkedTo.size; break;
+    case 'poker': dc.progress = game.pokerWins - (dc._startPoker || 0); break;
+    case 'gold': dc.progress = game.totalGoldEarned - (dc._startGold || 0); break;
+    case 'night': dc.progress = (game.time > 0.8 || game.time < 0.2) ? 1 : 0; break;
+    case 'explore': dc.progress = game.visitedBuildings.size; break;
+    case 'combo': dc.progress = combo.maxCombo; break;
+    case 'nodamage': dc.progress = game.noDamageToday ? 1 : 0; break;
+    case 'melee': dc.progress = game.meleeFights - (dc._startMelee || 0); break;
+  }
+
+  // Update UI
+  var progEl = document.getElementById('daily-progress');
+  if (progEl) {
+    progEl.textContent = Math.min(dc.progress, dc.target) + '/' + dc.target;
+  }
+
+  if (dc.progress >= dc.target && !dc.completed) {
+    dc.completed = true;
+    game.gold += dc.reward;
+    game.totalGoldEarned += dc.reward;
+    game.reputation = clamp(game.reputation + dc.repReward, 0, REPUTATION_MAX);
+    showNotification('DAILY BOUNTY COMPLETE! +$' + dc.reward + ', +' + dc.repReward + ' Rep', 'good');
+    audio.playVictory();
+    addXP(50);
+    addJournalEntry('Completed daily bounty: ' + dc.desc);
+
+    var el = document.getElementById('daily-challenge');
+    if (el) el.classList.add('hidden');
+  }
+}
+
+function initDailyChallengeTracking() {
+  var dc = game.dailyChallenge;
+  if (!dc) return;
+  dc._startKills = game.outlawsKilled;
+  dc._startArrests = game.outlawsArrested;
+  dc._startCrimes = game.crimesResolved;
+  dc._startDuels = game.duelsWon;
+  dc._startPoker = game.pokerWins;
+  dc._startGold = game.totalGoldEarned;
+  dc._startMelee = game.meleeFights;
+}
+
+// --- Hook into existing systems to grant XP ---
+// These get called from the existing code via a wrapper
+var _origShowNotif = showNotification;
+showNotification = function(text, type) {
+  _origShowNotif(text, type);
+  // Grant XP for positive actions
+  if (type === 'good' || (text && text.indexOf('+') === 0)) {
+    addXP(5);
+  }
+  if (text && text.indexOf('Crime resolved') !== -1) addXP(30);
+  if (text && text.indexOf('arrested') !== -1) { addXP(20); addCombo(); }
+  if (text && text.indexOf('Duel won') !== -1) addXP(25);
+  if (text && text.indexOf('Mission Complete') !== -1) addXP(40);
+  if (text && text.indexOf('LEVEL UP') !== -1) return; // Don't loop
+};
+
+// Hook into bullet kills for combo
+var _origBulletUpdate = bullets.update.bind(bullets);
+bullets.update = function(npcs, player, particlesRef, gameState, map) {
+  var killsBefore = gameState.outlawsKilled || 0;
+  _origBulletUpdate(npcs, player, particlesRef, gameState, map);
+  var killsAfter = gameState.outlawsKilled || 0;
+  if (killsAfter > killsBefore) {
+    for (var k = 0; k < killsAfter - killsBefore; k++) {
+      addCombo();
+      addXP(15);
+    }
+  }
+};
 
 // ─────────────────────────────────────────────
 // §Q  GAME OVER & NG+
@@ -5947,6 +6307,9 @@ function gameLoop(timestamp) {
       updateQuests();
       updateTime(dt);
       if (typeof updateAchievements === 'function') updateAchievements();
+      updateCombo();
+      updateStreak();
+      updateDailyChallenge();
       updateAmbientParticles();
       bullets.update(game.npcs, game.player, particles, game, game.map);
       particles.update();
@@ -6082,6 +6445,30 @@ function gameLoop(timestamp) {
 // ─────────────────────────────────────────────
 // §C  UI EVENT HANDLERS
 // ─────────────────────────────────────────────
+
+// 0. Cheat code input
+var cheatInput = document.getElementById('cheat-input');
+if (cheatInput) {
+  cheatInput.addEventListener('keydown', function(e) {
+    e.stopPropagation(); // Don't trigger game controls while typing
+  });
+  cheatInput.addEventListener('keyup', function(e) {
+    e.stopPropagation();
+    if (this.value.toLowerCase() === 'srg2') {
+      cheatActivated = true;
+      this.style.borderColor = '#ffd700';
+      this.style.color = '#ffd700';
+      this.value = 'ACTIVATED';
+      this.disabled = true;
+      setTimeout(function() {
+        if (cheatInput) {
+          cheatInput.style.borderColor = '#5a3a18';
+          cheatInput.style.color = '#b8944a';
+        }
+      }, 2000);
+    }
+  });
+}
 
 // 1. New game button -> show difficulty select
 document.getElementById('btn-new').addEventListener('click', function() {
