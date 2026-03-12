@@ -5230,6 +5230,13 @@ function initGame(difficulty, ngPlus) {
   game.bodyguards = [];
   game.prisoners = [];
   game.mounted = game.mounted || false;
+  // Corrupt start code
+  if (game._corruptStart) {
+    game.corruption = 80;
+    game._corruptMode = true;
+    showNotification('CORRUPT MODE: You start as a Crime Boss!');
+    addJournalEntry('You arrived in town with dark intentions...');
+  }
 
   // NG+ carry-overs
   if (ngPlus && ngPlus.level) {
@@ -6508,11 +6515,24 @@ if (cheatInput) {
   });
   cheatInput.addEventListener('keyup', function(e) {
     e.stopPropagation();
-    if (this.value.toLowerCase() === 'srg2') {
+    var code = this.value.toLowerCase();
+    if (code === 'srg2') {
       cheatActivated = true;
       this.style.borderColor = '#ffd700';
       this.style.color = '#ffd700';
       this.value = 'ACTIVATED';
+      this.disabled = true;
+      setTimeout(function() {
+        if (cheatInput) {
+          cheatInput.style.borderColor = '#5a3a18';
+          cheatInput.style.color = '#b8944a';
+        }
+      }, 2000);
+    } else if (code === 'corrupt') {
+      game._corruptStart = true;
+      this.style.borderColor = '#880088';
+      this.style.color = '#cc66ff';
+      this.value = 'CORRUPT MODE';
       this.disabled = true;
       setTimeout(function() {
         if (cheatInput) {
