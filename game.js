@@ -1883,8 +1883,8 @@ class BulletSystem {
         vy: Math.sin(dir) * BULLET_SPEED,
         fromPlayer: fromPlayer,
         type: type,
-        life: 25,
-        maxLife: 25,
+        life: 35,
+        maxLife: 35,
         damage: 2
       });
     }
@@ -1920,13 +1920,19 @@ class BulletSystem {
         let hit = false;
         for (const npc of npcs) {
           if (npc.state === 'dead' || npc.state === 'arrested') continue;
-          if (dist(b, npc) < 14) {
+          const isHostile = npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY || npc.hostile;
+          // Cheat mode: bullets pass through innocents
+          if (gameState._cheatMode && !isHostile) continue;
+          // Larger hit radius for more reliable hits (20px)
+          if (dist(b, npc) < 20) {
             npc.hp = (npc.hp || 3) - b.damage;
             particles.emitBlood(npc.x, npc.y);
+            if (typeof triggerShake === 'function') triggerShake(3, 5);
             hit = true;
             if (npc.hp <= 0) {
               npc.state = 'dead';
-              if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY || npc.hostile) {
+              npc.dead = true;
+              if (isHostile) {
                 const reward = Math.floor((10 + rand(5, 20)));
                 gameState.gold = (gameState.gold || 0) + reward;
                 gameState.totalGoldEarned = (gameState.totalGoldEarned || 0) + reward;
@@ -4042,13 +4048,16 @@ function playerMelee() {
   var my = game.player.y + dd[1] * MELEE_RANGE;
   particles.emitSpark(mx, my);
 
-  // Check NPC hits in melee range
+  // Check NPC hits in melee range (generous 40px range)
   var hitAny = false;
   for (var i = 0; i < game.npcs.length; i++) {
     var npc = game.npcs[i];
     if (npc.state === 'dead' || npc.state === 'arrested') continue;
+    var isHostile = npc.hostile || npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY;
+    // Cheat mode: can't hit innocents
+    if (game._cheatMode && !isHostile) continue;
     var d = dist(game.player, npc);
-    if (d < MELEE_RANGE + 10) {
+    if (d < MELEE_RANGE + 20) {
       npc.hp--;
       hitAny = true;
       particles.emitBlood(npc.x, npc.y);
@@ -4163,7 +4172,7 @@ function updatePlayer(dt) {
     if (game.ammo > 0) {
       game.ammo--;
       game.totalShots++;
-      p.shootCooldown = 20;
+      p.shootCooldown = 12;
       p.justShot = 8;
 
       // Convert cardinal dir (0=down,1=up,2=left,3=right) to radians
@@ -4187,7 +4196,16 @@ function updatePlayer(dt) {
         showNotification('Gun is wearing out! Visit the blacksmith.');
       }
     } else {
-      showNotification('Out of ammo!');
+      showNotification('Out of ammo! Reloading...');
+      // Auto-reload: give 6 ammo after a short delay
+      game._reloading = true;
+      p.shootCooldown = 60; // 1 second reload time
+      setTimeout(function() {
+        game.ammo += 6;
+        game._reloading = false;
+        if (typeof audio.playReload === 'function') audio.playReload();
+        showNotification('Reloaded! +6 ammo');
+      }, 1000);
     }
   }
 
@@ -5296,6 +5314,7 @@ function applyCheatCode() {
   game.xp = 0;
   game.level = 50;
   game.rank = 'Wyatt Earp';
+  game._cheatMode = true; // bullets pass through innocents
   showNotification('CHEAT ACTIVATED: Max everything!', 'good');
   addJournalEntry('A mysterious power surges through you...');
 }
