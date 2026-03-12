@@ -1961,15 +1961,23 @@ class BulletSystem {
       // NPC bullet hitting player
       if (!b.fromPlayer && player) {
         if (dist(b, player) < 14) {
+          if (gameState._cheatMode) {
+            // Invincible — absorb bullet with no damage
+            this.bullets.splice(i, 1);
+            particles.emit(player.x, player.y, 3, '#ffd700', 2, 10);
+            continue;
+          }
           const dmgMult = gameState.difficulty ? gameState.difficulty.outlawDamageMult || 1 : 1;
           const dmg = Math.max(1, Math.round(b.damage * dmgMult));
           player.hp -= dmg;
           particles.emitBlood(player.x, player.y);
           if (typeof triggerShake === 'function') triggerShake(6, 10);
           this.bullets.splice(i, 1);
-          if (player.hp <= 0) {
+          if (player.hp <= 0 && !gameState._cheatMode) {
             player.hp = 0;
             player.dead = true;
+          } else if (player.hp <= 0 && gameState._cheatMode) {
+            player.hp = player.maxHp || 99;
           }
           continue;
         }
@@ -4003,9 +4011,48 @@ function updateDuel() {
         showNotification('Duel won! +10 Rep, +$50');
         addJournalEntry('Won duel against ' + d.npc.name + ' (' + reactionMs + 'ms).');
       } else {
+        if (game._cheatMode) {
+          d.result = 'win';
+          document.getElementById('duel-prompt').textContent = 'INVINCIBLE!';
+          document.getElementById('duel-timer').textContent = 'Bullet bounced off you!';
+          d.npc.state = 'dead';
+          d.npc.hostile = false;
+          game.outlawsKilled++;
+          game.duelsWon++;
+          audio.playGunshot();
+          showNotification('Cheat mode: You won anyway!');
+        } else {
+          d.result = 'lose';
+          document.getElementById('duel-prompt').textContent = 'TOO SLOW!';
+          document.getElementById('duel-timer').textContent = 'They got you...';
+          game.player.hp -= 2;
+          game.noDamageToday = false;
+          audio.playGunshot();
+          particles.emitBlood(game.player.x, game.player.y);
+          if (game.player.hp <= 0) {
+            game.gameOverReason = 'Killed in a duel by ' + d.npc.name + '.';
+          }
+        }
+      }
+      setTimeout(endDuel, 2000);
+    }
+
+    if (d.timer >= d.reactionWindow && !d.playerDrew) {
+      d.phase = 'result';
+      if (game._cheatMode) {
+        d.result = 'win';
+        document.getElementById('duel-prompt').textContent = 'INVINCIBLE!';
+        document.getElementById('duel-timer').textContent = 'Bullet bounced off you!';
+        d.npc.state = 'dead';
+        d.npc.hostile = false;
+        game.outlawsKilled++;
+        game.duelsWon++;
+        audio.playGunshot();
+        showNotification('Cheat mode: You won anyway!');
+      } else {
         d.result = 'lose';
         document.getElementById('duel-prompt').textContent = 'TOO SLOW!';
-        document.getElementById('duel-timer').textContent = 'They got you...';
+        document.getElementById('duel-timer').textContent = 'They drew first!';
         game.player.hp -= 2;
         game.noDamageToday = false;
         audio.playGunshot();
@@ -4016,21 +4063,6 @@ function updateDuel() {
       }
       setTimeout(endDuel, 2000);
     }
-
-    if (d.timer >= d.reactionWindow && !d.playerDrew) {
-      d.phase = 'result';
-      d.result = 'lose';
-      document.getElementById('duel-prompt').textContent = 'TOO SLOW!';
-      document.getElementById('duel-timer').textContent = 'They drew first!';
-      game.player.hp -= 2;
-      game.noDamageToday = false;
-      audio.playGunshot();
-      particles.emitBlood(game.player.x, game.player.y);
-      if (game.player.hp <= 0) {
-        game.gameOverReason = 'Killed in a duel by ' + d.npc.name + '.';
-      }
-      setTimeout(endDuel, 2000);
-    }
   }
 }
 
@@ -4038,9 +4070,10 @@ function endDuel() {
   document.getElementById('duel-ui').classList.add('hidden');
   if (typeof audio.stopWesternRiff === 'function') audio.stopWesternRiff();
   game.duelState = null;
-  if (game.player.hp <= 0) {
+  if (game.player.hp <= 0 && !game._cheatMode) {
     game.state = 'gameover';
   } else {
+    if (game._cheatMode && game.player.hp <= 0) game.player.hp = game.player.maxHp;
     game.state = 'playing';
   }
 }
@@ -4520,7 +4553,7 @@ function updateCrimes(dt) {
         particles.emit(fire.x + randF(-fire.radius, fire.radius), fire.y + randF(-fire.radius, fire.radius), 1, '#ff6600', 2, 20);
         // Damage player if close
         if (dist(game.player, fire) < fire.radius + 10) {
-          if (Math.random() < 0.01) {
+          if (Math.random() < 0.01 && !game._cheatMode) {
             game.player.hp--;
             game.noDamageToday = false;
             showNotification('Burned by the fire! -1 HP');
@@ -4736,7 +4769,7 @@ function updateTime(dt) {
   }
 
   // Game over conditions
-  if (game.reputation <= 0) {
+  if (game.reputation <= 0 && !game._cheatMode) {
     game.state = 'gameover';
     game.gameOverReason = 'Your reputation hit rock bottom. The town ran you out.';
   }
@@ -5237,10 +5270,12 @@ function initGame(difficulty, ngPlus) {
   game.mounted = game.mounted || false;
   // Corrupt start code
   if (game._corruptStart) {
-    game.corruption = 80;
+    game.corruption = game._corruptStartLevel || 80;
     game._corruptMode = true;
-    showNotification('CORRUPT MODE: You start as a Crime Boss!');
-    addJournalEntry('You arrived in town with dark intentions...');
+    var tierNames = ['Bent Cop', 'Crooked Sheriff', 'Crime Boss', 'Tyrant'];
+    var tierIdx = game.corruption <= 20 ? 0 : game.corruption <= 60 ? 1 : game.corruption <= 80 ? 2 : 3;
+    showNotification('CORRUPT MODE: You start as ' + tierNames[tierIdx] + '! (Corruption: ' + game.corruption + ')');
+    addJournalEntry('You arrived in town with dark intentions... (Corruption: ' + game.corruption + ')');
   }
 
   // NG+ carry-overs
@@ -6534,10 +6569,15 @@ if (cheatInput) {
         }
       }, 2000);
     } else if (code === 'corrupt') {
+      var level = prompt('How corrupt do you want to start?\n\nEnter a number 1-100:\n\n1-20: Bent Cop (shakedowns)\n21-60: Crooked Sheriff (bodyguards + stealing)\n61-80: Crime Boss (outlaw allies)\n81-100: Tyrant (double gold, assassins hunt you)');
+      var parsed = parseInt(level, 10);
+      if (isNaN(parsed) || parsed < 1) parsed = 50;
+      if (parsed > 100) parsed = 100;
       game._corruptStart = true;
+      game._corruptStartLevel = parsed;
       this.style.borderColor = '#880088';
       this.style.color = '#cc66ff';
-      this.value = 'CORRUPT MODE';
+      this.value = 'CORRUPT (' + parsed + ')';
       this.disabled = true;
       setTimeout(function() {
         if (cheatInput) {

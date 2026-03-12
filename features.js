@@ -313,7 +313,7 @@ function updateFeatures(dt) {
               if (game.npcs[bni].hp <= 0) { game.npcs[bni].state = 'dead'; game.outlawsKilled++; }
             }
           }
-          if (dist(p, barrel) < 70) { p.hp -= 2; showNotification('Caught in the explosion! -2 HP'); }
+          if (dist(p, barrel) < 70 && !game._cheatMode) { p.hp -= 2; showNotification('Caught in the explosion! -2 HP'); }
           break;
         }
       }
