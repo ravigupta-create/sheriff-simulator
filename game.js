@@ -5100,6 +5100,26 @@ function updateNPCs(dt) {
       continue;
     }
 
+    // Escaped prisoner — flee toward map edge
+    if (npc._escapee && npc._fleeTargetX !== undefined) {
+      var fdx = npc._fleeTargetX - npc.x;
+      var fdy = npc._fleeTargetY - npc.y;
+      var flen = Math.hypot(fdx, fdy);
+      if (flen > 20) {
+        var fnx = npc.x + (fdx / flen) * npc.speed * 1.5;
+        var fny = npc.y + (fdy / flen) * npc.speed * 1.5;
+        if (canMove(fnx, npc.y, 5)) npc.x = fnx;
+        if (canMove(npc.x, fny, 5)) npc.y = fny;
+        npc.state = 'walking';
+        npc.facingRight = fdx >= 0;
+        npc.animTimer++;
+      } else {
+        // Reached edge — remove from world
+        npc.state = 'dead';
+      }
+      continue;
+    }
+
     // Idle NPC wandering
     npc.moveTimer--;
     if (npc.moveTimer <= 0) {

@@ -822,6 +822,7 @@ var MEETING_TEMPLATES = [
       { text: 'Accept the deal — divided town', outcome: 'An uneasy truce. Crime drops on your side but flourishes on theirs. You sleep easier. The town doesn\'t.', gold: 200, rep: -10, corruption: 15 },
       { text: 'Counter-offer — you get 20% of their take', outcome: '{boss} smiles. "A businessman." Monthly payments begin. You\'re on the payroll now.', gold: 400, rep: -18, corruption: 22 },
       { text: 'Arrest everyone in this room', outcome: 'Bold move! A tense standoff. Bodyguards think twice. {boss} surrenders. Legendary courage.', gold: 60, rep: 25, corruption: -15 },
+      { text: 'INTIMIDATE — "You work for ME now."', outcome: 'You slam the desk and draw your gun. {boss}\'s bodyguards freeze. "From now on, your operation pays tribute to this badge." {boss} nods slowly. You own them.', gold: 500, rep: -5, corruption: 25, intimidate: true },
     ] },
   { type: 'boss', name: 'Weapons Deal', bodyguards: 3,
     desc: '{boss} opens a case of gleaming new rifles. "Army surplus. Fell off a wagon. I need storage — your evidence locker would be perfect. $800 for the inconvenience."',
@@ -829,6 +830,7 @@ var MEETING_TEMPLATES = [
       { text: 'Accept — store the weapons', outcome: 'Illegal arms in your evidence locker. $800 richer, soul considerably poorer.', gold: 800, rep: -15, corruption: 20 },
       { text: 'Take the weapons for yourself', outcome: 'You confiscate the lot. {boss} is furious but can\'t report stolen contraband. +30 ammo.', gold: 0, rep: 5, corruption: 5 },
       { text: 'Arrest them for arms trafficking', outcome: 'Three armed criminals in your office. The arrest is harrowing but successful.', gold: 80, rep: 20, corruption: -12 },
+      { text: 'INTIMIDATE — "These guns AND your profits are mine."', outcome: 'You put your boot on the rifle case and lean in close. "Every shipment through this town, I get a cut. Or I bury you." {boss} swallows hard and agrees.', gold: 800, rep: -5, corruption: 25, intimidate: true },
     ] },
   { type: 'boss', name: 'The Protection Offer', bodyguards: 2,
     desc: '{boss} slides a cigar across the desk. "Sheriff, things are about to get... dangerous in this town. New gang moving in from the east. My boys can protect you. For a fee."',
@@ -836,6 +838,7 @@ var MEETING_TEMPLATES = [
       { text: 'Accept protection — pay $100/week', outcome: 'The eastern gang backs off when they see {boss}\'s men around. Expensive peace.', gold: -100, rep: -8, corruption: 12 },
       { text: 'Refuse — you don\'t need protection', outcome: '{boss} shrugs. "Your funeral, Sheriff." The eastern gang arrives next week. You handle it alone.', gold: 0, rep: 8, corruption: 0 },
       { text: 'Tell them to deal with the gang — prove their worth', outcome: '{boss} grins. Two gangs clash. The eastern gang is destroyed. {boss}\'s power doubles.', gold: 50, rep: -5, corruption: 8 },
+      { text: 'INTIMIDATE — "YOU pay ME for protection."', outcome: 'You crack your knuckles. "Here\'s the deal. Your boys report to me. You pay me $200 a week. Or I shut down every operation you have." {boss} starts sweating. Deal made.', gold: 200, rep: -5, corruption: 25, intimidate: true },
     ] },
   { type: 'boss', name: 'The Grand Heist', bodyguards: 3,
     desc: '{boss} unfurls blueprints of the railroad payroll office. "The big score, Sheriff. $10,000. We need you to be somewhere else that night. Your cut: $3,000."',
@@ -843,6 +846,7 @@ var MEETING_TEMPLATES = [
       { text: 'Accept — be conveniently elsewhere', outcome: 'The heist goes perfectly. $3,000 appears in your safe. The railroad never suspects you.', gold: 3000, rep: -25, corruption: 30 },
       { text: 'Demand half — $5,000', outcome: '{boss} whistles. "Greedy lawman." But pays. You\'re now their most expensive asset.', gold: 5000, rep: -35, corruption: 40 },
       { text: 'Alert the railroad and set a trap', outcome: 'Epic ambush. The gang walks into a wall of railroad security. {boss} barely escapes. You\'re a hero.', gold: 150, rep: 30, corruption: -20 },
+      { text: 'INTIMIDATE — "I take 80% or you rot in a cell."', outcome: 'You grab {boss} by the collar. "You pull this heist, I get $8,000. And next month you bring me another score. Refuse and your boys find out what the inside of my jail looks like." {boss} has no choice.', gold: 8000, rep: -10, corruption: 35, intimidate: true },
     ] },
   // Informant Meetings
   { type: 'informant', name: 'Tip About a Robbery', bodyguards: 0,
@@ -1202,6 +1206,23 @@ function enterSheriffOffice() {
     if (office.repHistory.length > 30) office.repHistory.shift();
   }
 
+  // Collect daily tribute from intimidated bosses
+  if (game._intimidatedBosses && game._intimidatedBosses.length > 0) {
+    var totalTribute = 0;
+    for (var ibi = 0; ibi < game._intimidatedBosses.length; ibi++) {
+      var ib = game._intimidatedBosses[ibi];
+      if (ib.lastPaidDay !== (game.dayCount || 1)) {
+        ib.lastPaidDay = game.dayCount || 1;
+        totalTribute += ib.tribute;
+      }
+    }
+    if (totalTribute > 0) {
+      game.gold = (game.gold || 0) + totalTribute;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + totalTribute;
+      showNotification('Boss tribute collected: +$' + totalTribute + ' from ' + game._intimidatedBosses.length + ' boss(es)');
+    }
+  }
+
   // Generate daily meeting queue
   if (office._lastMeetingDay !== (game.dayCount || 1)) {
     office._lastMeetingDay = game.dayCount || 1;
@@ -1317,11 +1338,10 @@ function enterSheriffOffice() {
     }
   }
 
-  // Reset new views
+  // Reset new views (but NOT prisonerEvent — it was just set above)
   office.readingBook = false;
   office.viewingWanted = false;
   office.viewingNotices = false;
-  office.prisonerEvent = null;
   office.playingSolitaire = false;
 }
 
@@ -3811,8 +3831,20 @@ function resolveMeeting(choiceIdx) {
     game.ammo = Math.min((game.ammo || 0) + 20, MAX_AMMO_CAP);
   }
 
+  // Intimidated boss becomes a recurring income source
+  if (choice.intimidate && m.bossName) {
+    if (!game._intimidatedBosses) game._intimidatedBosses = [];
+    var alreadyOwned = game._intimidatedBosses.some(function(b) { return b.name === m.bossName; });
+    if (!alreadyOwned) {
+      var tribute = rand(50, 150);
+      game._intimidatedBosses.push({ name: m.bossName, tribute: tribute, lastPaidDay: game.dayCount || 1 });
+      showNotification(m.bossName + ' now pays you $' + tribute + ' per day in tribute!');
+    }
+  }
+
   var rewardLine = '\n\n' + (earnedRep >= 0 ? '+' : '') + earnedRep + ' Rep  |  ' + (earnedGold >= 0 ? '+' : '') + '$' + Math.abs(earnedGold);
   if (choice.corruption) rewardLine += '  |  ' + (choice.corruption > 0 ? '+' : '') + choice.corruption + ' Corruption';
+  if (choice.intimidate) rewardLine += '  |  BOSS INTIMIDATED — daily tribute!';
   twReset(choice.outcome + rewardLine);
   addJournalEntry('Meeting: ' + m.name + '. ' + (earnedRep >= 0 ? '+' : '') + earnedRep + ' Rep');
   office.currentMeeting = null;
@@ -4725,14 +4757,35 @@ function resolvePrisonerEvent(choice) {
       showNotification('You subdued ' + evt.prisoner.name + '! +5 Rep');
       addJournalEntry('Stopped escape attempt by ' + evt.prisoner.name);
     } else {
-      // Let go
+      // Let go — prisoner escapes into the world
       game.reputation = clamp((game.reputation || 50) - 3, 0, REPUTATION_MAX);
       var idx = office.prisoners.indexOf(evt.prisoner);
       if (idx >= 0) {
         office.prisonerLog.push({ name: evt.prisoner.name, day: game.dayCount || 1, fate: 'Escaped' });
         office.prisoners.splice(idx, 1);
       }
-      showNotification(evt.prisoner.name + ' escaped. -3 Rep');
+      // Spawn escaped prisoner NPC walking away from the sheriff office
+      if (typeof createNPC === 'function' && typeof NPC_TYPES !== 'undefined') {
+        var sheriffB2 = null;
+        for (var sbi = 0; sbi < game.buildings.length; sbi++) {
+          if (game.buildings[sbi].type === BUILDING_TYPES.SHERIFF) { sheriffB2 = game.buildings[sbi]; break; }
+        }
+        var spawnX = sheriffB2 ? sheriffB2.doorX + rand(-3, 3) : rand(10, 20);
+        var spawnY = sheriffB2 ? sheriffB2.doorY + 2 : rand(10, 20);
+        var escapee = createNPC(
+          game.npcs.length, NPC_TYPES.OUTLAW,
+          evt.prisoner.name + ' (Escapee)',
+          spawnX, spawnY, null
+        );
+        escapee.hostile = false;
+        escapee.fleeing = true;
+        escapee._escapee = true;
+        // Set flee target to map edge
+        escapee._fleeTargetX = (Math.random() < 0.5 ? 2 : MAP_W - 2) * TILE;
+        escapee._fleeTargetY = (Math.random() < 0.5 ? 2 : MAP_H - 2) * TILE;
+        game.npcs.push(escapee);
+      }
+      showNotification(evt.prisoner.name + ' escaped! They\'re fleeing from the jail!');
     }
   } else if (evt.type === 'bribe') {
     if (choice === 0) {
