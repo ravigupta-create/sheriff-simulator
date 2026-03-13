@@ -7639,6 +7639,14 @@ function gameLoop(timestamp) {
       if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
       if (typeof renderCorruptionOverlay === 'function') renderCorruptionOverlay();
       if (typeof renderFeaturesOverlay === 'function') renderFeaturesOverlay();
+      // Allow any key to dismiss tutorial
+      if (consumeKey('KeyE') || consumeKey('Space') || consumeKey('Enter') || consumeKey('Escape') ||
+          consumeKey('Digit1') || consumeKey('Digit2') || consumeKey('Digit3')) {
+        var tutOverlay = document.getElementById('tutorial-overlay');
+        if (tutOverlay) tutOverlay.classList.add('hidden');
+        game.state = _preTutorialState || 'playing';
+        _preTutorialState = null;
+      }
       break;
 
     case 'gameover':

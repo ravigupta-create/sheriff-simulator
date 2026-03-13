@@ -1521,12 +1521,21 @@ function updateOffice(dt) {
   // ── SHOWING OUTCOME ──
   if (office.showingOutcome) {
     twUpdate(dt);
-    if (typewriter.done && (consumeKey('KeyE') || consumeKey('Space') || consumeKey('Enter'))) {
+    // Allow skipping typewriter
+    if (!typewriter.done && (consumeKey('Space') || consumeKey('Enter') || consumeKey('KeyE'))) {
+      typewriter.revealed = typewriter.text.length;
+      typewriter.done = true;
+    }
+    // Dismiss outcome when done
+    if (typewriter.done && (consumeKey('KeyE') || consumeKey('Space') || consumeKey('Enter') || consumeKey('Escape'))) {
       office.showingOutcome = false;
       office.currentCase = null;
+      office.currentMeeting = null;
       office.caseChoiceVisible = false;
-      office.sittingAtDesk = true;
+      office.meetingChoiceVisible = false;
+      office.sittingAtDesk = false;
       office.waitingForCase = false;
+      office.deskMode = 'main';
     }
     return;
   }
