@@ -15,8 +15,8 @@ var office = {
   active: false,
   sittingAtDesk: false,
   selectedZone: 0,
-  zones: ['desk', 'caseBoard', 'gunRack', 'jailCells', 'exit'],
-  zoneLabels: ['Desk [1]', 'Case Board [2]', 'Gun Rack [3]', 'Jail Cells [4]', 'Exit [ESC]'],
+  zones: ['desk', 'caseBoard', 'gunRack', 'jailCells', 'bed', 'records', 'wanted', 'notices', 'exit'],
+  zoneLabels: ['Desk [1]', 'Case Board [2]', 'Gun Rack [3]', 'Jail Cells [4]', 'Bed [5]', 'Records [6]', 'Wanted Board [7]', 'Notice Board [8]', 'Exit [ESC]'],
 
   // Case system
   activeCases: [],
@@ -45,6 +45,8 @@ var office = {
     gunRack: 0,
     jailCells: 0,
     decor: 0,
+    bed: 0,
+    security: 0,
   },
   upgradeMenuOpen: false,
   selectedUpgrade: 0,
@@ -64,6 +66,104 @@ var office = {
 
   // Ammo tracking
   _ammoGivenDay: -1,
+
+  // Bed / Sleep
+  viewingBed: false,
+  sleeping: false,
+  sleepTimer: 0,
+  sleepHours: 6,
+  _lastSleepDay: -1,
+  dreamText: '',
+  nightmareActive: false,
+
+  // Desk sub-menu
+  deskMode: 'main', // 'main','meeting','coffee','letters','telegraph','drawers'
+  meetingQueue: [],
+  currentMeeting: null,
+  meetingChoiceVisible: false,
+  _lastMeetingDay: -1,
+  _coffeeBrewedDay: -1,
+  _drawerSearchedDay: -1,
+  telegrams: [],
+  letters: [],
+
+  // Records / Stats
+  viewingStats: false,
+  statsTab: 0,
+  repHistory: [],
+  prisonerLog: [],
+
+  // Deputies
+  deputies: [],
+  viewingDeputies: false,
+  selectedDeputy: 0,
+
+  // Office events
+  officeEvent: null,
+  _lastEventDay: -1,
+  officeDog: false,
+  dogName: '',
+
+  // Trophies
+  trophies: [],
+
+  // Mini-games
+  playingDarts: false,
+  dartPhase: 0,
+  dartPower: 0,
+  dartAngle: 0,
+  dartScore: 0,
+  dartRounds: 0,
+  targetPractice: false,
+  targetPhase: 0,
+  targetTimer: 0,
+  targetScore: 0,
+
+  // Crafting
+  craftingOpen: false,
+  _badgePolished: false,
+  _polishDay: -1,
+  pendingRequisitions: [],
+
+  // Ambient
+  flies: [],
+  smokeParticles: [],
+  musicBoxOn: false,
+
+  // Bookshelf / Lore
+  readingBook: false,
+  selectedBook: 0,
+  bookRead: {},  // track which books were read
+
+  // Trophy system
+  trophyCheckDone: false,
+
+  // Wanted poster board
+  viewingWanted: false,
+  wantedPosters: [],
+
+  // Prisoner events
+  prisonerEventTimer: 0,
+  prisonerEvent: null,
+
+  // Solitaire
+  playingSolitaire: false,
+  solitaireCards: [],
+  solitaireScore: 0,
+  solitaireFlipped: 0,
+  solitaireMatches: 0,
+
+  // Office safe
+  safeGold: 0,
+  _safeOpened: false,
+
+  // Notice board
+  viewingNotices: false,
+  notices: [],
+
+  // Spittoon mini-game
+  spittoonStreak: 0,
+  _spittoonDay: -1,
 };
 
 // ─────────────────────────────────────────────
@@ -96,6 +196,20 @@ var OFFICE_UPGRADES = [
       { name: 'Bare Floors', desc: 'Dusty wooden floor.', cost: 0 },
       { name: 'Carpet & Curtains', desc: '+5% case rep gains.', cost: 60 },
       { name: 'Luxurious Interior', desc: '+15% rep gains from cases.', cost: 180 },
+    ]
+  },
+  {
+    key: 'bed', name: 'Bed', levels: [
+      { name: 'Bedroll', desc: 'A thin bedroll on the floor.', cost: 0 },
+      { name: 'Iron Cot', desc: 'Restores +3 HP. Fewer nightmares.', cost: 80 },
+      { name: 'Four-Poster Bed', desc: 'Full HP restore. Dream clues.', cost: 250 },
+    ]
+  },
+  {
+    key: 'security', name: 'Office Security', levels: [
+      { name: 'Wooden Door', desc: 'A simple wooden door.', cost: 0 },
+      { name: 'Iron Door + Bars', desc: 'Fewer break-ins. +2 jail capacity.', cost: 150 },
+      { name: 'Reinforced Vault', desc: 'No break-ins. Safe stores gold.', cost: 350 },
     ]
   },
 ];
@@ -509,6 +623,312 @@ var VISITOR_NAMES = [
   'One-Eyed Pete', 'Deacon Frost', 'Sgt. Wheeler', 'Martha Clearwater',
   'Chinese Charlie', 'Senora Delgado', 'Railroad Jim', 'Crazy Ethel',
   'Judge Parker', 'Blacksmith Brody', 'Trapper Hays', 'Nell from the Saloon',
+  'Apache Joe', 'Fancy Dan', 'Grizzled Gus', 'Sister Mary', 'Tinker Tom',
+  'Peg-Leg Murphy', 'Prairie Rose', 'Silent Sam', 'Doc Patches', 'Whistle Willie',
+];
+
+// ─────────────────────────────────────────────
+// §4B  NEW CASE TEMPLATES (12 more)
+// ─────────────────────────────────────────────
+var NEW_CASE_TEMPLATES = [
+  // ── ARSON (2) ──
+  { name: 'The Barn Burner', category: 'arson', difficulty: 3,
+    description: 'Three barns burned in two nights. Ranchers are arming themselves. A recently fired ranch hand was seen buying kerosene, but the local insurance agent has been pushing policies hard.',
+    choices: [
+      { text: 'Arrest the fired hand immediately', outcome: 'He confesses under pressure but reveals the insurance agent hired him. Both arrested. Conspiracy exposed.', gold: 55, rep: 18, arrest: true },
+      { text: 'Investigate the insurance angle', outcome: 'Paper trail leads straight to the agent. He burned barns to sell policies. Brilliant detective work.', gold: 65, rep: 22, arrest: true },
+      { text: 'Set a night watch and catch them red-handed', outcome: 'You catch the hand mid-torch at the fourth barn. Clean collar, no doubt about guilt.', gold: 45, rep: 15, arrest: true },
+    ] },
+  { name: 'Fire at the Schoolhouse', category: 'arson', difficulty: 4,
+    description: 'The schoolhouse is ablaze at midnight. No students inside, thank God. But the teacher\'s personal library — her life\'s work — is destroyed. She suspects the father of a boy she disciplined.',
+    choices: [
+      { text: 'Confront the father', outcome: 'He breaks down crying. Did it in a drunken rage. Remorse is genuine. The teacher forgives him, barely.', gold: 25, rep: 12, arrest: true },
+      { text: 'Investigate the ashes for clues', outcome: 'Find a whiskey bottle with a rag — classic firebomb. Fingerprints in soot. Father identified.', gold: 40, rep: 16, arrest: true },
+      { text: 'Organize rebuilding, investigate later', outcome: 'Community rallies. School rebuilt in a week. Arsonist never found but the town\'s spirit is unbroken.', gold: 15, rep: 10, arrest: false },
+    ] },
+  // ── SMUGGLING (2) ──
+  { name: 'The Whiskey Run', category: 'smuggling', difficulty: 3,
+    description: 'Untaxed whiskey flooding the saloons, undercutting the legitimate distributor. Wagons come in at night from the hills. The moonshine is good but the tax revenue is vanishing.',
+    choices: [
+      { text: 'Raid the still in the hills', outcome: 'Find a massive operation run by three brothers. They fight back but you prevail. Barrels of moonshine seized.', gold: 60, rep: 14, arrest: true },
+      { text: 'Tax the moonshine — make it legal', outcome: 'Pragmatic solution. Brothers pay tax, town gets revenue, saloons get cheap whiskey. Everyone wins.', gold: 45, rep: 8, arrest: false },
+      { text: 'Confiscate and sell it yourself', outcome: 'You become the middleman. Profitable but corrupt. The brothers owe you "favors."', gold: 120, rep: -15, arrest: false },
+    ] },
+  { name: 'Opium Den Discovery', category: 'smuggling', difficulty: 5,
+    description: 'A hidden room beneath the laundry is an opium den. Twelve addicts, some prominent citizens. The owner claims it\'s "medicine." Federal law is murky. Morality is not.',
+    choices: [
+      { text: 'Shut it down and arrest the owner', outcome: 'Den closed. Owner jailed. Addicts left without help, some turn to worse. But the law is clear.', gold: 40, rep: 15, arrest: true },
+      { text: 'Close it quietly — protect reputations', outcome: 'Prominent citizens grateful. Owner relocated. Addiction continues in the shadows.', gold: 80, rep: -5, arrest: false },
+      { text: 'Set up a treatment program', outcome: 'Radical idea. Doc helps addicts recover. Owner fined, not jailed. Progressive justice.', gold: 20, rep: 20, arrest: false },
+    ] },
+  // ── KIDNAPPING (2) ──
+  { name: 'The Banker\'s Daughter', category: 'kidnapping', difficulty: 4,
+    description: 'Banker\'s daughter taken from her bedroom. Ransom note demands $5,000 in the canyon by midnight. Banker can\'t pay. You have 8 hours.',
+    choices: [
+      { text: 'Ride to the canyon with fake money', outcome: 'The switch works. Kidnappers grab the bag, you grab the girl. Shootout, but she\'s safe.', gold: 70, rep: 25, arrest: true },
+      { text: 'Track the kidnappers to their hideout', outcome: 'Follow hoof prints. Find a cabin. Rescue the girl before deadline. No shots fired.', gold: 55, rep: 22, arrest: true },
+      { text: 'Negotiate down the ransom', outcome: 'Talk them to $1,000. Banker pays. Girl returned. Kidnappers escape but she lives.', gold: 30, rep: 8, arrest: false },
+    ] },
+  { name: 'The Missing Preacher', category: 'kidnapping', difficulty: 3,
+    description: 'Reverend vanished after evening service. His horse found tied to a tree outside town. Boot prints suggest he was dragged. A note nailed to the church door: "He knows what he did."',
+    choices: [
+      { text: 'Investigate the reverend\'s past', outcome: 'He witnessed a murder years ago. The killer has returned. Find them in a homestead, reverend tied up but alive.', gold: 50, rep: 18, arrest: true },
+      { text: 'Organize a search posse immediately', outcome: 'Posse finds reverend in an abandoned mine. Kidnapper fled but reverend is shaken but alive.', gold: 35, rep: 14, arrest: false },
+      { text: 'Follow the boot prints alone', outcome: 'Brave and effective. Confront the kidnapper one-on-one. He surrenders when he sees the badge.', gold: 45, rep: 20, arrest: true },
+    ] },
+  // ── FRAUD (2) ──
+  { name: 'Snake Oil Salesman', category: 'fraud', difficulty: 2,
+    description: 'A traveling salesman selling "miracle elixir" that cured nothing and made three people sick. He\'s packing his wagon to leave at dawn. Sold $200 worth of colored water.',
+    choices: [
+      { text: 'Arrest him before he leaves', outcome: 'Catch him hitching his horse. Money mostly recovered. Town folk get refunds.', gold: 35, rep: 12, arrest: true },
+      { text: 'Run him out of town at gunpoint', outcome: 'He leaves fast. No refunds but no more victims. Quick and effective.', gold: 10, rep: 6, arrest: false },
+      { text: 'Buy the "elixir" recipe for yourself', outcome: 'It\'s colored water with pepper. You now sell it at a markup. Profitable but shameless.', gold: 80, rep: -12, arrest: false },
+    ] },
+  { name: 'The Fake Marshal', category: 'fraud', difficulty: 4,
+    description: 'A man with a convincing badge has been collecting "federal taxes" from businesses. Claims Washington sent him. His papers look real. The businesses paid $500 total.',
+    choices: [
+      { text: 'Telegraph Washington to verify', outcome: 'No such marshal exists. Arrest the imposter. Most money recovered. Federal commendation.', gold: 60, rep: 22, arrest: true },
+      { text: 'Confront him directly with your suspicions', outcome: 'He draws on you! Quick shootout. He\'s wounded and arrested. Badge was stolen from a dead marshal.', gold: 50, rep: 18, arrest: true },
+      { text: 'Let him continue — maybe he IS real', outcome: 'He\'s not. Skips town with the money. You look incompetent.', gold: 0, rep: -15, arrest: false },
+    ] },
+  // ── NATIVE AFFAIRS (2) ──
+  { name: 'The Broken Treaty', category: 'native', difficulty: 4,
+    description: 'Settlers building on treaty land. The tribe sends a delegation — calm but firm. Settlers cite a new territorial law. Both sides have legitimate claims. Tensions rising daily.',
+    choices: [
+      { text: 'Enforce the treaty — remove settlers', outcome: 'Settlers furious but law is law. Tribe respects your word. Federal authorities back you up.', gold: 20, rep: 18, arrest: false },
+      { text: 'Negotiate a compromise — shared land', outcome: 'Both sides grudgingly accept. Not perfect but blood is avoided. Solomon would be proud.', gold: 30, rep: 15, arrest: false },
+      { text: 'Side with settlers — progress marches on', outcome: 'Tribe withdraws in bitter silence. Raids begin two weeks later. Blood on your hands.', gold: 50, rep: -20, arrest: false },
+    ] },
+  { name: 'Sacred Ground Dispute', category: 'native', difficulty: 3,
+    description: 'Miners discovered gold on land the tribe considers sacred burial ground. Mining company wants to dig. Tribe threatens war. Both sides armed.',
+    choices: [
+      { text: 'Declare the land protected', outcome: 'Mining company pulls out. Tribe grateful. Company lobbies against you in territorial capital.', gold: 10, rep: 20, arrest: false },
+      { text: 'Broker a deal — mine the edges only', outcome: 'Careful negotiation. Sacred center untouched, gold extracted from periphery. Tense peace holds.', gold: 40, rep: 12, arrest: false },
+      { text: 'Let the mining company proceed', outcome: 'Gold flows but so does blood. Tribe attacks miners. You\'ve started a war.', gold: 80, rep: -25, arrest: false },
+    ] },
+];
+// Append new cases to main array
+for (var _nci = 0; _nci < NEW_CASE_TEMPLATES.length; _nci++) {
+  CASE_TEMPLATES.push(NEW_CASE_TEMPLATES[_nci]);
+}
+
+// ─────────────────────────────────────────────
+// §4C  MEETING TEMPLATES
+// ─────────────────────────────────────────────
+var BOSS_NAMES = [
+  'Don Vittorio', 'El Diablo', 'Madame Noir', 'The Kingpin',
+  'Black Jack Barnes', 'Iron Fist Fontaine', 'Red Widow', 'The Colonel',
+];
+
+var MEETING_TEMPLATES = [
+  // Crime Boss Meetings (show bodyguards)
+  { type: 'boss', name: 'Territory Negotiation', bodyguards: 2,
+    desc: '{boss} arrives flanked by armed men. "Sheriff, let\'s discuss territory. My people stay south of Main Street, your law stays north. Everyone prospers."',
+    choices: [
+      { text: 'Accept the deal — divided town', outcome: 'An uneasy truce. Crime drops on your side but flourishes on theirs. You sleep easier. The town doesn\'t.', gold: 200, rep: -10, corruption: 15 },
+      { text: 'Counter-offer — you get 20% of their take', outcome: '{boss} smiles. "A businessman." Monthly payments begin. You\'re on the payroll now.', gold: 400, rep: -18, corruption: 22 },
+      { text: 'Arrest everyone in this room', outcome: 'Bold move! A tense standoff. Bodyguards think twice. {boss} surrenders. Legendary courage.', gold: 60, rep: 25, corruption: -15 },
+    ] },
+  { type: 'boss', name: 'Weapons Deal', bodyguards: 3,
+    desc: '{boss} opens a case of gleaming new rifles. "Army surplus. Fell off a wagon. I need storage — your evidence locker would be perfect. $800 for the inconvenience."',
+    choices: [
+      { text: 'Accept — store the weapons', outcome: 'Illegal arms in your evidence locker. $800 richer, soul considerably poorer.', gold: 800, rep: -15, corruption: 20 },
+      { text: 'Take the weapons for yourself', outcome: 'You confiscate the lot. {boss} is furious but can\'t report stolen contraband. +30 ammo.', gold: 0, rep: 5, corruption: 5 },
+      { text: 'Arrest them for arms trafficking', outcome: 'Three armed criminals in your office. The arrest is harrowing but successful.', gold: 80, rep: 20, corruption: -12 },
+    ] },
+  { type: 'boss', name: 'The Protection Offer', bodyguards: 2,
+    desc: '{boss} slides a cigar across the desk. "Sheriff, things are about to get... dangerous in this town. New gang moving in from the east. My boys can protect you. For a fee."',
+    choices: [
+      { text: 'Accept protection — pay $100/week', outcome: 'The eastern gang backs off when they see {boss}\'s men around. Expensive peace.', gold: -100, rep: -8, corruption: 12 },
+      { text: 'Refuse — you don\'t need protection', outcome: '{boss} shrugs. "Your funeral, Sheriff." The eastern gang arrives next week. You handle it alone.', gold: 0, rep: 8, corruption: 0 },
+      { text: 'Tell them to deal with the gang — prove their worth', outcome: '{boss} grins. Two gangs clash. The eastern gang is destroyed. {boss}\'s power doubles.', gold: 50, rep: -5, corruption: 8 },
+    ] },
+  { type: 'boss', name: 'The Grand Heist', bodyguards: 3,
+    desc: '{boss} unfurls blueprints of the railroad payroll office. "The big score, Sheriff. $10,000. We need you to be somewhere else that night. Your cut: $3,000."',
+    choices: [
+      { text: 'Accept — be conveniently elsewhere', outcome: 'The heist goes perfectly. $3,000 appears in your safe. The railroad never suspects you.', gold: 3000, rep: -25, corruption: 30 },
+      { text: 'Demand half — $5,000', outcome: '{boss} whistles. "Greedy lawman." But pays. You\'re now their most expensive asset.', gold: 5000, rep: -35, corruption: 40 },
+      { text: 'Alert the railroad and set a trap', outcome: 'Epic ambush. The gang walks into a wall of railroad security. {boss} barely escapes. You\'re a hero.', gold: 150, rep: 30, corruption: -20 },
+    ] },
+  // Informant Meetings
+  { type: 'informant', name: 'Tip About a Robbery', bodyguards: 0,
+    desc: 'A nervous man in a hat pulled low whispers: "There\'s gonna be a hit on the general store tonight. Three men, armed. I\'m telling you because they cheated me out of my cut."',
+    choices: [
+      { text: 'Stake out the store tonight', outcome: 'You catch all three mid-robbery. Clean arrests. The informant disappears into the night.', gold: 45, rep: 15, corruption: 0 },
+      { text: 'Pay him for more information', outcome: 'For $20 he gives names, hideout location, and the fence they use. Goldmine of intel.', gold: -20, rep: 8, corruption: 0 },
+      { text: 'Ignore it — could be a setup', outcome: 'It wasn\'t. Store robbed clean. Owner blames you. Should have listened.', gold: 0, rep: -10, corruption: 0 },
+    ] },
+  // Town Council Meeting
+  { type: 'council', name: 'Budget Review', bodyguards: 0,
+    desc: 'The town council convenes in your office. Mayor speaks: "Sheriff, we need to discuss your budget. Crime is down but so are our coffers. Justify your spending."',
+    choices: [
+      { text: 'Present your case statistics professionally', outcome: 'Council impressed by your record-keeping. Budget maintained. Even a small raise. +$50.', gold: 50, rep: 10, corruption: 0 },
+      { text: 'Threaten to resign if they cut funding', outcome: 'Risky gambit. Council backs down — they can\'t afford to lose you. But resentment brews.', gold: 30, rep: -3, corruption: 0 },
+      { text: 'Accept the cuts gracefully', outcome: 'Budget reduced but council respects your selflessness. Tighter belt, warmer hearts.', gold: -30, rep: 12, corruption: 0 },
+    ] },
+  // Bounty Hunter Visit
+  { type: 'bounty_hunter', name: 'The Hunter\'s Bargain', bodyguards: 0,
+    desc: 'A dusty bounty hunter drops a stack of wanted posters on your desk. "I\'ve got three of these men in a wagon outside. $200 each or I take them to the next county."',
+    choices: [
+      { text: 'Pay $600 for all three prisoners', outcome: 'Three dangerous criminals behind bars. Your jail fills up but the streets are safer.', gold: -600, rep: 15, corruption: 0 },
+      { text: 'Negotiate — $150 each', outcome: 'Hunter grumbles but accepts. $450 for three prisoners. Good deal.', gold: -450, rep: 12, corruption: 0 },
+      { text: 'Tell him to move along', outcome: 'Hunter takes them to the next county. Their problem now. But your bounty board stays full.', gold: 0, rep: -3, corruption: 0 },
+    ] },
+  // Journalist Interview
+  { type: 'journalist', name: 'Newspaper Interview', bodyguards: 0,
+    desc: 'A reporter from the Frontier Gazette adjusts her spectacles. "Sheriff, our readers want to know: how do you feel about the state of law and order in this town? On the record."',
+    choices: [
+      { text: 'Give an honest, humble interview', outcome: 'Article paints you as dedicated and competent. Reputation boosted across the territory.', gold: 10, rep: 15, corruption: 0 },
+      { text: 'Boast about your achievements', outcome: 'Article calls you "the greatest sheriff this side of the Pecos." Ego stroked, some eye-rolls.', gold: 5, rep: 8, corruption: 0 },
+      { text: 'Refuse the interview — no comment', outcome: 'Article speculates wildly. "What is the sheriff hiding?" Rumors spread.', gold: 0, rep: -8, corruption: 0 },
+    ] },
+  // Deputy Report
+  { type: 'deputy_report', name: 'Patrol Report', bodyguards: 0,
+    desc: 'Your deputy returns from patrol, hat dusty and eyes tired. "Boss, I found tracks heading north. At least six riders. They\'ve set up camp in the old silver mine. Could be the Dalton gang."',
+    choices: [
+      { text: 'Ride out with a posse at dawn', outcome: 'Dawn raid on the mine. Dalton gang caught sleeping. Six arrests, zero casualties. Textbook.', gold: 80, rep: 22, corruption: 0 },
+      { text: 'Send word to the Army', outcome: 'Army arrives in three days. Gang has moved by then. Professional but slow.', gold: 20, rep: 5, corruption: 0 },
+      { text: 'Ignore it — outside our jurisdiction', outcome: 'Gang raids the town two days later. Your inaction had consequences.', gold: 0, rep: -15, corruption: 0 },
+    ] },
+  // Merchant Deal
+  { type: 'merchant', name: 'Arms Dealer Offer', bodyguards: 0,
+    desc: 'A well-dressed merchant opens a velvet-lined case. "Finest firearms from back East. I\'ll give you a lawman\'s discount — 40% off. These guns will keep your town safe."',
+    choices: [
+      { text: 'Buy a batch for the office (+20 ammo)', outcome: 'Quality weapons at a fair price. Your armory is well-stocked.', gold: -60, rep: 3, corruption: 0 },
+      { text: 'Buy and resell at markup', outcome: 'Entrepreneurial spirit! You make $40 profit. Merchant respects the hustle.', gold: 40, rep: -2, corruption: 3 },
+      { text: 'Inspect for stolen goods', outcome: 'Serial numbers filed off two pistols. Merchant arrested for trafficking. Good eye, Sheriff.', gold: 30, rep: 12, corruption: 0 },
+    ] },
+  // Citizen Petitions
+  { type: 'petition', name: 'Build a School', bodyguards: 0,
+    desc: 'A group of mothers arrives at your desk. "Sheriff, this town needs a proper school. Our children deserve better than a barn. We need your support at the council meeting."',
+    choices: [
+      { text: 'Champion the cause — attend the meeting', outcome: 'Your endorsement sways the council. School funded! Children cheer. Parents grateful.', gold: -20, rep: 18, corruption: 0 },
+      { text: 'Promise to help — then forget about it', outcome: 'Empty promises remembered at election time. Trust eroded.', gold: 0, rep: -8, corruption: 0 },
+      { text: 'Tell them it\'s not your jurisdiction', outcome: 'Technically true but heartless. The mothers leave disappointed.', gold: 0, rep: -5, corruption: 0 },
+    ] },
+  { type: 'petition', name: 'Clean Up Main Street', bodyguards: 0,
+    desc: 'Business owners petition: "Sheriff, the drunks sleeping on Main Street are scaring customers. The horse manure is ankle-deep. We need law and order AND cleanliness."',
+    choices: [
+      { text: 'Organize a cleanup crew', outcome: 'Streets gleaming. Business booms. Small cost, big impact.', gold: -15, rep: 12, corruption: 0 },
+      { text: 'Arrest the public drunks', outcome: 'Jail fills with harmless drunks. Real criminals get less attention. Questionable priorities.', gold: 10, rep: 3, corruption: 0 },
+      { text: 'Tell them to hire a street sweeper', outcome: 'Passing the buck. But they do hire one. Problem solved without your help.', gold: 0, rep: -3, corruption: 0 },
+    ] },
+];
+
+// ─────────────────────────────────────────────
+// §4D  DREAM TEMPLATES
+// ─────────────────────────────────────────────
+var DREAM_TEMPLATES = [
+  'You dream of wide-open plains stretching forever. A lone eagle circles overhead. Peace fills your chest.',
+  'In the dream, your father hands you his badge. "Protect them," he says. "Even when they don\'t deserve it."',
+  'You dream of a poker game with Death himself. He folds. You wake with a gold coin in your hand... wait, that\'s just a button.',
+  'A vast desert. A single cactus blooms with golden flowers. You reach for one and it turns to dust.',
+  'You dream of the town — but it\'s empty. Wind blows through open doors. Tumbleweeds roll down Main Street. Something terrible happened here.',
+  'In the dream, you ride a horse made of lightning across a purple sky. It feels like freedom. You don\'t want to wake up.',
+  'You dream of a woman singing in the saloon. Her voice is so beautiful that the clock stops. Time stands still.',
+  'The dream is simple: you\'re fishing by a creek. No badge. No gun. Just water and sky. The fish aren\'t biting. You don\'t care.',
+  'You dream you\'re defending the office against a hundred outlaws. Your guns never run out. Dawn breaks and they\'re all gone.',
+  'In the dream, a coyote speaks to you. "The man with the scar knows the truth." You wake trying to remember what truth.',
+  'You dream of gold — mountains of it — but every coin you touch turns to sand. Greed is a desert.',
+  'The dream is a courtroom. You\'re the accused. The judge is your reflection. The verdict... you wake before it comes.',
+];
+
+var NIGHTMARE_TEMPLATES = [
+  'You wake in a cold sweat. The faces of everyone you\'ve wronged stared from the darkness.',
+  'A nightmare — the jail cells were empty and the outlaws were coming. You couldn\'t find your gun.',
+  'You dreamed the town burned and you could only watch. The screams still echo.',
+  'Nightmare: you looked in the mirror and saw a wanted poster with YOUR face. The bounty was $1,000.',
+  'You dreamed you were buried alive. The dirt tasted like guilt.',
+  'The nightmare showed you twenty years from now. The badge was tarnished. The town was gone.',
+];
+
+// ─────────────────────────────────────────────
+// §4E  OFFICE EVENT TEMPLATES
+// ─────────────────────────────────────────────
+var OFFICE_EVENT_TEMPLATES = [
+  { name: 'Rat Infestation', desc: 'Rats are everywhere! Chewing on case files and scurrying across your desk. Something must be done.',
+    choices: [
+      { text: 'Get a cat from the general store', outcome: 'A scrawny tabby takes up residence. Rats gone within a week. New office pet.', gold: -5, rep: 2 },
+      { text: 'Set traps and clean the office', outcome: 'Messy work but effective. Office smells of cheese for days.', gold: -3, rep: 1 },
+      { text: 'Ignore it — they were here first', outcome: 'Rats multiply. Case files chewed. Evidence contaminated. Not your finest moment.', gold: 0, rep: -5 },
+    ] },
+  { name: 'Stray Dog', desc: 'A mangy but friendly dog wanders into the office, tail wagging. It curls up by the stove and refuses to leave.',
+    choices: [
+      { text: 'Adopt it — every sheriff needs a dog', outcome: 'You name him and he becomes the office mascot. Prisoners like him. Visitors smile.', gold: -5, rep: 5, dog: true },
+      { text: 'Feed it but don\'t keep it', outcome: 'The dog eats, wags its tail, and leaves. You feel oddly lonely.', gold: -2, rep: 0 },
+      { text: 'Shoo it away', outcome: 'The dog whimpers and slinks out. Even the prisoners look disappointed.', gold: 0, rep: -3 },
+    ] },
+  { name: 'Broken Window', desc: 'You arrive to find your office window shattered. A rock with a note: "LEAVE TOWN OR ELSE." Threatening, but cowardly.',
+    choices: [
+      { text: 'Investigate — find who threw it', outcome: 'Fingerprints on the rock. A recently released prisoner. Re-arrested for threatening an officer.', gold: 10, rep: 8 },
+      { text: 'Board it up and move on', outcome: 'Practical but the threat lingers. Town wonders if you\'re scared.', gold: -5, rep: -2 },
+      { text: 'Display the note publicly — show no fear', outcome: '"Come get me." Bold move. The town respects your courage. The coward never tries again.', gold: 0, rep: 12 },
+    ] },
+  { name: 'Anonymous Tip', desc: 'An envelope slipped under the door. Inside: a map marking an outlaw hideout in the hills, with "ACT FAST" scrawled on it.',
+    choices: [
+      { text: 'Ride out immediately', outcome: 'The tip is good! Find a cache of stolen goods worth $200. The anonymous helper is never identified.', gold: 200, rep: 10 },
+      { text: 'Set up surveillance first', outcome: 'Patient approach pays off. You catch the outlaws returning AND find the cache. Double win.', gold: 250, rep: 15 },
+      { text: 'Ignore it — probably a trap', outcome: 'It wasn\'t a trap. The outlaws move the cache. Opportunity wasted.', gold: 0, rep: -5 },
+    ] },
+  { name: 'Flood Warning', desc: 'The creek is rising fast. Rain hasn\'t stopped in two days. The bridge might not hold. Your office is on high ground but the saloon district isn\'t.',
+    choices: [
+      { text: 'Organize an evacuation of low ground', outcome: 'Everyone moved to safety before the flood hits. Property damaged but no lives lost. Leadership.', gold: -10, rep: 20 },
+      { text: 'Reinforce the bridge', outcome: 'Sandbagging works! Bridge holds. Town commerce continues. Exhausting but effective.', gold: -15, rep: 12 },
+      { text: 'Wait and see — might not be that bad', outcome: 'It was that bad. Saloon flooded. Three horses drowned. You should have acted.', gold: 0, rep: -15 },
+    ] },
+  { name: 'Town Drunk Incident', desc: 'Old Jeb stumbled into your office, knocked over the filing cabinet, and passed out on the floor. He\'s snoring loudly.',
+    choices: [
+      { text: 'Let him sleep it off in a cell', outcome: 'Jeb wakes up grateful. Brings you apple pie next week. Kindness remembered.', gold: 0, rep: 5 },
+      { text: 'Carry him to Doc\'s office', outcome: 'Doc checks him out. Jeb has a bad liver. Doc starts treating him. You might have saved his life.', gold: -5, rep: 8 },
+      { text: 'Throw him out', outcome: 'Jeb stumbles into a horse trough. Whole town sees. You look heartless.', gold: 0, rep: -5 },
+    ] },
+  { name: 'Federal Inspector', desc: 'A stern man in a federal suit surveys your office. "I\'m Inspector Hayes. I\'m here to evaluate your operation. Show me your records."',
+    choices: [
+      { text: 'Present everything transparently', outcome: 'Inspector impressed with your thoroughness. Commendation letter sent to the governor.', gold: 50, rep: 15 },
+      { text: 'Show him the highlights, hide the problems', outcome: 'He finds the problems anyway. "Integrity matters, Sheriff." Stern warning issued.', gold: 0, rep: -8 },
+      { text: 'Refuse — your office, your rules', outcome: 'Inspector threatens to revoke your commission. You back down. Embarrassing.', gold: 0, rep: -12 },
+    ] },
+  { name: 'Office Fire', desc: 'The stove pipe burst! Flames lick the back wall. Smoke fills the room. Act fast or lose everything!',
+    choices: [
+      { text: 'Save the case files first', outcome: 'Files saved but the gun rack takes damage. One weapon lost. But the records survive.', gold: -20, rep: 5 },
+      { text: 'Put out the fire immediately', outcome: 'Quick thinking with a bucket brigade. Minimal damage. Your desk is singed but intact.', gold: -10, rep: 8 },
+      { text: 'Save the weapons and ammo', outcome: 'Guns saved but half your case files are ash. Completed cases lost from record.', gold: 0, rep: -5 },
+    ] },
+];
+
+// ─────────────────────────────────────────────
+// §4F  DEPUTY NAMES & TELEGRAM TEMPLATES
+// ─────────────────────────────────────────────
+var DEPUTY_NAMES = [
+  'Jake Cooper', 'Billy Red Cloud', 'Tom Fitzgerald', 'Carlos Mendez',
+  'Henry "Hank" Mitchell', 'Elijah Stone', 'Young Sam Porter', 'Dutch Williams',
+  'Frank "Deadeye" Ross', 'Patrick O\'Brien', 'Isaiah Freeman', 'Cody Barnes',
+];
+
+var DOG_NAMES = ['Bandit', 'Dusty', 'Scout', 'Copper', 'Rex', 'Sheriff Jr.', 'Whiskey', 'Bullet'];
+
+var TELEGRAM_TEMPLATES = [
+  'STOP — Gang of 8 heading your direction from Tombstone STOP — Armed and dangerous STOP — Be prepared STOP',
+  'STOP — Federal bounty increased on Rattlesnake Hank STOP — Now $500 dead or alive STOP',
+  'STOP — Governor commends your service STOP — Keep up the good work STOP — Promotion pending review STOP',
+  'STOP — Smallpox outbreak in Silver Creek STOP — Quarantine advised STOP — Do not accept travelers STOP',
+  'STOP — Railroad expansion approved STOP — New station coming to your town STOP — Expect increased traffic STOP',
+  'STOP — State prison break STOP — Three convicts heading west STOP — Descriptions attached STOP',
+  'STOP — Gold discovered in hills north of town STOP — Expect prospector influx STOP — Prepare for trouble STOP',
+  'STOP — Circuit judge arriving Thursday STOP — Prepare prisoners for trial STOP — Formal attire required STOP',
+  'STOP — Your request for reinforcements DENIED STOP — Budget constraints STOP — You\'re on your own STOP',
+  'STOP — Congratulations STOP — Your town ranked safest in territory STOP — $100 bonus enclosed STOP',
+];
+
+var LORE_BOOKS = [
+  { title: 'The Lawman\'s Code', text: 'A worn leather book detailing proper procedure for arrests, interrogations, and evidence handling. You feel more competent. (+2 Rep)', rep: 2 },
+  { title: 'Wild West Legends', text: 'Stories of Wyatt Earp, Doc Holliday, and Billy the Kid. Thrilling tales that remind you why you took the badge.', rep: 1 },
+  { title: 'Frontier Medicine', text: 'A guide to treating gunshot wounds, snake bites, and consumption. Practical knowledge. (+1 HP next sleep)', hp: 1 },
+  { title: 'The Art of War (translated)', text: 'Sun Tzu\'s ancient strategies applied to frontier conflict. "Know your enemy." (+5% case rewards today)', gold: 5 },
+  { title: 'Town Charter', text: 'The founding document of your town. Reading it reminds you what you\'re protecting. (+3 Rep)', rep: 3 },
+  { title: 'Criminal Psychology', text: 'A professor\'s notes on the criminal mind. Understanding motive helps solve cases faster.', rep: 2 },
+  { title: 'Territorial Law Compendium', text: 'Every law on the books. Dry reading but essential reference for complex cases.', rep: 1 },
+  { title: 'Personal Journal', text: 'Your own journal. Reading old entries reminds you of how far you\'ve come. Or how far you\'ve fallen.', rep: 0 },
 ];
 
 // ─────────────────────────────────────────────
@@ -562,6 +982,58 @@ function initDustMotes() {
   }
 }
 
+function initFlies() {
+  office.flies = [];
+  for (var i = 0; i < 4; i++) {
+    office.flies.push({
+      x: Math.random() * gameCanvas.width * 0.3 + gameCanvas.width * 0.05,
+      y: Math.random() * gameCanvas.height * 0.3,
+      angle: Math.random() * Math.PI * 2,
+      speed: 15 + Math.random() * 25,
+      turnTimer: 0,
+    });
+  }
+  office.smokeParticles = [];
+}
+
+function updateFlies(dt) {
+  for (var i = 0; i < office.flies.length; i++) {
+    var f = office.flies[i];
+    f.turnTimer -= dt;
+    if (f.turnTimer <= 0) {
+      f.angle += (Math.random() - 0.5) * 2.5;
+      f.turnTimer = 0.1 + Math.random() * 0.3;
+    }
+    f.x += Math.cos(f.angle) * f.speed * dt;
+    f.y += Math.sin(f.angle) * f.speed * dt;
+    var w = gameCanvas.width, h = gameCanvas.height;
+    if (f.x < 10 || f.x > w * 0.4 || f.y < 5 || f.y > h * 0.35) {
+      f.angle += Math.PI;
+      f.x = clamp(f.x, 15, w * 0.35);
+      f.y = clamp(f.y, 10, h * 0.3);
+    }
+  }
+  // Smoke from stove
+  if (Math.random() < 0.15) {
+    office.smokeParticles.push({
+      x: gameCanvas.width * 0.08 + Math.random() * 10,
+      y: gameCanvas.height * 0.28,
+      vy: -8 - Math.random() * 12,
+      vx: (Math.random() - 0.5) * 4,
+      life: 1.5 + Math.random(),
+      maxLife: 2.5,
+      size: 2 + Math.random() * 3,
+    });
+  }
+  for (var s = office.smokeParticles.length - 1; s >= 0; s--) {
+    var sp = office.smokeParticles[s];
+    sp.x += sp.vx * dt;
+    sp.y += sp.vy * dt;
+    sp.life -= dt;
+    if (sp.life <= 0) office.smokeParticles.splice(s, 1);
+  }
+}
+
 function updateDustMotes(dt) {
   var w = gameCanvas.width, h = gameCanvas.height;
   for (var i = 0; i < office.dustMotes.length; i++) {
@@ -587,14 +1059,25 @@ function enterSheriffOffice() {
   office.viewingBoard = false;
   office.viewingJail = false;
   office.viewingGunRack = false;
+  office.viewingBed = false;
+  office.viewingStats = false;
+  office.viewingDeputies = false;
   office.upgradeMenuOpen = false;
+  office.craftingOpen = false;
   office.currentCase = null;
+  office.currentMeeting = null;
   office.showingOutcome = false;
   office.caseChoiceVisible = false;
+  office.meetingChoiceVisible = false;
   office.waitingForCase = false;
+  office.sleeping = false;
+  office.deskMode = 'main';
+  office.playingDarts = false;
+  office.targetPractice = false;
   office.fadeIn = 0;
   game.state = 'office';
   initDustMotes();
+  initFlies();
 
   // Daily ammo bonus from gun rack upgrade
   if (office._ammoGivenDay !== game.dayCount) {
@@ -608,6 +1091,131 @@ function enterSheriffOffice() {
     }
     office._ammoGivenDay = game.dayCount;
   }
+
+  // Record rep history
+  if (office.repHistory.length === 0 || office.repHistory[office.repHistory.length - 1].day !== (game.dayCount || 1)) {
+    office.repHistory.push({ day: game.dayCount || 1, rep: game.reputation || 50 });
+    if (office.repHistory.length > 30) office.repHistory.shift();
+  }
+
+  // Generate daily meeting queue
+  if (office._lastMeetingDay !== (game.dayCount || 1)) {
+    office._lastMeetingDay = game.dayCount || 1;
+    office.meetingQueue = [];
+    var meetCount = rand(1, 3);
+    for (var mi = 0; mi < meetCount; mi++) {
+      var mt = MEETING_TEMPLATES[rand(0, MEETING_TEMPLATES.length - 1)];
+      // Boss meetings only if corruption > 20 or corrupt mode
+      if (mt.type === 'boss' && (game.corruption || 0) < 20 && !game._corruptMode) {
+        mt = MEETING_TEMPLATES[rand(4, MEETING_TEMPLATES.length - 1)]; // pick non-boss
+      }
+      var bossName = BOSS_NAMES[rand(0, BOSS_NAMES.length - 1)];
+      office.meetingQueue.push({
+        type: mt.type,
+        name: mt.name,
+        bodyguards: mt.bodyguards || 0,
+        desc: mt.desc.replace(/\{boss\}/g, bossName),
+        choices: mt.choices.map(function(c) {
+          return {
+            text: c.text, outcome: c.outcome.replace(/\{boss\}/g, bossName),
+            gold: c.gold, rep: c.rep, corruption: c.corruption || 0
+          };
+        }),
+        bossName: bossName,
+      });
+    }
+  }
+
+  // Generate daily telegram
+  if (office.telegrams.length === 0 || (office.telegrams[office.telegrams.length - 1].day !== (game.dayCount || 1) && Math.random() < 0.5)) {
+    office.telegrams.push({
+      text: TELEGRAM_TEMPLATES[rand(0, TELEGRAM_TEMPLATES.length - 1)],
+      day: game.dayCount || 1,
+      read: false,
+    });
+    if (office.telegrams.length > 10) office.telegrams.shift();
+  }
+
+  // Deputy salary deduction
+  for (var di = 0; di < office.deputies.length; di++) {
+    var dep = office.deputies[di];
+    if (dep._lastPaidDay !== (game.dayCount || 1)) {
+      dep._lastPaidDay = game.dayCount || 1;
+      var salary = 10 + dep.skill * 5;
+      if ((game.gold || 0) >= salary) {
+        game.gold -= salary;
+        dep.loyalty = Math.min(100, dep.loyalty + 2);
+      } else {
+        dep.loyalty = Math.max(0, dep.loyalty - 15);
+        if (dep.loyalty <= 0) {
+          showNotification(dep.name + ' quit — you couldn\'t pay them!');
+          office.deputies.splice(di, 1);
+          di--;
+        }
+      }
+    }
+  }
+
+  // Prisoner mood decay
+  for (var pi = 0; pi < office.prisoners.length; pi++) {
+    var pr = office.prisoners[pi];
+    if (pr.mood === undefined) pr.mood = 60;
+    pr.mood = Math.max(0, pr.mood - rand(2, 8));
+    if (pr.fed) { pr.fed = false; } // reset daily feeding
+  }
+
+  // Random office event
+  if (office._lastEventDay !== (game.dayCount || 1) && Math.random() < 0.18) {
+    office._lastEventDay = game.dayCount || 1;
+    office.officeEvent = OFFICE_EVENT_TEMPLATES[rand(0, OFFICE_EVENT_TEMPLATES.length - 1)];
+  }
+
+  // Requisition delivery
+  for (var ri = office.pendingRequisitions.length - 1; ri >= 0; ri--) {
+    var req = office.pendingRequisitions[ri];
+    if ((game.dayCount || 1) >= req.deliveryDay) {
+      if (req.type === 'ammo') {
+        game.ammo = Math.min((game.ammo || 0) + req.amount, MAX_AMMO_CAP);
+        showNotification('Ammo requisition arrived! +' + req.amount);
+      } else if (req.type === 'tonic') {
+        game.healthTonics = (game.healthTonics || 0) + req.amount;
+        showNotification('Health tonics delivered! +' + req.amount);
+      }
+      office.pendingRequisitions.splice(ri, 1);
+    }
+  }
+
+  // Check for trophies
+  checkTrophies();
+
+  // Random prisoner event (bribe/escape attempt)
+  if (office.prisoners.length > 0 && Math.random() < 0.15) {
+    var evtPrisoner = office.prisoners[rand(0, office.prisoners.length - 1)];
+    if (evtPrisoner.mood < 30 && Math.random() < 0.5) {
+      office.prisonerEvent = {
+        type: 'escape',
+        prisoner: evtPrisoner,
+        desc: evtPrisoner.name + ' is attempting to escape from the jail!',
+        choices: ['[1] Subdue (+5 Rep, prisoner mood -20)', '[2] Let them go (prisoner released, -3 Rep)']
+      };
+    } else if (Math.random() < 0.4) {
+      var bribeAmt = rand(20, 80);
+      office.prisonerEvent = {
+        type: 'bribe',
+        prisoner: evtPrisoner,
+        amount: bribeAmt,
+        desc: evtPrisoner.name + ' offers you $' + bribeAmt + ' for their freedom.',
+        choices: ['[1] Accept bribe (+$' + bribeAmt + ', +5 Corruption, prisoner released)', '[2] Refuse (+3 Rep, prisoner mood -10)']
+      };
+    }
+  }
+
+  // Reset new views
+  office.readingBook = false;
+  office.viewingWanted = false;
+  office.viewingNotices = false;
+  office.prisonerEvent = null;
+  office.playingSolitaire = false;
 }
 
 function exitSheriffOffice() {
@@ -750,6 +1358,7 @@ function updateOffice(dt) {
   office.clockSwing += dt * 2.2;
   office.lampFlicker += dt * 8;
   updateDustMotes(dt);
+  updateFlies(dt);
 
   // ── SHOWING OUTCOME ──
   if (office.showingOutcome) {
@@ -827,9 +1436,12 @@ function updateOffice(dt) {
       if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
         office.selectedPrisoner = (office.selectedPrisoner + 1) % office.prisoners.length;
       }
-      if (consumeKey('Digit1')) doJailAction(0);
-      if (consumeKey('Digit2')) doJailAction(1);
-      if (consumeKey('Digit3')) doJailAction(2);
+      if (consumeKey('Digit1')) doJailAction(0); // Release
+      if (consumeKey('Digit2')) doJailAction(1); // Interrogate
+      if (consumeKey('Digit3')) doJailAction(2); // Execute
+      if (consumeKey('KeyF')) doJailAction(3);   // Feed
+      if (consumeKey('KeyT')) doJailAction(4);   // Transfer
+      if (consumeKey('KeyX')) doJailAction(5);   // Work detail
     }
     return;
   }
@@ -843,11 +1455,269 @@ function updateOffice(dt) {
       office.upgradeMenuOpen = true;
       office.selectedUpgrade = 0;
     }
+    if (consumeKey('KeyD')) {
+      office.playingDarts = true;
+      office.dartPhase = 0;
+      office.dartPower = 0;
+      office.dartRounds = 0;
+      office.dartScore = 0;
+      office.viewingGunRack = false;
+    }
+    if (consumeKey('KeyT')) {
+      office.targetPractice = true;
+      office.targetPhase = 0;
+      office.targetTimer = 0;
+      office.targetScore = 0;
+      office.viewingGunRack = false;
+    }
     return;
   }
 
-  // ── SITTING AT DESK ──
+  // ── SLEEPING ──
+  if (office.sleeping) {
+    office.sleepTimer -= dt;
+    if (office.sleepTimer <= 0) {
+      office.sleeping = false;
+      var bedLvl = office.upgrades.bed || 0;
+      var hpRestore = bedLvl >= 2 ? (game.player.maxHp || 5) : (bedLvl >= 1 ? 3 : 2);
+      if (office.nightmareActive) { hpRestore = 1; office.nightmareActive = false; }
+      game.player.hp = Math.min((game.player.maxHp || 5), (game.player.hp || 1) + hpRestore);
+      game.time = Math.min(1, (game.time || 0) + office.sleepHours / 24);
+      if (game.time >= 1) { game.time -= 1; game.dayCount = (game.dayCount || 1) + 1; }
+      showNotification('Rested! +' + hpRestore + ' HP');
+      if (office.dreamText) {
+        twReset(office.dreamText);
+        office.showingOutcome = true;
+      }
+      office.viewingBed = true;
+    }
+    return;
+  }
+
+  // ── OFFICE EVENT ──
+  if (office.officeEvent) {
+    if (!office._eventShown) {
+      office._eventShown = true;
+      twReset(office.officeEvent.name + '\n\n' + office.officeEvent.desc);
+      office.caseChoiceVisible = false;
+    }
+    twUpdate(dt);
+    if (typewriter.done && !office.caseChoiceVisible) office.caseChoiceVisible = true;
+    if (office.caseChoiceVisible) {
+      for (var ei = 0; ei < office.officeEvent.choices.length; ei++) {
+        if (consumeKey('Digit' + (ei + 1))) {
+          resolveOfficeEvent(ei);
+          return;
+        }
+      }
+    }
+    if (!typewriter.done && (consumeKey('Space') || consumeKey('Enter'))) {
+      typewriter.revealed = typewriter.text.length; typewriter.done = true;
+    }
+    return;
+  }
+
+  // ── MEETING ──
+  if (office.currentMeeting) {
+    twUpdate(dt);
+    if (typewriter.done && !office.meetingChoiceVisible) office.meetingChoiceVisible = true;
+    if (office.meetingChoiceVisible) {
+      for (var mci = 0; mci < office.currentMeeting.choices.length; mci++) {
+        if (consumeKey('Digit' + (mci + 1))) {
+          resolveMeeting(mci);
+          return;
+        }
+      }
+    }
+    if (!typewriter.done && (consumeKey('Space') || consumeKey('Enter'))) {
+      typewriter.revealed = typewriter.text.length; typewriter.done = true;
+    }
+    return;
+  }
+
+  // ── BED VIEW ──
+  if (office.viewingBed) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.viewingBed = false; }
+    if (consumeKey('KeyE') || consumeKey('Enter')) {
+      if (office._lastSleepDay === (game.dayCount || 1)) {
+        showNotification('You already slept today. Can\'t sleep again until tomorrow.');
+      } else {
+        office._lastSleepDay = game.dayCount || 1;
+        office.sleeping = true;
+        office.sleepTimer = 2.5;
+        // Dream or nightmare
+        var corruption = game.corruption || 0;
+        if (corruption > 50 && Math.random() < 0.3) {
+          office.nightmareActive = true;
+          office.dreamText = NIGHTMARE_TEMPLATES[rand(0, NIGHTMARE_TEMPLATES.length - 1)];
+          office.sleepTimer = 1.5;
+        } else if (office.upgrades.bed >= 2 && Math.random() < 0.6) {
+          office.dreamText = DREAM_TEMPLATES[rand(0, DREAM_TEMPLATES.length - 1)];
+        } else {
+          office.dreamText = '';
+        }
+      }
+    }
+    return;
+  }
+
+  // ── STATS / RECORDS VIEW ──
+  if (office.viewingStats) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.viewingStats = false; }
+    if (consumeKey('Tab')) { office.statsTab = (office.statsTab + 1) % 4; }
+    return;
+  }
+
+  // ── DEPUTIES VIEW ──
+  if (office.viewingDeputies) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.viewingDeputies = false; }
+    if (office.deputies.length > 0) {
+      if (consumeKey('ArrowUp') || consumeKey('KeyW')) office.selectedDeputy = (office.selectedDeputy - 1 + office.deputies.length) % office.deputies.length;
+      if (consumeKey('ArrowDown') || consumeKey('KeyS')) office.selectedDeputy = (office.selectedDeputy + 1) % office.deputies.length;
+      if (consumeKey('Digit1')) deputyAction('patrol');
+      if (consumeKey('Digit2')) deputyAction('train');
+      if (consumeKey('Digit3')) deputyAction('fire');
+    }
+    if (consumeKey('KeyH')) hireDeputy();
+    return;
+  }
+
+  // ── CRAFTING VIEW ──
+  if (office.craftingOpen) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.craftingOpen = false; }
+    if (consumeKey('Digit1')) craftItem('silver_bullets');
+    if (consumeKey('Digit2')) craftItem('tonic');
+    if (consumeKey('Digit3')) craftItem('badge_polish');
+    if (consumeKey('Digit4') && (game.corruption || 0) >= 30) craftItem('forge_documents');
+    if (consumeKey('Digit5')) craftItem('requisition_ammo');
+    if (consumeKey('Digit6')) craftItem('requisition_tonic');
+    return;
+  }
+
+  // ── READING A BOOK ──
+  if (office.readingBook) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.readingBook = false; }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      office.selectedBook = (office.selectedBook + 1) % LORE_BOOKS.length;
+    }
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      office.selectedBook = (office.selectedBook - 1 + LORE_BOOKS.length) % LORE_BOOKS.length;
+    }
+    if (consumeKey('KeyE') || consumeKey('Enter')) {
+      office.bookRead[office.selectedBook] = true;
+      // Reading grants small rep bonus first time
+      if (!office.bookRead['_bonus_' + office.selectedBook]) {
+        office.bookRead['_bonus_' + office.selectedBook] = true;
+        game.reputation = clamp((game.reputation || 50) + 1, 0, REPUTATION_MAX);
+        showNotification('Interesting read! +1 Rep (knowledge is power)');
+      }
+    }
+    return;
+  }
+
+  // ── WANTED POSTER BOARD ──
+  if (office.viewingWanted) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.viewingWanted = false; }
+    return;
+  }
+
+  // ── NOTICE BOARD ──
+  if (office.viewingNotices) {
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.viewingNotices = false; }
+    return;
+  }
+
+  // ── PRISONER EVENT ──
+  if (office.prisonerEvent) {
+    if (consumeKey('Digit1')) {
+      resolvePrisonerEvent(0);
+    }
+    if (consumeKey('Digit2')) {
+      resolvePrisonerEvent(1);
+    }
+    return;
+  }
+
+  // ── SOLITAIRE ──
+  if (office.playingSolitaire) {
+    updateSolitaire(dt);
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.playingSolitaire = false; }
+    return;
+  }
+
+  // ── DARTS MINI-GAME ──
+  if (office.playingDarts) {
+    updateDarts(dt);
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.playingDarts = false; }
+    return;
+  }
+
+  // ── TARGET PRACTICE ──
+  if (office.targetPractice) {
+    updateTargetPractice(dt);
+    if (consumeKey('Escape') || consumeKey('KeyQ')) { office.targetPractice = false; }
+    return;
+  }
+
+  // ── SITTING AT DESK (expanded with sub-menu) ──
   if (office.sittingAtDesk) {
+    if (office.deskMode === 'telegraph') {
+      if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
+      // Mark telegrams read
+      for (var ti = 0; ti < office.telegrams.length; ti++) office.telegrams[ti].read = true;
+      return;
+    }
+    if (office.deskMode === 'drawers') {
+      if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
+      if (consumeKey('KeyE') || consumeKey('Enter')) {
+        if (office._drawerSearchedDay === (game.dayCount || 1)) {
+          showNotification('Nothing new in the drawers today.');
+        } else {
+          office._drawerSearchedDay = game.dayCount || 1;
+          var drawerGold = rand(2, 15);
+          game.gold = (game.gold || 0) + drawerGold;
+          game.totalGoldEarned = (game.totalGoldEarned || 0) + drawerGold;
+          showNotification('Found $' + drawerGold + ' in the desk drawer!');
+          if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+        }
+      }
+      return;
+    }
+    if (office.deskMode === 'coffee') {
+      if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
+      if (consumeKey('KeyE') || consumeKey('Enter')) {
+        if (office._coffeeBrewedDay === (game.dayCount || 1)) {
+          showNotification('Already had coffee today. Any more and you\'ll vibrate.');
+        } else {
+          office._coffeeBrewedDay = game.dayCount || 1;
+          office._coffeeCount = (office._coffeeCount || 0) + 1;
+          game._coffeeBoost = true;
+          game._coffeeTimer = 120;
+          showNotification('Coffee brewed! Speed boost for 2 minutes.');
+          if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+        }
+      }
+      return;
+    }
+    if (office.deskMode === 'meetings') {
+      if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
+      if (office.meetingQueue.length > 0) {
+        for (var mqi = 0; mqi < Math.min(office.meetingQueue.length, 3); mqi++) {
+          if (consumeKey('Digit' + (mqi + 1))) {
+            var mtg = office.meetingQueue.splice(mqi, 1)[0];
+            office.currentMeeting = mtg;
+            office.meetingChoiceVisible = false;
+            var bodyguardText = mtg.bodyguards > 0 ? ' [' + mtg.bodyguards + ' armed bodyguards present]' : '';
+            twReset('[MEETING: ' + mtg.name + ']' + bodyguardText + '\n\n' + mtg.desc);
+            office.deskMode = 'main';
+            return;
+          }
+        }
+      }
+      return;
+    }
+
+    // Main desk menu
     if (office.waitingForCase) {
       office.waitTimer += dt;
       if (office.waitTimer >= 1.8) {
@@ -870,18 +1740,34 @@ function updateOffice(dt) {
         office.waitTimer = 0;
         office.visitorNPCName = VISITOR_NAMES[rand(0, VISITOR_NAMES.length - 1)];
       }
+      if (consumeKey('KeyC')) { office.deskMode = 'coffee'; }
+      if (consumeKey('KeyT')) { office.deskMode = 'telegraph'; }
+      if (consumeKey('KeyX')) { office.deskMode = 'drawers'; }
+      if (consumeKey('KeyM')) { office.deskMode = 'meetings'; }
+      if (consumeKey('KeyN')) { office.craftingOpen = true; }
+      if (consumeKey('KeyP')) { office.viewingDeputies = true; office.selectedDeputy = 0; }
+      if (consumeKey('KeyB')) { office.readingBook = true; office.selectedBook = 0; }
+      if (consumeKey('KeyL')) { office.playingSolitaire = true; initSolitaire(); }
+      if (consumeKey('KeyO')) { toggleMusicBox(); }
+      if (consumeKey('KeyG')) { interactWithDog(); }
+      if (consumeKey('KeyJ')) { useSpittoon(); }
       if (consumeKey('Escape') || consumeKey('KeyQ')) {
         office.sittingAtDesk = false;
+        office.deskMode = 'main';
       }
     }
     return;
   }
 
   // ── MAIN ZONE NAV ──
-  if (consumeKey('Digit1')) { office.sittingAtDesk = true; office.waitingForCase = false; return; }
+  if (consumeKey('Digit1')) { office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; return; }
   if (consumeKey('Digit2')) { office.viewingBoard = true; office.boardScroll = 0; return; }
   if (consumeKey('Digit3')) { office.viewingGunRack = true; return; }
   if (consumeKey('Digit4')) { office.viewingJail = true; office.selectedPrisoner = 0; return; }
+  if (consumeKey('Digit5')) { office.viewingBed = true; return; }
+  if (consumeKey('Digit6')) { office.viewingStats = true; office.statsTab = 0; return; }
+  if (consumeKey('Digit7')) { office.viewingWanted = true; generateWantedPosters(); return; }
+  if (consumeKey('Digit8')) { office.viewingNotices = true; generateNotices(); return; }
   if (consumeKey('Escape')) { exitSheriffOffice(); return; }
   if (consumeKey('KeyU')) { office.upgradeMenuOpen = true; office.selectedUpgrade = 0; return; }
 
@@ -893,10 +1779,14 @@ function updateOffice(dt) {
   }
   if (consumeKey('KeyE') || consumeKey('Enter')) {
     switch (office.zones[office.selectedZone]) {
-      case 'desk': office.sittingAtDesk = true; office.waitingForCase = false; break;
+      case 'desk': office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; break;
       case 'caseBoard': office.viewingBoard = true; office.boardScroll = 0; break;
       case 'gunRack': office.viewingGunRack = true; break;
       case 'jailCells': office.viewingJail = true; office.selectedPrisoner = 0; break;
+      case 'bed': office.viewingBed = true; break;
+      case 'records': office.viewingStats = true; office.statsTab = 0; break;
+      case 'wanted': office.viewingWanted = true; generateWantedPosters(); break;
+      case 'notices': office.viewingNotices = true; generateNotices(); break;
       case 'exit': exitSheriffOffice(); break;
     }
   }
@@ -1028,11 +1918,58 @@ function doJailAction(action) {
       showNotification(p.name + ' hanged. -8 Rep. Fear keeps order.');
       game.reputation = clamp((game.reputation || 50) - 8, 0, REPUTATION_MAX);
       addJournalEntry('Executed prisoner ' + p.name + ' by hanging.');
+      office.prisonerLog.push({ name: p.name, crime: p.crime, fate: 'executed', day: game.dayCount || 1 });
       office.prisoners.splice(office.selectedPrisoner, 1);
       if (office.selectedPrisoner >= office.prisoners.length) {
         office.selectedPrisoner = Math.max(0, office.prisoners.length - 1);
       }
       if (typeof audio !== 'undefined' && typeof audio.playBad === 'function') audio.playBad();
+      break;
+
+    case 3: // Feed
+      if (p.fed) {
+        showNotification(p.name + ' already fed today.');
+        return;
+      }
+      if ((game.gold || 0) < 5) {
+        showNotification('Need $5 to feed a prisoner.');
+        return;
+      }
+      game.gold -= 5;
+      p.fed = true;
+      p.mood = Math.min(100, (p.mood || 50) + 20);
+      showNotification('Fed ' + p.name + '. Mood improved. -$5');
+      if (p.mood >= 80 && !p.informant && Math.random() < 0.3) {
+        p.informant = true;
+        showNotification(p.name + ' is now an informant! +$5/day intel.');
+      }
+      if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+      break;
+
+    case 4: // Transfer to federal custody
+      var bounty = 30 + rand(10, 50);
+      game.gold = (game.gold || 0) + bounty;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + bounty;
+      game.reputation = clamp((game.reputation || 50) + 5, 0, REPUTATION_MAX);
+      showNotification('Transferred ' + p.name + ' to federal custody. +$' + bounty);
+      addJournalEntry('Transferred ' + p.name + ' to federal prison.');
+      office.prisonerLog.push({ name: p.name, crime: p.crime, fate: 'transferred', day: game.dayCount || 1 });
+      office.prisoners.splice(office.selectedPrisoner, 1);
+      if (office.selectedPrisoner >= office.prisoners.length) {
+        office.selectedPrisoner = Math.max(0, office.prisoners.length - 1);
+      }
+      if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+      break;
+
+    case 5: // Work detail
+      if (p.working) {
+        p.working = false;
+        showNotification(p.name + ' removed from work detail.');
+      } else {
+        p.working = true;
+        p.mood = Math.max(0, (p.mood || 50) - 10);
+        showNotification(p.name + ' assigned to work detail. +$5/day income.');
+      }
       break;
   }
 }
@@ -1079,7 +2016,13 @@ function renderOfficeOverlay() {
   drawOfficeRoom(W, H);
 
   // Draw current sub-view on top
-  if (office.showingOutcome) {
+  if (office.sleeping) {
+    drawSleepOverlay(W, H);
+  } else if (office.officeEvent && office._eventShown) {
+    drawOfficeEventPanel(W, H);
+  } else if (office.currentMeeting) {
+    drawMeetingPanel(W, H);
+  } else if (office.showingOutcome) {
     drawOutcomePanel(W, H);
   } else if (office.currentCase && !office.currentCase.resolved) {
     drawCasePanel(W, H);
@@ -1091,6 +2034,28 @@ function renderOfficeOverlay() {
     drawJailView(W, H);
   } else if (office.viewingGunRack) {
     drawGunRackView(W, H);
+  } else if (office.viewingBed) {
+    drawBedView(W, H);
+  } else if (office.viewingStats) {
+    drawStatsView(W, H);
+  } else if (office.viewingDeputies) {
+    drawDeputiesView(W, H);
+  } else if (office.craftingOpen) {
+    drawCraftingView(W, H);
+  } else if (office.readingBook) {
+    drawBookshelfView(W, H);
+  } else if (office.viewingWanted) {
+    drawWantedBoard(W, H);
+  } else if (office.viewingNotices) {
+    drawNoticeBoard(W, H);
+  } else if (office.prisonerEvent) {
+    drawPrisonerEventPanel(W, H);
+  } else if (office.playingSolitaire) {
+    drawSolitaireView(W, H);
+  } else if (office.playingDarts) {
+    drawDartsView(W, H);
+  } else if (office.targetPractice) {
+    drawTargetPracticeView(W, H);
   } else if (office.sittingAtDesk) {
     drawDeskView(W, H);
   } else {
@@ -1098,12 +2063,34 @@ function renderOfficeOverlay() {
   }
 
   // Dust motes overlay
+  ctx.globalAlpha = alpha;
   for (var i = 0; i < office.dustMotes.length; i++) {
     var m = office.dustMotes[i];
     ctx.globalAlpha = m.alpha * alpha;
     ctx.fillStyle = '#e8d8b8';
     ctx.beginPath();
     ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Flies near window
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#222';
+  for (var fi = 0; fi < office.flies.length; fi++) {
+    var fly = office.flies[fi];
+    ctx.beginPath();
+    ctx.arc(fly.x, fly.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Smoke from stove
+  for (var si = 0; si < office.smokeParticles.length; si++) {
+    var sp = office.smokeParticles[si];
+    var sa = (sp.life / sp.maxLife) * 0.2 * alpha;
+    ctx.globalAlpha = sa;
+    ctx.fillStyle = '#aaa';
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -1491,6 +2478,194 @@ function drawOfficeRoom(W, H) {
     ctx.fillStyle = '#5a5248';
   }
 
+  // ── STOVE (left side, below filing cabinet) ──
+  var stX = W * 0.04, stY = H * 0.72, stW = W * 0.08, stH = H * 0.16;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(stX, stY, stW, stH);
+  ctx.fillStyle = '#222';
+  ctx.fillRect(stX + 2, stY + 2, stW - 4, stH * 0.3);
+  // Fire glow
+  var fireFlk = Math.sin(Date.now() * 0.008) * 0.3 + 0.7;
+  ctx.fillStyle = 'rgba(255, 80, 20, ' + (0.6 * fireFlk) + ')';
+  ctx.fillRect(stX + 4, stY + 4, stW - 8, stH * 0.25);
+  ctx.fillStyle = 'rgba(255, 180, 40, ' + (0.4 * fireFlk) + ')';
+  ctx.fillRect(stX + 6, stY + 6, stW - 12, stH * 0.15);
+  // Stovepipe
+  ctx.fillStyle = '#333';
+  ctx.fillRect(stX + stW / 2 - 3, stY - H * 0.44, 6, H * 0.44);
+  // Coffee pot on stove
+  ctx.fillStyle = '#444';
+  ctx.fillRect(stX + stW - 14, stY - 6, 10, 8);
+  ctx.fillStyle = '#555';
+  ctx.beginPath();
+  ctx.arc(stX + stW - 9, stY - 6, 5, Math.PI, 0);
+  ctx.fill();
+
+  // ── BED (right side, below jail cells) ──
+  var bedX = W * 0.8, bedY = H * 0.58, bedW = W * 0.16, bedH = H * 0.12;
+  var bedLvl = office.upgrades.bed || 0;
+  // Frame
+  ctx.fillStyle = bedLvl >= 2 ? '#4a1a08' : (bedLvl >= 1 ? '#5a3a1a' : '#7a6a50');
+  ctx.fillRect(bedX, bedY, bedW, bedH);
+  // Mattress
+  ctx.fillStyle = bedLvl >= 2 ? '#e8d8c0' : (bedLvl >= 1 ? '#c0b090' : '#8a7a60');
+  ctx.fillRect(bedX + 3, bedY + 2, bedW - 6, bedH - 5);
+  // Pillow
+  ctx.fillStyle = bedLvl >= 2 ? '#fff8e8' : '#d0c8b0';
+  ctx.fillRect(bedX + 4, bedY + 3, bedW * 0.2, bedH * 0.5);
+  // Blanket
+  ctx.fillStyle = bedLvl >= 2 ? '#6a1818' : (bedLvl >= 1 ? '#5a4a3a' : '#6a5a40');
+  ctx.fillRect(bedX + bedW * 0.3, bedY + 3, bedW * 0.65, bedH - 6);
+  // Headboard for four-poster
+  if (bedLvl >= 2) {
+    ctx.fillStyle = '#3a1008';
+    ctx.fillRect(bedX - 3, bedY - 10, 4, bedH + 12);
+    ctx.fillRect(bedX + bedW - 1, bedY - 10, 4, bedH + 12);
+    ctx.fillRect(bedX - 3, bedY - 12, bedW + 6, 4);
+    // Drapes
+    ctx.fillStyle = '#7a1515';
+    ctx.fillRect(bedX - 2, bedY - 8, 8, bedH + 6);
+    ctx.fillRect(bedX + bedW - 6, bedY - 8, 8, bedH + 6);
+  }
+  // Label
+  ctx.fillStyle = '#e8d8b8';
+  ctx.font = 'bold ' + Math.max(8, bedW * 0.07) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('BED', bedX + bedW / 2, bedY - 3);
+
+  // ── AMERICAN FLAG (right wall, near window) ──
+  var flgX = W * 0.58, flgY = wallH * 0.08;
+  var flgW = W * 0.06, flgH = flgW * 0.55;
+  // Pole
+  ctx.fillStyle = '#c0a030';
+  ctx.fillRect(flgX - 2, flgY - 4, 3, flgH + 12);
+  // Flag body - waving
+  var wave = Math.sin(Date.now() * 0.002) * 2;
+  ctx.fillStyle = '#cc2222';
+  ctx.fillRect(flgX + 1, flgY + wave * 0.5, flgW, flgH);
+  // Stripes
+  ctx.fillStyle = '#ffffff';
+  for (var si2 = 0; si2 < 6; si2 += 2) {
+    ctx.fillRect(flgX + 1, flgY + si2 * (flgH / 7) + wave * 0.5, flgW, flgH / 7);
+  }
+  // Blue canton
+  ctx.fillStyle = '#224488';
+  ctx.fillRect(flgX + 1, flgY + wave * 0.5, flgW * 0.4, flgH * 0.55);
+
+  // ── BOOKSHELF (left wall, below case board) ──
+  var bsX = W * 0.15, bsY = H * 0.38, bsW = W * 0.1, bsH = H * 0.28;
+  ctx.fillStyle = '#4a2810';
+  ctx.fillRect(bsX, bsY, bsW, bsH);
+  ctx.strokeStyle = '#3a1808';
+  ctx.lineWidth = 1;
+  // Shelves
+  for (var shi = 0; shi < 4; shi++) {
+    var shY = bsY + shi * (bsH / 4);
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(bsX, shY, bsW, 3);
+    // Books
+    var bookColors = ['#882222', '#224488', '#228844', '#886622', '#662288', '#cc8833', '#336666'];
+    for (var bi2 = 0; bi2 < 5; bi2++) {
+      var bx = bsX + 3 + bi2 * (bsW - 6) / 5;
+      var bh = bsH / 5 - 4 + rand(-3, 3);
+      ctx.fillStyle = bookColors[(shi * 5 + bi2) % bookColors.length];
+      ctx.fillRect(bx, shY + 4, (bsW - 8) / 5 - 2, bh);
+    }
+  }
+
+  // ── DARTBOARD (right wall, near gun rack) ──
+  var dbX = W * 0.74, dbY = wallH * 0.35, dbR = Math.min(wallH * 0.2, 18);
+  ctx.fillStyle = '#2a1808';
+  ctx.beginPath();
+  ctx.arc(dbX, dbY, dbR + 3, 0, Math.PI * 2);
+  ctx.fill();
+  // Rings
+  var dartCols = ['#cc2222', '#e8d8b8', '#222288', '#e8d8b8', '#cc2222'];
+  for (var dri = 0; dri < 5; dri++) {
+    ctx.fillStyle = dartCols[dri];
+    ctx.beginPath();
+    ctx.arc(dbX, dbY, dbR * (1 - dri * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Bullseye
+  ctx.fillStyle = '#cc2222';
+  ctx.beginPath();
+  ctx.arc(dbX, dbY, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── OFFICE DOG (if adopted) ──
+  if (office.officeDog) {
+    var dogX = stX + stW + 10, dogY = stY + stH - 8;
+    var dogBob = Math.sin(Date.now() * 0.003) * 1;
+    // Body
+    ctx.fillStyle = '#8b6340';
+    ctx.fillRect(dogX - 6, dogY + dogBob, 12, 6);
+    // Head
+    ctx.fillStyle = '#7a5230';
+    ctx.beginPath();
+    ctx.arc(dogX + 8, dogY - 2 + dogBob, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Ears
+    ctx.fillStyle = '#5a3a18';
+    ctx.fillRect(dogX + 4, dogY - 6 + dogBob, 3, 4);
+    ctx.fillRect(dogX + 10, dogY - 6 + dogBob, 3, 4);
+    // Tail wag
+    var tailAngle = Math.sin(Date.now() * 0.01) * 0.5;
+    ctx.strokeStyle = '#8b6340';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(dogX - 6, dogY + 2 + dogBob);
+    ctx.lineTo(dogX - 10 + Math.sin(tailAngle) * 4, dogY - 2 + dogBob);
+    ctx.stroke();
+    // Eyes
+    ctx.fillStyle = '#111';
+    ctx.fillRect(dogX + 6, dogY - 3 + dogBob, 1.5, 1.5);
+    ctx.fillRect(dogX + 9, dogY - 3 + dogBob, 1.5, 1.5);
+  }
+
+  // ── TROPHY WALL (above bookshelf) ──
+  if (office.trophies.length > 0) {
+    ctx.fillStyle = '#e8d8b8';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    for (var tri = 0; tri < Math.min(office.trophies.length, 4); tri++) {
+      var trX = bsX + tri * 22 + 12;
+      var trY = bsY - 14;
+      // Small trophy
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(trX - 3, trY, 6, 8);
+      ctx.beginPath();
+      ctx.arc(trX, trY, 4, Math.PI, 0);
+      ctx.fill();
+    }
+  }
+
+  // ── SPITTOON (near desk) ──
+  var spX = W * 0.3 + W * 0.4 + 12, spY = H * 0.52 + H * 0.16 + H * 0.07;
+  ctx.fillStyle = '#8b6340';
+  ctx.beginPath();
+  ctx.arc(spX, spY, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#6a4a28';
+  ctx.beginPath();
+  ctx.arc(spX, spY, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── COAT/HAT RACK (near exit) ──
+  var rkX = W * 0.95, rkY = H * 0.28;
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(rkX - 1, rkY, 3, H * 0.3);
+  // Pegs
+  ctx.fillRect(rkX - 6, rkY + 8, 12, 3);
+  ctx.fillRect(rkX - 6, rkY + 28, 12, 3);
+  // Hat
+  ctx.fillStyle = '#4a3218';
+  ctx.fillRect(rkX - 8, rkY + 2, 16, 5);
+  ctx.fillRect(rkX - 5, rkY - 4, 10, 7);
+  // Coat
+  ctx.fillStyle = '#3a2a1a';
+  ctx.fillRect(rkX - 4, rkY + 30, 8, 22);
+
   // ── VIGNETTE ──
   var grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.18, W / 2, H / 2, W * 0.7);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
@@ -1589,11 +2764,12 @@ function wrapTextLines(text, maxWidth, fontSize) {
 
 // ── Main navigation (zone selection) ──
 function drawMainNavigation(W, H) {
-  var pw = Math.min(W * 0.52, 500), ph = Math.min(H * 0.32, 260);
-  var px = (W - pw) / 2, py = H * 0.6;
+  var pw = Math.min(W * 0.55, 520), ph = Math.min(H * 0.42, 340);
+  var px = (W - pw) / 2, py = H * 0.52;
   drawUIPanel(px, py, pw, ph, "SHERIFF'S OFFICE");
 
-  var fs = Math.max(11, Math.min(15, pw * 0.028));
+  var fs = Math.max(10, Math.min(14, pw * 0.025));
+  var spacing = Math.min(fs + 7, (ph - 80) / office.zoneLabels.length);
   ctx.textAlign = 'center';
 
   for (var i = 0; i < office.zoneLabels.length; i++) {
@@ -1601,22 +2777,28 @@ function drawMainNavigation(W, H) {
     ctx.fillStyle = sel ? PALETTE.uiHighlight : PALETTE.uiText;
     ctx.font = (sel ? 'bold ' : '') + fs + 'px monospace';
     var label = (sel ? '>> ' : '   ') + office.zoneLabels[i] + (sel ? ' <<' : '');
-    ctx.fillText(label, px + pw / 2, py + 52 + i * (fs + 9));
+    ctx.fillText(label, px + pw / 2, py + 48 + i * spacing);
   }
+
+  // Trophy count & dog indicator
+  var statusLine = 'Trophies: ' + office.trophies.length + '/' + TROPHY_DEFS.length;
+  if (office.officeDog) statusLine += '  |  Dog: ' + office.dogName;
+  if (office.musicBoxOn) statusLine += '  |  ♪ Music';
 
   ctx.fillStyle = PALETTE.uiTextDim;
   ctx.font = (fs - 2) + 'px monospace';
-  ctx.fillText('A/D: Select  |  E: Enter  |  U: Upgrades  |  ESC: Leave', px + pw / 2, py + ph - 28);
-  ctx.fillText('Gold: $' + (game.gold || 0) + '  |  Rep: ' + (game.reputation || 50) + '  |  Day ' + (game.dayCount || 1), px + pw / 2, py + ph - 12);
+  ctx.fillText('A/D: Select  |  E: Enter  |  U: Upgrades  |  ESC: Leave', px + pw / 2, py + ph - 38);
+  ctx.fillText(statusLine, px + pw / 2, py + ph - 24);
+  ctx.fillText('Gold: $' + (game.gold || 0) + '  |  Rep: ' + (game.reputation || 50) + '  |  Day ' + (game.dayCount || 1), px + pw / 2, py + ph - 10);
 }
 
 // ── Sitting at desk ──
 function drawDeskView(W, H) {
-  var pw = Math.min(W * 0.55, 520), ph = Math.min(H * 0.3, 220);
-  var px = (W - pw) / 2, py = H * 0.6;
+  var pw = Math.min(W * 0.62, 580), ph = Math.min(H * 0.45, 360);
+  var px = (W - pw) / 2, py = H * 0.5;
   drawUIPanel(px, py, pw, ph, 'AT YOUR DESK');
 
-  var fs = Math.max(11, Math.min(15, pw * 0.027));
+  var fs = Math.max(10, Math.min(14, pw * 0.024));
   ctx.textAlign = 'center';
 
   if (office.waitingForCase) {
@@ -1625,21 +2807,138 @@ function drawDeskView(W, H) {
     var dots = '';
     var dotCount = Math.floor((office.waitTimer * 3) % 4);
     for (var d = 0; d < dotCount; d++) dots += '.';
-    ctx.fillText('A knock at the door' + dots, px + pw / 2, py + 58);
+    ctx.fillText('A knock at the door' + dots, px + pw / 2, py + 50);
     ctx.fillStyle = PALETTE.uiTextDim;
     ctx.font = 'italic ' + (fs - 1) + 'px monospace';
-    ctx.fillText(office.visitorNPCName + ' is approaching...', px + pw / 2, py + 80);
-  } else {
-    ctx.fillStyle = PALETTE.uiText;
-    ctx.font = fs + 'px monospace';
-    ctx.fillText('You sit at your desk. Papers piled high.', px + pw / 2, py + 55);
-    ctx.fillText('The lamp casts long shadows across the room.', px + pw / 2, py + 73);
+    ctx.fillText(office.visitorNPCName + ' is approaching...', px + pw / 2, py + 68);
+  } else if (office.deskMode === 'telegraph') {
     ctx.fillStyle = PALETTE.uiHighlight;
     ctx.font = 'bold ' + fs + 'px monospace';
-    ctx.fillText('[E] Wait for a case    [Q/ESC] Stand up', px + pw / 2, py + ph - 38);
+    ctx.fillText('TELEGRAPH', px + pw / 2, py + 48);
+    ctx.textAlign = 'left';
+    var ty = py + 65;
+    if (office.telegrams.length === 0) {
+      ctx.fillStyle = PALETTE.uiTextDim;
+      ctx.font = 'italic ' + (fs - 1) + 'px monospace';
+      ctx.fillText('  No telegrams received yet.', px + 18, ty);
+    } else {
+      for (var ti = office.telegrams.length - 1; ti >= Math.max(0, office.telegrams.length - 4); ti--) {
+        var tg = office.telegrams[ti];
+        ctx.fillStyle = tg.read ? PALETTE.uiTextDim : PALETTE.uiHighlight;
+        ctx.font = (fs - 1) + 'px monospace';
+        var tLines = wrapTextLines('Day ' + tg.day + ': ' + tg.text, pw - 40, fs - 1);
+        for (var tl = 0; tl < tLines.length; tl++) {
+          if (ty > py + ph - 30) break;
+          ctx.fillText(tLines[tl], px + 18, ty);
+          ty += fs + 2;
+        }
+        ty += 6;
+      }
+    }
+    ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.uiTextDim;
     ctx.font = (fs - 2) + 'px monospace';
-    ctx.fillText('Cases solved: ' + office.completedCases.length + '  |  Active: ' + office.activeCases.length + '  |  Prisoners: ' + office.prisoners.length + '/' + getMaxPrisoners(), px + pw / 2, py + ph - 14);
+    ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
+  } else if (office.deskMode === 'coffee') {
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('COFFEE POT', px + pw / 2, py + 55);
+    ctx.fillStyle = PALETTE.uiText;
+    ctx.font = fs + 'px monospace';
+    if (office._coffeeBrewedDay === (game.dayCount || 1)) {
+      ctx.fillText('Already caffeinated today.', px + pw / 2, py + 80);
+    } else {
+      ctx.fillText('A fresh pot is ready. Brew a cup?', px + pw / 2, py + 80);
+      ctx.fillStyle = PALETTE.uiHighlight;
+      ctx.font = 'bold ' + fs + 'px monospace';
+      ctx.fillText('[E] Brew Coffee (Speed boost 2 min)', px + pw / 2, py + 105);
+    }
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
+  } else if (office.deskMode === 'drawers') {
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('DESK DRAWERS', px + pw / 2, py + 55);
+    ctx.fillStyle = PALETTE.uiText;
+    ctx.font = fs + 'px monospace';
+    if (office._drawerSearchedDay === (game.dayCount || 1)) {
+      ctx.fillText('Nothing else of interest in the drawers today.', px + pw / 2, py + 80);
+    } else {
+      ctx.fillText('Rummage through the desk drawers?', px + pw / 2, py + 80);
+      ctx.fillStyle = PALETTE.uiHighlight;
+      ctx.font = 'bold ' + fs + 'px monospace';
+      ctx.fillText('[E] Search Drawers', px + pw / 2, py + 105);
+    }
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
+  } else if (office.deskMode === 'meetings') {
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('MEETING REQUESTS', px + pw / 2, py + 48);
+    if (office.meetingQueue.length === 0) {
+      ctx.fillStyle = PALETTE.uiTextDim;
+      ctx.font = 'italic ' + fs + 'px monospace';
+      ctx.fillText('No meetings scheduled today.', px + pw / 2, py + 80);
+    } else {
+      var my = py + 65;
+      ctx.textAlign = 'left';
+      for (var mqi = 0; mqi < Math.min(office.meetingQueue.length, 3); mqi++) {
+        var mtg = office.meetingQueue[mqi];
+        ctx.fillStyle = mtg.type === 'boss' ? '#cc3030' : PALETTE.uiText;
+        ctx.font = 'bold ' + (fs - 1) + 'px monospace';
+        var typeLabel = mtg.type === 'boss' ? 'BOSS' : mtg.type.toUpperCase();
+        ctx.fillText('[' + (mqi + 1) + '] ' + typeLabel + ': ' + mtg.name, px + 18, my);
+        if (mtg.bodyguards > 0) {
+          ctx.fillStyle = '#cc6600';
+          ctx.font = (fs - 2) + 'px monospace';
+          ctx.fillText('    ' + mtg.bodyguards + ' armed bodyguards', px + 18, my + fs + 2);
+        }
+        my += fs * 2 + 10;
+      }
+    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
+  } else {
+    // Main desk menu
+    ctx.fillStyle = PALETTE.uiText;
+    ctx.font = fs + 'px monospace';
+    var unreadTelegrams = office.telegrams.filter(function(t) { return !t.read; }).length;
+    var pendingMeetings = office.meetingQueue.length;
+    var y = py + 48;
+
+    var menuItems = [
+      { key: 'E', label: 'Wait for a case', highlight: true },
+      { key: 'M', label: 'Meetings' + (pendingMeetings > 0 ? ' (' + pendingMeetings + ' waiting)' : ''), warn: pendingMeetings > 0 },
+      { key: 'C', label: 'Brew Coffee' + (office._coffeeBrewedDay === (game.dayCount || 1) ? ' (done)' : '') },
+      { key: 'T', label: 'Telegraph' + (unreadTelegrams > 0 ? ' (' + unreadTelegrams + ' NEW)' : '') },
+      { key: 'X', label: 'Search Drawers' },
+      { key: 'N', label: 'Crafting & Supplies' },
+      { key: 'P', label: 'Deputy Management (' + office.deputies.length + ')' },
+      { key: 'B', label: 'Read a Book (' + Object.keys(office.bookRead).filter(function(k){return k[0]!=='_';}).length + '/' + LORE_BOOKS.length + ')' },
+      { key: 'L', label: 'Play Solitaire' },
+      { key: 'O', label: 'Music Box ' + (office.musicBoxOn ? '(ON)' : '(OFF)') },
+      { key: 'G', label: office.officeDog ? ('Pet ' + office.dogName) : '' },
+      { key: 'J', label: 'Spittoon Challenge' },
+    ];
+    // Filter empty labels
+    menuItems = menuItems.filter(function(m) { return m.label !== ''; });
+
+    for (var mi = 0; mi < menuItems.length; mi++) {
+      var item = menuItems[mi];
+      ctx.fillStyle = item.highlight ? PALETTE.uiHighlight : (item.warn ? '#ccaa30' : PALETTE.uiText);
+      ctx.font = (mi === 0 ? 'bold ' : '') + (fs - 1) + 'px monospace';
+      ctx.fillText('[' + item.key + '] ' + item.label, px + pw / 2, y);
+      y += fs + 4;
+    }
+
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('[Q/ESC] Stand up', px + pw / 2, py + ph - 25);
+    ctx.fillText('Cases: ' + office.completedCases.length + '  |  Prisoners: ' + office.prisoners.length + '/' + getMaxPrisoners() + '  |  Gold: $' + (game.gold || 0), px + pw / 2, py + ph - 10);
   }
 }
 
@@ -1814,7 +3113,7 @@ function drawCaseBoard(W, H) {
     ctx.fillText(office.boardTab === 0 ? 'No active cases. Sit at your desk to receive one.' : 'No completed cases yet.', px + pw / 2, listY + 20);
   } else {
     ctx.textAlign = 'left';
-    var catColors = { murder: '#cc3030', robbery: '#ccaa30', missing: '#4488cc', land: '#30aa30', supernatural: '#aa44cc', political: '#cc6600', animal: '#886644' };
+    var catColors = { murder: '#cc3030', robbery: '#ccaa30', missing: '#4488cc', land: '#30aa30', supernatural: '#aa44cc', political: '#cc6600', animal: '#886644', arson: '#ff6600', smuggling: '#7744bb', kidnapping: '#cc4488', fraud: '#44aacc', native: '#aa8844' };
     for (var ci = office.boardScroll; ci < Math.min(cases.length, office.boardScroll + visibleCt); ci++) {
       var c = cases[ci];
       var cy = listY + (ci - office.boardScroll) * entryH;
@@ -1885,12 +3184,29 @@ function drawJailView(W, H) {
 
       ctx.fillStyle = PALETTE.uiTextDim;
       ctx.font = (fs - 2) + 'px monospace';
-      ctx.fillText('    Crime: ' + p.crime + '  |  Day ' + p.day + (p.interrogated ? '  |  INTERROGATED' : ''), px + margin, iy + fs * 2 + 3);
+      var mood = p.mood !== undefined ? p.mood : 50;
+      var moodCol = mood > 60 ? '#44aa44' : (mood > 30 ? '#aaaa44' : '#aa4444');
+      var moodLabel = mood > 60 ? 'Content' : (mood > 30 ? 'Restless' : 'Hostile');
+      var statusBits = 'Day ' + p.day;
+      if (p.interrogated) statusBits += ' | TALKED';
+      if (p.informant) statusBits += ' | INFORMANT';
+      if (p.working) statusBits += ' | WORKING';
+      if (p.fed) statusBits += ' | FED';
+      ctx.fillText('    ' + p.crime + '  |  ' + statusBits, px + margin, iy + fs * 2 + 3);
+      // Mood bar
+      var mbarX = px + pw - margin - 80, mbarY = iy + 2, mbarW = 60, mbarH = 6;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(mbarX, mbarY, mbarW, mbarH);
+      ctx.fillStyle = moodCol;
+      ctx.fillRect(mbarX, mbarY, mbarW * (mood / 100), mbarH);
+      ctx.fillStyle = moodCol;
+      ctx.font = (fs - 3) + 'px monospace';
+      ctx.fillText(moodLabel, mbarX, mbarY + mbarH + 8);
 
       if (isSel) {
         ctx.fillStyle = PALETTE.uiText;
         ctx.font = (fs - 1) + 'px monospace';
-        ctx.fillText('    [1] Release (+mercy)  [2] Interrogate (intel)  [3] Execute (fear)', px + margin, iy + fs * 3 + 5);
+        ctx.fillText('    [1]Release [2]Interrogate [3]Execute [F]Feed [T]Transfer [X]Work', px + margin, iy + fs * 3 + 5);
       }
     }
   }
@@ -1951,7 +3267,7 @@ function drawGunRackView(W, H) {
   ctx.fillStyle = PALETTE.uiTextDim;
   ctx.font = (fs - 2) + 'px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('[U] Upgrade Menu  |  [Q/ESC] Close', px + pw / 2, py + ph - 8);
+  ctx.fillText('[U] Upgrade  |  [D] Darts  |  [T] Target Practice  |  [Q/ESC] Close', px + pw / 2, py + ph - 8);
 }
 
 // ── Upgrade menu ──
@@ -2035,3 +3351,1350 @@ function drawUpgradeMenu(W, H) {
     }
   }, 1200);
 })();
+
+// Add mood to new prisoners
+var _origPush = office.prisoners.push;
+office.prisoners.push = function(p) {
+  if (p.mood === undefined) p.mood = 60 + rand(-10, 10);
+  return _origPush.call(office.prisoners, p);
+};
+
+// ─────────────────────────────────────────────
+// §18  BED & SLEEP SYSTEM
+// ─────────────────────────────────────────────
+function drawBedView(W, H) {
+  var pw = Math.min(W * 0.55, 500), ph = Math.min(H * 0.42, 320);
+  var px = (W - pw) / 2, py = H * 0.3;
+  var bedLvl = office.upgrades.bed || 0;
+  var bedNames = ['Bedroll', 'Iron Cot', 'Four-Poster Bed'];
+  drawUIPanel(px, py, pw, ph, 'BED — ' + bedNames[bedLvl]);
+
+  var fs = Math.max(10, Math.min(14, pw * 0.025));
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.font = fs + 'px monospace';
+
+  var hpRestore = bedLvl >= 2 ? 'Full HP' : (bedLvl >= 1 ? '+3 HP' : '+2 HP');
+  ctx.fillText('Rest and recover your strength.', px + pw / 2, py + 52);
+  ctx.fillText('Current HP: ' + (game.player.hp || 1) + '/' + (game.player.maxHp || 5), px + pw / 2, py + 72);
+  ctx.fillText('Sleep restores: ' + hpRestore, px + pw / 2, py + 92);
+
+  if (office._lastSleepDay === (game.dayCount || 1)) {
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = 'italic ' + fs + 'px monospace';
+    ctx.fillText('You already slept today.', px + pw / 2, py + 120);
+  } else {
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('[E] Sleep (advances 6 hours)', px + pw / 2, py + 120);
+  }
+
+  if (bedLvl >= 2) {
+    ctx.fillStyle = '#8888cc';
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('Four-poster bed grants vivid dreams with clues.', px + pw / 2, py + 145);
+  }
+
+  // Time display
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  var timeStr = typeof getTimeString === 'function' ? getTimeString(game.time || 0) : 'Unknown';
+  ctx.fillText('Current time: ' + timeStr + '  |  Day ' + (game.dayCount || 1), px + pw / 2, py + ph - 30);
+  ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
+}
+
+function drawSleepOverlay(W, H) {
+  // Black screen with Zzz
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = Math.min(1, office.fadeIn);
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'center';
+  var zzz = 'Z';
+  var zCount = Math.floor((2.5 - office.sleepTimer) * 3) + 1;
+  for (var zi = 0; zi < Math.min(zCount, 6); zi++) zzz += 'z';
+  ctx.fillText(zzz, W / 2, H / 2 - 10);
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = '14px monospace';
+  ctx.fillText('Sleeping...', W / 2, H / 2 + 20);
+  if (office.nightmareActive) {
+    ctx.fillStyle = '#cc3030';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('* Restless sleep... nightmares... *', W / 2, H / 2 + 45);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §19  MEETING SYSTEM
+// ─────────────────────────────────────────────
+function resolveMeeting(choiceIdx) {
+  var m = office.currentMeeting;
+  if (!m) return;
+  var choice = m.choices[choiceIdx];
+
+  var earnedGold = choice.gold || 0;
+  var earnedRep = choice.rep || 0;
+
+  if (earnedGold > 0) {
+    game.gold = (game.gold || 0) + earnedGold;
+    game.totalGoldEarned = (game.totalGoldEarned || 0) + earnedGold;
+  } else if (earnedGold < 0) {
+    if ((game.gold || 0) < Math.abs(earnedGold)) {
+      showNotification('Not enough gold!');
+      return;
+    }
+    game.gold = (game.gold || 0) + earnedGold;
+  }
+
+  game.reputation = clamp((game.reputation || 50) + earnedRep, 0, REPUTATION_MAX);
+
+  if (choice.corruption) {
+    game.corruption = clamp((game.corruption || 0) + choice.corruption, 0, 100);
+  }
+
+  // Add prisoners from bounty hunter meetings
+  if (m.type === 'bounty_hunter' && choiceIdx <= 1 && earnedGold < 0) {
+    for (var pi = 0; pi < 3; pi++) {
+      if (office.prisoners.length < getMaxPrisoners()) {
+        office.prisoners.push({
+          name: randomPrisonerName(), crime: 'Bounty Capture',
+          day: game.dayCount || 1, interrogated: false, mood: 40,
+        });
+      }
+    }
+  }
+
+  // Add ammo from arms dealer
+  if (m.type === 'merchant' && choiceIdx === 0) {
+    game.ammo = Math.min((game.ammo || 0) + 20, MAX_AMMO_CAP);
+  }
+
+  var rewardLine = '\n\n' + (earnedRep >= 0 ? '+' : '') + earnedRep + ' Rep  |  ' + (earnedGold >= 0 ? '+' : '') + '$' + Math.abs(earnedGold);
+  if (choice.corruption) rewardLine += '  |  ' + (choice.corruption > 0 ? '+' : '') + choice.corruption + ' Corruption';
+  twReset(choice.outcome + rewardLine);
+  addJournalEntry('Meeting: ' + m.name + '. ' + (earnedRep >= 0 ? '+' : '') + earnedRep + ' Rep');
+  office.currentMeeting = null;
+  office.meetingChoiceVisible = false;
+  office.showingOutcome = true;
+
+  if (earnedRep >= 0) {
+    if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+  } else {
+    if (typeof audio !== 'undefined' && typeof audio.playBad === 'function') audio.playBad();
+  }
+}
+
+function drawMeetingPanel(W, H) {
+  var pw = Math.min(W * 0.7, 660), ph = Math.min(H * 0.7, 540);
+  var px = (W - pw) / 2, py = H * 0.15;
+  var m = office.currentMeeting;
+  drawUIPanel(px, py, pw, ph, 'MEETING: ' + (m ? m.name : ''));
+
+  if (!m) return;
+  var fs = Math.max(10, Math.min(14, pw * 0.021));
+  var margin = 18;
+
+  // Draw bodyguards if present
+  if (m.bodyguards > 0) {
+    for (var bg = 0; bg < m.bodyguards; bg++) {
+      var bgX = px + margin + bg * 30 + 10;
+      var bgY = py + 42;
+      // Bodyguard silhouette
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(bgX, bgY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(bgX - 4, bgY + 6, 8, 12);
+      // Gun
+      ctx.fillStyle = '#555';
+      ctx.fillRect(bgX + 4, bgY + 8, 8, 2);
+    }
+    ctx.fillStyle = '#cc3030';
+    ctx.font = 'bold ' + (fs - 2) + 'px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(m.bodyguards + ' armed bodyguards stand by the door.', px + margin + m.bodyguards * 30 + 20, py + 52);
+  }
+
+  // Boss name
+  if (m.bossName) {
+    ctx.fillStyle = '#cc6600';
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(m.bossName + ' speaks:', px + margin, py + (m.bodyguards > 0 ? 75 : 50));
+  }
+
+  // Typewriter text
+  var startY = py + (m.bodyguards > 0 ? 90 : 65);
+  var visible = twGetVisible();
+  ctx.font = fs + 'px monospace';
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.textAlign = 'left';
+  var lines = wrapTextLines(visible, pw - margin * 2, fs);
+  for (var i = 0; i < lines.length; i++) {
+    var ly = startY + i * (fs + 4);
+    if (ly > py + ph - 100) break;
+    ctx.fillText(lines[i], px + margin, ly);
+  }
+
+  // Choices
+  if (office.meetingChoiceVisible) {
+    var choiceY = py + ph - 90;
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + (fs - 1) + 'px monospace';
+    ctx.fillText('YOUR RESPONSE:', px + margin, choiceY);
+    choiceY += fs + 5;
+    for (var ci = 0; ci < m.choices.length; ci++) {
+      ctx.fillStyle = PALETTE.uiText;
+      ctx.font = (fs - 1) + 'px monospace';
+      var choiceText = '[' + (ci + 1) + '] ' + m.choices[ci].text;
+      var cLines = wrapTextLines(choiceText, pw - margin * 2, fs - 1);
+      for (var cl = 0; cl < cLines.length; cl++) {
+        ctx.fillText(cLines[cl], px + margin, choiceY);
+        choiceY += fs + 2;
+      }
+      choiceY += 2;
+    }
+  }
+
+  if (!typewriter.done) {
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[SPACE] Skip text', px + pw / 2, py + ph - 8);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §20  OFFICE EVENTS
+// ─────────────────────────────────────────────
+function resolveOfficeEvent(choiceIdx) {
+  var evt = office.officeEvent;
+  if (!evt) return;
+  var choice = evt.choices[choiceIdx];
+
+  if (choice.gold) {
+    if (choice.gold < 0 && (game.gold || 0) < Math.abs(choice.gold)) {
+      showNotification('Not enough gold!');
+      return;
+    }
+    game.gold = (game.gold || 0) + choice.gold;
+    if (choice.gold > 0) game.totalGoldEarned = (game.totalGoldEarned || 0) + choice.gold;
+  }
+  if (choice.rep) game.reputation = clamp((game.reputation || 50) + choice.rep, 0, REPUTATION_MAX);
+
+  if (choice.dog) {
+    office.officeDog = true;
+    office.dogName = DOG_NAMES[rand(0, DOG_NAMES.length - 1)];
+    showNotification('You adopted ' + office.dogName + '! Good boy.');
+  }
+
+  addJournalEntry('Office event: ' + evt.name + '. ' + choice.outcome.substring(0, 60) + '...');
+
+  var rewardLine = '';
+  if (choice.gold || choice.rep) {
+    rewardLine = '\n\n' + (choice.rep ? ((choice.rep >= 0 ? '+' : '') + choice.rep + ' Rep') : '') +
+      (choice.gold ? ('  |  ' + (choice.gold >= 0 ? '+' : '') + '$' + Math.abs(choice.gold)) : '');
+  }
+  twReset(choice.outcome + rewardLine);
+  office.officeEvent = null;
+  office._eventShown = false;
+  office.showingOutcome = true;
+
+  if ((choice.rep || 0) >= 0) {
+    if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+  } else {
+    if (typeof audio !== 'undefined' && typeof audio.playBad === 'function') audio.playBad();
+  }
+}
+
+function drawOfficeEventPanel(W, H) {
+  var pw = Math.min(W * 0.65, 600), ph = Math.min(H * 0.6, 460);
+  var px = (W - pw) / 2, py = H * 0.2;
+  drawUIPanel(px, py, pw, ph, 'OFFICE EVENT');
+
+  var fs = Math.max(10, Math.min(14, pw * 0.022));
+  var margin = 18;
+
+  var visible = twGetVisible();
+  ctx.font = fs + 'px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.uiText;
+  var lines = wrapTextLines(visible, pw - margin * 2, fs);
+  for (var i = 0; i < lines.length; i++) {
+    var ly = py + 48 + i * (fs + 4);
+    if (ly > py + ph - 100) break;
+    if (i === 0) { ctx.fillStyle = PALETTE.uiHighlight; ctx.font = 'bold ' + fs + 'px monospace'; }
+    else { ctx.fillStyle = PALETTE.uiText; ctx.font = fs + 'px monospace'; }
+    ctx.fillText(lines[i], px + margin, ly);
+  }
+
+  if (office.caseChoiceVisible && office.officeEvent) {
+    var choiceY = py + ph - 85;
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + (fs - 1) + 'px monospace';
+    ctx.fillText('YOUR CHOICE:', px + margin, choiceY);
+    choiceY += fs + 5;
+    for (var ci = 0; ci < office.officeEvent.choices.length; ci++) {
+      ctx.fillStyle = PALETTE.uiText;
+      ctx.font = (fs - 1) + 'px monospace';
+      ctx.fillText('[' + (ci + 1) + '] ' + office.officeEvent.choices[ci].text, px + margin, choiceY);
+      choiceY += fs + 5;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §21  STATS / RECORDS VIEW
+// ─────────────────────────────────────────────
+function drawStatsView(W, H) {
+  var pw = Math.min(W * 0.7, 640), ph = Math.min(H * 0.75, 560);
+  var px = (W - pw) / 2, py = H * 0.12;
+  drawUIPanel(px, py, pw, ph, 'SHERIFF\'S RECORDS');
+
+  var fs = Math.max(10, Math.min(13, pw * 0.02));
+  var margin = 18;
+
+  // Tabs
+  var tabs = ['Cases', 'Jail Log', 'Finances', 'Rep History'];
+  ctx.font = 'bold ' + fs + 'px monospace';
+  ctx.textAlign = 'center';
+  for (var t = 0; t < tabs.length; t++) {
+    ctx.fillStyle = t === office.statsTab ? PALETTE.uiHighlight : PALETTE.uiTextDim;
+    ctx.fillText(tabs[t], px + pw * (0.14 + t * 0.24), py + 44);
+  }
+  ctx.fillStyle = PALETTE.uiBorder;
+  ctx.fillRect(px + margin, py + 52, pw - margin * 2, 1);
+
+  var y = py + 68;
+  ctx.textAlign = 'left';
+  ctx.font = fs + 'px monospace';
+  ctx.fillStyle = PALETTE.uiText;
+
+  if (office.statsTab === 0) {
+    // Case stats
+    var catCounts = {};
+    for (var ci = 0; ci < office.completedCases.length; ci++) {
+      var cat = office.completedCases[ci].category;
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+    }
+    ctx.fillText('Total cases solved: ' + office.completedCases.length, px + margin, y); y += fs + 5;
+    ctx.fillText('Active cases: ' + office.activeCases.length, px + margin, y); y += fs + 5;
+    ctx.fillText('Villain proposals handled: ' + office.completedCases.filter(function(c) { return c.isVillainProposal; }).length, px + margin, y); y += fs + 10;
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.fillText('By Category:', px + margin, y); y += fs + 5;
+    ctx.fillStyle = PALETTE.uiText;
+    var catKeys = Object.keys(catCounts);
+    for (var ck = 0; ck < catKeys.length; ck++) {
+      ctx.fillText('  ' + catKeys[ck] + ': ' + catCounts[catKeys[ck]], px + margin, y); y += fs + 3;
+    }
+  } else if (office.statsTab === 1) {
+    // Prisoner log
+    ctx.fillText('Total prisoners: ' + (office.prisonerLog.length + office.prisoners.length), px + margin, y); y += fs + 5;
+    ctx.fillText('Currently held: ' + office.prisoners.length, px + margin, y); y += fs + 5;
+    var informants = office.prisoners.filter(function(p) { return p.informant; }).length;
+    var working = office.prisoners.filter(function(p) { return p.working; }).length;
+    ctx.fillText('Informants: ' + informants + '  |  Working: ' + working, px + margin, y); y += fs + 10;
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.fillText('Recent History:', px + margin, y); y += fs + 5;
+    ctx.fillStyle = PALETTE.uiText;
+    var logSlice = office.prisonerLog.slice(-8);
+    for (var pl = logSlice.length - 1; pl >= 0; pl--) {
+      var entry = logSlice[pl];
+      ctx.fillText('  Day ' + entry.day + ': ' + entry.name + ' — ' + entry.fate, px + margin, y);
+      y += fs + 3;
+      if (y > py + ph - 30) break;
+    }
+  } else if (office.statsTab === 2) {
+    // Finances
+    ctx.fillText('Gold on hand: $' + (game.gold || 0), px + margin, y); y += fs + 5;
+    ctx.fillText('Total earned: $' + (game.totalGoldEarned || 0), px + margin, y); y += fs + 5;
+    var dailyIncome = office.prisoners.filter(function(p) { return p.working; }).length * 5;
+    var dailyInfoIncome = office.prisoners.filter(function(p) { return p.informant; }).length * 5;
+    var deputyCost = 0;
+    for (var d = 0; d < office.deputies.length; d++) deputyCost += 10 + office.deputies[d].skill * 5;
+    ctx.fillText('Daily prison labor income: $' + dailyIncome, px + margin, y); y += fs + 5;
+    ctx.fillText('Daily informant income: $' + dailyInfoIncome, px + margin, y); y += fs + 5;
+    ctx.fillText('Daily deputy salary cost: -$' + deputyCost, px + margin, y); y += fs + 5;
+    ctx.fillStyle = dailyIncome + dailyInfoIncome - deputyCost >= 0 ? PALETTE.uiSuccess : PALETTE.uiDanger;
+    ctx.fillText('Net daily: $' + (dailyIncome + dailyInfoIncome - deputyCost), px + margin, y); y += fs + 10;
+    ctx.fillStyle = PALETTE.uiText;
+    ctx.fillText('Pending requisitions: ' + office.pendingRequisitions.length, px + margin, y);
+  } else if (office.statsTab === 3) {
+    // Rep history (ASCII bar chart)
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.fillText('Reputation over time:', px + margin, y); y += fs + 8;
+    var maxBarW = pw - margin * 2 - 60;
+    for (var ri = 0; ri < office.repHistory.length; ri++) {
+      var rh = office.repHistory[ri];
+      var barW = Math.max(2, (rh.rep / 100) * maxBarW);
+      var barCol = rh.rep > 70 ? '#44aa44' : (rh.rep > 40 ? '#aaaa44' : '#aa4444');
+      ctx.fillStyle = PALETTE.uiTextDim;
+      ctx.font = (fs - 2) + 'px monospace';
+      ctx.fillText('D' + rh.day, px + margin, y + 4);
+      ctx.fillStyle = barCol;
+      ctx.fillRect(px + margin + 35, y - 4, barW, 8);
+      ctx.fillStyle = PALETTE.uiText;
+      ctx.font = (fs - 3) + 'px monospace';
+      ctx.fillText(rh.rep + '', px + margin + 40 + barW, y + 3);
+      y += 12;
+      if (y > py + ph - 30) break;
+    }
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.fillText('[TAB] Switch tab  |  [Q/ESC] Close', px + pw / 2, py + ph - 8);
+}
+
+// ─────────────────────────────────────────────
+// §22  DEPUTY SYSTEM
+// ─────────────────────────────────────────────
+function hireDeputy() {
+  if (office.deputies.length >= 3) {
+    showNotification('Maximum 3 deputies!');
+    return;
+  }
+  var cost = 100 + office.deputies.length * 75;
+  if ((game.gold || 0) < cost) {
+    showNotification('Need $' + cost + ' to hire a deputy.');
+    return;
+  }
+  game.gold -= cost;
+  var name = DEPUTY_NAMES[rand(0, DEPUTY_NAMES.length - 1)];
+  // Ensure unique name
+  var existingNames = office.deputies.map(function(d) { return d.name; });
+  while (existingNames.indexOf(name) !== -1) {
+    name = DEPUTY_NAMES[rand(0, DEPUTY_NAMES.length - 1)];
+  }
+  office.deputies.push({
+    name: name,
+    skill: 1,
+    loyalty: 70,
+    onPatrol: false,
+    patrolReturn: 0,
+    _lastPaidDay: game.dayCount || 1,
+  });
+  showNotification('Hired Deputy ' + name + '! -$' + cost);
+  addJournalEntry('Hired deputy: ' + name);
+  if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+}
+
+function deputyAction(action) {
+  if (office.deputies.length === 0) return;
+  var dep = office.deputies[office.selectedDeputy];
+  if (!dep) return;
+
+  switch (action) {
+    case 'patrol':
+      if (dep.onPatrol) {
+        showNotification(dep.name + ' is already on patrol.');
+        return;
+      }
+      dep.onPatrol = true;
+      dep.patrolReturn = (game.dayCount || 1) + 1;
+      showNotification(dep.name + ' sent on patrol. Returns tomorrow.');
+      break;
+    case 'train':
+      if (dep.skill >= 5) {
+        showNotification(dep.name + ' is at max skill!');
+        return;
+      }
+      var trainCost = dep.skill * 50;
+      if ((game.gold || 0) < trainCost) {
+        showNotification('Training costs $' + trainCost + '.');
+        return;
+      }
+      game.gold -= trainCost;
+      dep.skill++;
+      dep.loyalty = Math.min(100, dep.loyalty + 10);
+      showNotification(dep.name + ' trained to skill ' + dep.skill + '! -$' + trainCost);
+      break;
+    case 'fire':
+      showNotification('Fired Deputy ' + dep.name + '. -3 Rep.');
+      game.reputation = clamp((game.reputation || 50) - 3, 0, REPUTATION_MAX);
+      addJournalEntry('Fired deputy: ' + dep.name);
+      office.deputies.splice(office.selectedDeputy, 1);
+      if (office.selectedDeputy >= office.deputies.length) {
+        office.selectedDeputy = Math.max(0, office.deputies.length - 1);
+      }
+      break;
+  }
+}
+
+// Process deputy patrol returns
+(function deputyPatrolLoop() {
+  setInterval(function() {
+    if (!game || !office.deputies) return;
+    for (var i = 0; i < office.deputies.length; i++) {
+      var dep = office.deputies[i];
+      if (dep.onPatrol && (game.dayCount || 1) >= dep.patrolReturn) {
+        dep.onPatrol = false;
+        var success = Math.random() < (0.4 + dep.skill * 0.12);
+        if (success) {
+          var goldEarned = rand(15, 40) + dep.skill * 10;
+          var repEarned = rand(3, 8);
+          game.gold = (game.gold || 0) + goldEarned;
+          game.totalGoldEarned = (game.totalGoldEarned || 0) + goldEarned;
+          game.reputation = clamp((game.reputation || 50) + repEarned, 0, REPUTATION_MAX);
+          dep.loyalty = Math.min(100, dep.loyalty + 3);
+          showNotification(dep.name + ' returned: resolved a crime! +$' + goldEarned + ', +' + repEarned + ' Rep');
+        } else {
+          dep.loyalty = Math.max(0, dep.loyalty - 5);
+          showNotification(dep.name + ' returned: patrol was uneventful.');
+        }
+      }
+    }
+    // Prisoner work/informant daily income
+    for (var p = 0; p < office.prisoners.length; p++) {
+      var pr = office.prisoners[p];
+      if (pr.working && pr._lastWorkDay !== (game.dayCount || 1)) {
+        pr._lastWorkDay = game.dayCount || 1;
+        game.gold = (game.gold || 0) + 5;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + 5;
+      }
+      if (pr.informant && pr._lastIntelDay !== (game.dayCount || 1)) {
+        pr._lastIntelDay = game.dayCount || 1;
+        game.gold = (game.gold || 0) + 5;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + 5;
+      }
+    }
+  }, 2000);
+})();
+
+function drawDeputiesView(W, H) {
+  var pw = Math.min(W * 0.65, 600), ph = Math.min(H * 0.65, 480);
+  var px = (W - pw) / 2, py = H * 0.17;
+  drawUIPanel(px, py, pw, ph, 'DEPUTY MANAGEMENT (' + office.deputies.length + '/3)');
+
+  var fs = Math.max(10, Math.min(13, pw * 0.022));
+  var margin = 18;
+  var y = py + 48;
+
+  ctx.textAlign = 'left';
+  if (office.deputies.length === 0) {
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = 'italic ' + fs + 'px monospace';
+    ctx.fillText('No deputies hired yet.', px + margin, y);
+    y += fs + 10;
+  } else {
+    for (var i = 0; i < office.deputies.length; i++) {
+      var dep = office.deputies[i];
+      var isSel = i === office.selectedDeputy;
+      if (isSel) {
+        ctx.fillStyle = 'rgba(255,215,0,0.06)';
+        ctx.fillRect(px + margin - 3, y - 5, pw - margin * 2 + 6, fs * 4 + 6);
+      }
+      ctx.fillStyle = isSel ? PALETTE.uiHighlight : PALETTE.uiText;
+      ctx.font = 'bold ' + fs + 'px monospace';
+      ctx.fillText((isSel ? '> ' : '  ') + dep.name, px + margin, y + fs);
+      ctx.fillStyle = PALETTE.uiTextDim;
+      ctx.font = (fs - 2) + 'px monospace';
+      ctx.fillText('    Skill: ' + dep.skill + '/5  |  Loyalty: ' + dep.loyalty + '%  |  Salary: $' + (10 + dep.skill * 5) + '/day', px + margin, y + fs * 2 + 2);
+      ctx.fillStyle = dep.onPatrol ? '#ccaa30' : '#44aa44';
+      ctx.fillText('    Status: ' + (dep.onPatrol ? 'On Patrol (returns Day ' + dep.patrolReturn + ')' : 'Available'), px + margin, y + fs * 3 + 2);
+      if (isSel && !dep.onPatrol) {
+        ctx.fillStyle = PALETTE.uiText;
+        ctx.font = (fs - 1) + 'px monospace';
+        ctx.fillText('    [1] Send on Patrol  [2] Train ($' + (dep.skill * 50) + ')  [3] Fire', px + margin, y + fs * 4 + 2);
+      }
+      y += fs * 5 + 10;
+    }
+  }
+
+  var hireCost = 100 + office.deputies.length * 75;
+  if (office.deputies.length < 3) {
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('[H] Hire Deputy ($' + hireCost + ')', px + margin, py + ph - 45);
+  }
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  |  [Q/ESC] Close', px + pw / 2, py + ph - 10);
+}
+
+// ─────────────────────────────────────────────
+// §23  CRAFTING & SUPPLIES
+// ─────────────────────────────────────────────
+function craftItem(type) {
+  switch (type) {
+    case 'silver_bullets':
+      if ((game.gold || 0) < 30) { showNotification('Need $30 for silver bullets.'); return; }
+      game.gold -= 30;
+      game.ammo = Math.min((game.ammo || 0) + 6, MAX_AMMO_CAP);
+      showNotification('Crafted 6 silver bullets! -$30');
+      break;
+    case 'tonic':
+      if ((game.gold || 0) < 20) { showNotification('Need $20 for a tonic.'); return; }
+      game.gold -= 20;
+      game.healthTonics = (game.healthTonics || 0) + 1;
+      showNotification('Brewed a health tonic! -$20');
+      break;
+    case 'badge_polish':
+      if ((game.gold || 0) < 5) { showNotification('Need $5 for badge polish.'); return; }
+      if (office._polishDay === (game.dayCount || 1)) { showNotification('Badge already polished today.'); return; }
+      game.gold -= 5;
+      office._badgePolished = true;
+      office._polishDay = game.dayCount || 1;
+      showNotification('Badge polished! +5% rep gains today. -$5');
+      break;
+    case 'forge_documents':
+      if ((game.gold || 0) < 50) { showNotification('Need $50 for forged documents.'); return; }
+      game.gold -= 50;
+      game.corruption = clamp((game.corruption || 0) + 5, 0, 100);
+      game.gold = (game.gold || 0) + 120;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + 120;
+      showNotification('Forged documents sold on black market! +$120, +5 Corruption');
+      break;
+    case 'requisition_ammo':
+      if ((game.gold || 0) < 15) { showNotification('Need $15 for ammo requisition.'); return; }
+      game.gold -= 15;
+      office.pendingRequisitions.push({ type: 'ammo', amount: 12, deliveryDay: (game.dayCount || 1) + 1 });
+      showNotification('Ammo requisition sent! +12 ammo arrives tomorrow. -$15');
+      break;
+    case 'requisition_tonic':
+      if ((game.gold || 0) < 25) { showNotification('Need $25 for tonic requisition.'); return; }
+      game.gold -= 25;
+      office.pendingRequisitions.push({ type: 'tonic', amount: 2, deliveryDay: (game.dayCount || 1) + 1 });
+      showNotification('Tonic requisition sent! +2 tonics arrive tomorrow. -$25');
+      break;
+  }
+  if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+}
+
+function drawCraftingView(W, H) {
+  var pw = Math.min(W * 0.6, 560), ph = Math.min(H * 0.65, 480);
+  var px = (W - pw) / 2, py = H * 0.17;
+  drawUIPanel(px, py, pw, ph, 'CRAFTING & SUPPLIES  |  Gold: $' + (game.gold || 0));
+
+  var fs = Math.max(10, Math.min(13, pw * 0.022));
+  var margin = 18;
+  var y = py + 52;
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.uiHighlight;
+  ctx.font = 'bold ' + fs + 'px monospace';
+  ctx.fillText('Crafting:', px + margin, y); y += fs + 6;
+
+  var items = [
+    { key: '1', name: 'Silver Bullets', desc: '+6 ammo', cost: '$30' },
+    { key: '2', name: 'Health Tonic', desc: '+1 tonic', cost: '$20' },
+    { key: '3', name: 'Badge Polish', desc: '+5% rep today', cost: '$5' },
+  ];
+  if ((game.corruption || 0) >= 30) {
+    items.push({ key: '4', name: 'Forge Documents', desc: 'Sell fakes +$120 +5 corruption', cost: '$50', corrupt: true });
+  }
+
+  for (var i = 0; i < items.length; i++) {
+    ctx.fillStyle = items[i].corrupt ? '#cc3030' : PALETTE.uiText;
+    ctx.font = fs + 'px monospace';
+    ctx.fillText('[' + items[i].key + '] ' + items[i].name + ' — ' + items[i].desc + ' (' + items[i].cost + ')', px + margin, y);
+    y += fs + 5;
+  }
+
+  y += 10;
+  ctx.fillStyle = PALETTE.uiHighlight;
+  ctx.font = 'bold ' + fs + 'px monospace';
+  ctx.fillText('Requisitions (arrive next day):', px + margin, y); y += fs + 6;
+
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.font = fs + 'px monospace';
+  ctx.fillText('[5] Ammo Requisition — +12 ammo ($15)', px + margin, y); y += fs + 5;
+  ctx.fillText('[6] Tonic Requisition — +2 tonics ($25)', px + margin, y); y += fs + 10;
+
+  if (office.pendingRequisitions.length > 0) {
+    ctx.fillStyle = '#ccaa30';
+    ctx.font = (fs - 1) + 'px monospace';
+    ctx.fillText('Pending deliveries:', px + margin, y); y += fs + 3;
+    for (var r = 0; r < office.pendingRequisitions.length; r++) {
+      var req = office.pendingRequisitions[r];
+      ctx.fillText('  ' + req.type + ' x' + req.amount + ' — arrives Day ' + req.deliveryDay, px + margin, y);
+      y += fs + 3;
+    }
+  }
+
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[Q/ESC] Close', px + pw / 2, py + ph - 10);
+}
+
+// ─────────────────────────────────────────────
+// §24  MINI-GAMES: DARTS
+// ─────────────────────────────────────────────
+function updateDarts(dt) {
+  if (office.dartPhase === 0) {
+    // Swinging power bar
+    office.dartPower += dt * 120;
+    if (office.dartPower > 100) office.dartPower = 100;
+    if (consumeKey('Space') || consumeKey('KeyE')) {
+      office.dartPhase = 1;
+      office.dartAngle = 0;
+    }
+  } else if (office.dartPhase === 1) {
+    // Swinging aim
+    office.dartAngle += dt * 180;
+    if (consumeKey('Space') || consumeKey('KeyE')) {
+      // Calculate score
+      var aimError = Math.abs(Math.sin(office.dartAngle * Math.PI / 180)) * 50;
+      var powerError = Math.abs(office.dartPower - 75) * 0.5;
+      var totalError = aimError + powerError;
+      var score = totalError < 5 ? 50 : (totalError < 15 ? 25 : (totalError < 30 ? 10 : (totalError < 50 ? 5 : 1)));
+      office.dartScore += score;
+      office.dartRounds++;
+      showNotification('Dart hit! +' + score + ' points (Total: ' + office.dartScore + ')');
+      if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+      if (office.dartRounds >= 5) {
+        var goldReward = Math.floor(office.dartScore / 10);
+        game.gold = (game.gold || 0) + goldReward;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + goldReward;
+        if (!office._dartHighScore || office.dartScore > office._dartHighScore) office._dartHighScore = office.dartScore;
+        showNotification('Darts finished! Score: ' + office.dartScore + ', Earned $' + goldReward);
+        office.playingDarts = false;
+        office.dartScore = 0;
+        office.dartRounds = 0;
+      }
+      office.dartPhase = 0;
+      office.dartPower = 0;
+    }
+  }
+}
+
+function drawDartsView(W, H) {
+  var pw = Math.min(W * 0.5, 440), ph = Math.min(H * 0.55, 400);
+  var px = (W - pw) / 2, py = H * 0.22;
+  drawUIPanel(px, py, pw, ph, 'DART BOARD  |  Round ' + (office.dartRounds + 1) + '/5');
+
+  var fs = Math.max(10, Math.min(14, pw * 0.028));
+  ctx.textAlign = 'center';
+
+  // Dart board
+  var bx = px + pw / 2, by = py + ph * 0.35, br = ph * 0.2;
+  var dartCols2 = ['#cc2222', '#e8d8b8', '#222288', '#e8d8b8', '#cc2222'];
+  for (var dri = 0; dri < 5; dri++) {
+    ctx.fillStyle = dartCols2[dri];
+    ctx.beginPath();
+    ctx.arc(bx, by, br * (1 - dri * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#cc2222';
+  ctx.beginPath();
+  ctx.arc(bx, by, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Aim indicator
+  if (office.dartPhase === 1) {
+    var aimX = bx + Math.sin(office.dartAngle * Math.PI / 180) * br * 0.8;
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(aimX, by - br);
+    ctx.lineTo(aimX, by + br);
+    ctx.stroke();
+  }
+
+  // Power bar
+  ctx.fillStyle = '#222';
+  ctx.fillRect(px + 20, py + ph - 70, pw - 40, 16);
+  var powerCol = office.dartPower > 60 && office.dartPower < 90 ? '#44aa44' : '#aaaa44';
+  ctx.fillStyle = powerCol;
+  ctx.fillRect(px + 20, py + ph - 70, (pw - 40) * office.dartPower / 100, 16);
+  // Sweet spot indicator
+  ctx.fillStyle = '#44ff44';
+  ctx.fillRect(px + 20 + (pw - 40) * 0.7, py + ph - 70, (pw - 40) * 0.15, 16);
+
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.font = fs + 'px monospace';
+  ctx.fillText(office.dartPhase === 0 ? '[SPACE] Set Power' : '[SPACE] Throw!', px + pw / 2, py + ph - 36);
+  ctx.fillStyle = PALETTE.uiHighlight;
+  ctx.fillText('Score: ' + office.dartScore, px + pw / 2, py + ph - 18);
+}
+
+// ─────────────────────────────────────────────
+// §25  MINI-GAME: TARGET PRACTICE
+// ─────────────────────────────────────────────
+function updateTargetPractice(dt) {
+  if (office.targetPhase === 0) {
+    // Countdown
+    office.targetTimer += dt;
+    if (office.targetTimer >= 2) {
+      office.targetPhase = 1;
+      office.targetTimer = 0;
+    }
+  } else if (office.targetPhase === 1) {
+    // Random delay before "DRAW!"
+    office.targetTimer += dt;
+    var drawTime = 0.5 + Math.random() * 2;
+    if (consumeKey('Space') || consumeKey('KeyE')) {
+      // Too early!
+      showNotification('Too early! -5 Rep for recklessness.');
+      game.reputation = clamp((game.reputation || 50) - 5, 0, REPUTATION_MAX);
+      office.targetPractice = false;
+      office.targetPhase = 0;
+      office.targetTimer = 0;
+      return;
+    }
+    if (office.targetTimer >= drawTime) {
+      office.targetPhase = 2;
+      office.targetTimer = 0;
+    }
+  } else if (office.targetPhase === 2) {
+    // DRAW! Time reaction
+    office.targetTimer += dt;
+    if (consumeKey('Space') || consumeKey('KeyE')) {
+      var reactionMs = Math.round(office.targetTimer * 1000);
+      var score = reactionMs < 200 ? 50 : (reactionMs < 400 ? 30 : (reactionMs < 700 ? 15 : 5));
+      office.targetScore += score;
+      var goldReward = Math.floor(score / 5);
+      game.gold = (game.gold || 0) + goldReward;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + goldReward;
+      showNotification('BANG! ' + reactionMs + 'ms reaction! +' + score + ' pts, +$' + goldReward);
+      if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+      office.targetPractice = false;
+      office.targetPhase = 0;
+      office.targetTimer = 0;
+    }
+    if (office.targetTimer > 2) {
+      showNotification('Too slow! The bottle fell on its own.');
+      office.targetPractice = false;
+      office.targetPhase = 0;
+      office.targetTimer = 0;
+    }
+  }
+}
+
+function drawTargetPracticeView(W, H) {
+  var pw = Math.min(W * 0.5, 440), ph = Math.min(H * 0.45, 340);
+  var px = (W - pw) / 2, py = H * 0.27;
+  drawUIPanel(px, py, pw, ph, 'TARGET PRACTICE');
+
+  var fs = Math.max(12, Math.min(18, pw * 0.035));
+  ctx.textAlign = 'center';
+
+  if (office.targetPhase === 0) {
+    ctx.fillStyle = PALETTE.uiText;
+    ctx.font = fs + 'px monospace';
+    ctx.fillText('Get ready...', px + pw / 2, py + ph / 2);
+  } else if (office.targetPhase === 1) {
+    // Bottles on shelf
+    ctx.fillStyle = '#44aa44';
+    for (var bi = 0; bi < 5; bi++) {
+      ctx.fillRect(px + pw * 0.2 + bi * pw * 0.12, py + ph * 0.3, 10, 20);
+      ctx.beginPath();
+      ctx.arc(px + pw * 0.2 + bi * pw * 0.12 + 5, py + ph * 0.3, 5, Math.PI, 0);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ccaa30';
+    ctx.font = 'bold ' + (fs + 4) + 'px monospace';
+    ctx.fillText('WAIT...', px + pw / 2, py + ph * 0.7);
+  } else if (office.targetPhase === 2) {
+    ctx.fillStyle = '#ff4400';
+    ctx.font = 'bold ' + (fs + 8) + 'px monospace';
+    ctx.fillText('DRAW!', px + pw / 2, py + ph * 0.45);
+    ctx.fillStyle = PALETTE.uiHighlight;
+    ctx.font = fs + 'px monospace';
+    ctx.fillText('[SPACE] Shoot!', px + pw / 2, py + ph * 0.65);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §27  BOOKSHELF / LORE READING
+// ─────────────────────────────────────────────
+function drawBookshelfView(W, H) {
+  var pw = Math.min(W * 0.68, 620), ph = Math.min(H * 0.72, 540);
+  var px = (W - pw) / 2, py = H * 0.14;
+  drawUIPanel(px, py, pw, ph, 'BOOKSHELF');
+
+  var fs = Math.max(10, Math.min(13, pw * 0.022));
+  var margin = 18;
+  var y = py + 48;
+
+  ctx.textAlign = 'left';
+  for (var i = 0; i < LORE_BOOKS.length; i++) {
+    var sel = i === office.selectedBook;
+    var read = office.bookRead[i];
+    ctx.fillStyle = sel ? PALETTE.uiHighlight : (read ? PALETTE.uiTextDim : PALETTE.uiText);
+    ctx.font = (sel ? 'bold ' : '') + fs + 'px monospace';
+    ctx.fillText((sel ? '> ' : '  ') + LORE_BOOKS[i].title + (read ? ' [READ]' : ''), px + margin, y);
+    y += fs + 4;
+  }
+
+  y += 8;
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.font = (fs - 1) + 'px monospace';
+  var book = LORE_BOOKS[office.selectedBook];
+  if (office.bookRead[office.selectedBook]) {
+    var lines = wrapTextLines(book.content, pw - margin * 2, fs - 1);
+    for (var li = 0; li < lines.length; li++) {
+      if (y > py + ph - 30) break;
+      ctx.fillText(lines[li], px + margin, y);
+      y += fs + 2;
+    }
+  } else {
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = 'italic ' + (fs - 1) + 'px monospace';
+    ctx.fillText('Press [E] to read this book.', px + margin, y);
+  }
+
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  |  [E] Read  |  [Q/ESC] Close', px + pw / 2, py + ph - 8);
+}
+
+// ─────────────────────────────────────────────
+// §28  WANTED POSTER BOARD
+// ─────────────────────────────────────────────
+var WANTED_NAMES = [
+  'Black Bart', 'One-Eyed Pete', 'Cactus Jack', 'The Diamondback Kid',
+  'Whiskey Slim', 'Mad Dog McGraw', 'Iron Jaw Jenkins', 'Rattlesnake Ruby',
+  'Dusty Rhodes', 'The Silver Fox', 'Two-Gun Torres', 'Dynamite Dan'
+];
+var WANTED_CRIMES = [
+  'Train robbery', 'Bank heist', 'Horse theft', 'Murder', 'Cattle rustling',
+  'Stagecoach holdup', 'Arson', 'Counterfeiting', 'Jail break', 'Kidnapping'
+];
+
+function generateWantedPosters() {
+  if (office.wantedPosters.length > 0 && office.wantedPosters[0]._day === (game.dayCount || 1)) return;
+  office.wantedPosters = [];
+  var count = rand(3, 6);
+  for (var i = 0; i < count; i++) {
+    office.wantedPosters.push({
+      name: WANTED_NAMES[rand(0, WANTED_NAMES.length - 1)],
+      crime: WANTED_CRIMES[rand(0, WANTED_CRIMES.length - 1)],
+      bounty: rand(50, 500),
+      dead: Math.random() < 0.3,
+      _day: game.dayCount || 1
+    });
+  }
+}
+
+function drawWantedBoard(W, H) {
+  var pw = Math.min(W * 0.65, 600), ph = Math.min(H * 0.7, 520);
+  var px = (W - pw) / 2, py = H * 0.15;
+  drawUIPanel(px, py, pw, ph, 'WANTED BOARD');
+
+  var fs = Math.max(10, Math.min(13, pw * 0.022));
+  var margin = 18;
+  var y = py + 48;
+
+  ctx.textAlign = 'left';
+  for (var i = 0; i < office.wantedPosters.length; i++) {
+    var wp = office.wantedPosters[i];
+    // Mini poster look
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(px + margin, y - 4, pw - margin * 2, fs * 3 + 12);
+    ctx.fillStyle = '#e8d8b8';
+    ctx.fillRect(px + margin + 2, y - 2, pw - margin * 2 - 4, fs * 3 + 8);
+
+    ctx.fillStyle = '#3a2a1a';
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('WANTED: ' + wp.name, px + margin + 8, y + fs);
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('Crime: ' + wp.crime, px + margin + 8, y + fs * 2);
+    ctx.fillStyle = '#cc3030';
+    ctx.fillText('$' + wp.bounty + ' — ' + (wp.dead ? 'DEAD OR ALIVE' : 'ALIVE ONLY'), px + margin + 8, y + fs * 3);
+    y += fs * 3 + 18;
+    if (y > py + ph - 30) break;
+  }
+
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[Q/ESC] Close', px + pw / 2, py + ph - 8);
+}
+
+// ─────────────────────────────────────────────
+// §29  NOTICE BOARD
+// ─────────────────────────────────────────────
+var NOTICE_TEMPLATES = [
+  'Town dance this Saturday at the saloon.',
+  'Church services moved to 10 AM Sundays.',
+  'Cattle auction next week — best prices guaranteed.',
+  'New schoolteacher needed. Apply at town hall.',
+  'Doc Williams now offering dental extractions ($3).',
+  'MISSING: One brown mule, answers to "Biscuit".',
+  'Land for sale — 40 acres north of the creek.',
+  'Temperance Society meeting every Wednesday.',
+  'Railroad company seeking laborers. $2/day.',
+  'FOUND: Gold pocket watch near the general store.',
+  'WARNING: Coyotes spotted near livestock pens.',
+  'Blacksmith offering 20% off horseshoes this week.',
+  'Town council elections in 2 weeks. Register to vote.',
+  'Piano recital by Miss Eleanor — Friday evening.',
+  'Reward for information on missing shipment of dynamite.',
+];
+
+function generateNotices() {
+  if (office.notices.length > 0 && office.notices[0]._day === (game.dayCount || 1)) return;
+  office.notices = [];
+  var count = rand(4, 7);
+  var used = {};
+  for (var i = 0; i < count; i++) {
+    var idx = rand(0, NOTICE_TEMPLATES.length - 1);
+    while (used[idx]) idx = (idx + 1) % NOTICE_TEMPLATES.length;
+    used[idx] = true;
+    office.notices.push({ text: NOTICE_TEMPLATES[idx], _day: game.dayCount || 1 });
+  }
+}
+
+function drawNoticeBoard(W, H) {
+  var pw = Math.min(W * 0.6, 560), ph = Math.min(H * 0.65, 480);
+  var px = (W - pw) / 2, py = H * 0.17;
+  drawUIPanel(px, py, pw, ph, 'NOTICE BOARD');
+
+  var fs = Math.max(10, Math.min(13, pw * 0.022));
+  var margin = 18;
+  var y = py + 52;
+
+  ctx.textAlign = 'left';
+  for (var i = 0; i < office.notices.length; i++) {
+    ctx.fillStyle = (i % 2 === 0) ? PALETTE.uiText : PALETTE.uiTextDim;
+    ctx.font = fs + 'px monospace';
+    var lines = wrapTextLines('- ' + office.notices[i].text, pw - margin * 2, fs);
+    for (var l = 0; l < lines.length; l++) {
+      if (y > py + ph - 30) break;
+      ctx.fillText(lines[l], px + margin, y);
+      y += fs + 2;
+    }
+    y += 6;
+  }
+
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 2) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[Q/ESC] Close', px + pw / 2, py + ph - 8);
+}
+
+// ─────────────────────────────────────────────
+// §30  PRISONER EVENTS (bribe / escape)
+// ─────────────────────────────────────────────
+function resolvePrisonerEvent(choice) {
+  var evt = office.prisonerEvent;
+  if (!evt) return;
+
+  if (evt.type === 'escape') {
+    if (choice === 0) {
+      // Subdue
+      game.reputation = clamp((game.reputation || 50) + 5, 0, REPUTATION_MAX);
+      evt.prisoner.mood = Math.max(0, (evt.prisoner.mood || 50) - 20);
+      showNotification('You subdued ' + evt.prisoner.name + '! +5 Rep');
+      addJournalEntry('Stopped escape attempt by ' + evt.prisoner.name);
+    } else {
+      // Let go
+      game.reputation = clamp((game.reputation || 50) - 3, 0, REPUTATION_MAX);
+      var idx = office.prisoners.indexOf(evt.prisoner);
+      if (idx >= 0) {
+        office.prisonerLog.push({ name: evt.prisoner.name, day: game.dayCount || 1, fate: 'Escaped' });
+        office.prisoners.splice(idx, 1);
+      }
+      showNotification(evt.prisoner.name + ' escaped. -3 Rep');
+    }
+  } else if (evt.type === 'bribe') {
+    if (choice === 0) {
+      // Accept bribe
+      game.gold = (game.gold || 0) + evt.amount;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + evt.amount;
+      game.corruption = clamp((game.corruption || 0) + 5, 0, 100);
+      var idx2 = office.prisoners.indexOf(evt.prisoner);
+      if (idx2 >= 0) {
+        office.prisonerLog.push({ name: evt.prisoner.name, day: game.dayCount || 1, fate: 'Bribed out' });
+        office.prisoners.splice(idx2, 1);
+      }
+      showNotification('Accepted $' + evt.amount + ' bribe. +5 Corruption');
+      addJournalEntry('Accepted bribe from ' + evt.prisoner.name);
+    } else {
+      // Refuse
+      game.reputation = clamp((game.reputation || 50) + 3, 0, REPUTATION_MAX);
+      evt.prisoner.mood = Math.max(0, (evt.prisoner.mood || 50) - 10);
+      showNotification('Refused bribe. +3 Rep');
+    }
+  }
+
+  office.prisonerEvent = null;
+}
+
+function drawPrisonerEventPanel(W, H) {
+  var evt = office.prisonerEvent;
+  if (!evt) return;
+  var pw = Math.min(W * 0.55, 500), ph = Math.min(H * 0.4, 300);
+  var px = (W - pw) / 2, py = H * 0.3;
+  drawUIPanel(px, py, pw, ph, evt.type === 'escape' ? 'ESCAPE ATTEMPT!' : 'BRIBE OFFER');
+
+  var fs = Math.max(11, Math.min(14, pw * 0.025));
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.uiText;
+  ctx.font = fs + 'px monospace';
+  var descLines = wrapTextLines(evt.desc, pw - 36, fs);
+  var y = py + 55;
+  for (var i = 0; i < descLines.length; i++) {
+    ctx.fillText(descLines[i], px + pw / 2, y);
+    y += fs + 3;
+  }
+  y += 12;
+  ctx.fillStyle = PALETTE.uiHighlight;
+  ctx.font = (fs - 1) + 'px monospace';
+  ctx.fillText(evt.choices[0], px + pw / 2, y); y += fs + 6;
+  ctx.fillText(evt.choices[1], px + pw / 2, y);
+}
+
+// ─────────────────────────────────────────────
+// §31  SOLITAIRE (memory match card game)
+// ─────────────────────────────────────────────
+var CARD_SUITS = ['♠', '♥', '♦', '♣', '★', '☆', '♪', '♫'];
+
+function initSolitaire() {
+  var pairs = CARD_SUITS.slice(0, 6); // 6 pairs = 12 cards
+  var deck = [];
+  for (var i = 0; i < pairs.length; i++) {
+    deck.push({ suit: pairs[i], flipped: false, matched: false });
+    deck.push({ suit: pairs[i], flipped: false, matched: false });
+  }
+  // Shuffle
+  for (var s = deck.length - 1; s > 0; s--) {
+    var j = rand(0, s);
+    var tmp = deck[s]; deck[s] = deck[j]; deck[j] = tmp;
+  }
+  office.solitaireCards = deck;
+  office.solitaireScore = 0;
+  office.solitaireFlipped = 0;
+  office.solitaireMatches = 0;
+  office._solFirst = -1;
+  office._solSecond = -1;
+  office._solWait = 0;
+  office._solCursor = 0;
+}
+
+function updateSolitaire(dt) {
+  if (office._solWait > 0) {
+    office._solWait -= dt;
+    if (office._solWait <= 0) {
+      var c1 = office.solitaireCards[office._solFirst];
+      var c2 = office.solitaireCards[office._solSecond];
+      if (c1.suit === c2.suit) {
+        c1.matched = true;
+        c2.matched = true;
+        office.solitaireMatches++;
+        office.solitaireScore += 10;
+        if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+        if (office.solitaireMatches >= 6) {
+          var goldReward = Math.max(5, 60 - office.solitaireFlipped * 2);
+          game.gold = (game.gold || 0) + goldReward;
+          game.totalGoldEarned = (game.totalGoldEarned || 0) + goldReward;
+          office._solitaireWins = (office._solitaireWins || 0) + 1;
+          showNotification('Solitaire complete! Earned $' + goldReward);
+          office.playingSolitaire = false;
+          return;
+        }
+      } else {
+        c1.flipped = false;
+        c2.flipped = false;
+      }
+      office._solFirst = -1;
+      office._solSecond = -1;
+    }
+    return;
+  }
+
+  // Cursor movement
+  if (consumeKey('ArrowLeft') || consumeKey('KeyA')) office._solCursor = Math.max(0, office._solCursor - 1);
+  if (consumeKey('ArrowRight') || consumeKey('KeyD')) office._solCursor = Math.min(11, office._solCursor + 1);
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) office._solCursor = Math.max(0, office._solCursor - 4);
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) office._solCursor = Math.min(11, office._solCursor + 4);
+
+  if (consumeKey('KeyE') || consumeKey('Space') || consumeKey('Enter')) {
+    var card = office.solitaireCards[office._solCursor];
+    if (!card || card.flipped || card.matched) return;
+    card.flipped = true;
+    office.solitaireFlipped++;
+    if (office._solFirst === -1) {
+      office._solFirst = office._solCursor;
+    } else {
+      office._solSecond = office._solCursor;
+      office._solWait = 0.8;
+    }
+  }
+}
+
+function drawSolitaireView(W, H) {
+  var pw = Math.min(W * 0.6, 520), ph = Math.min(H * 0.55, 400);
+  var px = (W - pw) / 2, py = H * 0.22;
+  drawUIPanel(px, py, pw, ph, 'MEMORY MATCH  |  Pairs: ' + office.solitaireMatches + '/6');
+
+  var fs = Math.max(12, Math.min(18, pw * 0.03));
+  var cardW = (pw - 80) / 4, cardH = cardW * 1.3;
+  var startX = px + 30, startY = py + 50;
+
+  for (var i = 0; i < office.solitaireCards.length; i++) {
+    var card = office.solitaireCards[i];
+    var col = i % 4, row = Math.floor(i / 4);
+    var cx = startX + col * (cardW + 8), cy = startY + row * (cardH + 8);
+    var isCursor = i === office._solCursor;
+
+    if (isCursor) {
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx - 2, cy - 2, cardW + 4, cardH + 4);
+    }
+
+    if (card.matched) {
+      ctx.fillStyle = 'rgba(68,170,68,0.3)';
+      ctx.fillRect(cx, cy, cardW, cardH);
+      ctx.fillStyle = '#44aa44';
+      ctx.font = 'bold ' + (fs + 4) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(card.suit, cx + cardW / 2, cy + cardH / 2 + 6);
+    } else if (card.flipped) {
+      ctx.fillStyle = '#e8d8b8';
+      ctx.fillRect(cx, cy, cardW, cardH);
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx, cy, cardW, cardH);
+      ctx.fillStyle = '#3a2a1a';
+      ctx.font = 'bold ' + (fs + 4) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(card.suit, cx + cardW / 2, cy + cardH / 2 + 6);
+    } else {
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(cx, cy, cardW, cardH);
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx, cy, cardW, cardH);
+      ctx.fillStyle = '#6a5a4a';
+      ctx.font = (fs - 2) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', cx + cardW / 2, cy + cardH / 2 + 4);
+    }
+  }
+
+  ctx.fillStyle = PALETTE.uiTextDim;
+  ctx.font = (fs - 4) + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Flips: ' + office.solitaireFlipped + '  |  [WASD] Move  [E] Flip  [Q/ESC] Quit', px + pw / 2, py + ph - 10);
+}
+
+// ─────────────────────────────────────────────
+// §32  TROPHY SYSTEM
+// ─────────────────────────────────────────────
+var TROPHY_DEFS = [
+  { id: 'first_case', name: 'First Case', desc: 'Solve your first case', check: function() { return office.completedCases.length >= 1; } },
+  { id: '10_cases', name: 'Veteran Lawman', desc: 'Solve 10 cases', check: function() { return office.completedCases.length >= 10; } },
+  { id: '25_cases', name: 'Legend of the Law', desc: 'Solve 25 cases', check: function() { return office.completedCases.length >= 25; } },
+  { id: 'first_prisoner', name: 'Jailkeeper', desc: 'Jail your first prisoner', check: function() { return office.prisonerLog.length > 0 || office.prisoners.length > 0; } },
+  { id: '5_prisoners', name: 'Full House', desc: 'Have 5 prisoners at once', check: function() { return office.prisoners.length >= 5; } },
+  { id: 'first_deputy', name: 'Delegation', desc: 'Hire your first deputy', check: function() { return office.deputies.length >= 1; } },
+  { id: '3_deputies', name: 'Full Force', desc: 'Have 3 deputies at once', check: function() { return office.deputies.length >= 3; } },
+  { id: 'max_rep', name: 'Beloved Sheriff', desc: 'Reach max reputation', check: function() { return (game.reputation || 0) >= REPUTATION_MAX; } },
+  { id: 'rich', name: 'Gold Rush', desc: 'Have $1000 gold', check: function() { return (game.gold || 0) >= 1000; } },
+  { id: 'reader', name: 'Bookworm', desc: 'Read all lore books', check: function() { for (var i = 0; i < LORE_BOOKS.length; i++) { if (!office.bookRead[i]) return false; } return true; } },
+  { id: 'darts_50', name: 'Bullseye', desc: 'Score 50+ in one dart round', check: function() { return office._dartHighScore >= 50; } },
+  { id: 'coffee', name: 'Caffeinated', desc: 'Brew 10 cups of coffee', check: function() { return (office._coffeeCount || 0) >= 10; } },
+  { id: 'corrupt', name: 'Crooked Sheriff', desc: 'Reach 50+ corruption', check: function() { return (game.corruption || 0) >= 50; } },
+  { id: 'dog_owner', name: 'Man\'s Best Friend', desc: 'Adopt an office dog', check: function() { return office.officeDog; } },
+  { id: 'solitaire', name: 'Card Sharp', desc: 'Win a game of solitaire', check: function() { return (office._solitaireWins || 0) >= 1; } },
+];
+
+function checkTrophies() {
+  for (var i = 0; i < TROPHY_DEFS.length; i++) {
+    var td = TROPHY_DEFS[i];
+    var already = false;
+    for (var t = 0; t < office.trophies.length; t++) {
+      if (office.trophies[t].id === td.id) { already = true; break; }
+    }
+    if (!already && td.check()) {
+      office.trophies.push({ id: td.id, name: td.name, desc: td.desc, day: game.dayCount || 1 });
+      showNotification('TROPHY EARNED: ' + td.name + '!');
+      if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §33  MUSIC BOX
+// ─────────────────────────────────────────────
+function toggleMusicBox() {
+  office.musicBoxOn = !office.musicBoxOn;
+  showNotification(office.musicBoxOn ? 'Music box playing...' : 'Music box stopped.');
+  // Integrate with game audio if available
+  if (typeof audio !== 'undefined') {
+    if (office.musicBoxOn && typeof audio.playMusicBox === 'function') {
+      audio.playMusicBox();
+    } else if (!office.musicBoxOn && typeof audio.stopMusicBox === 'function') {
+      audio.stopMusicBox();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §34  OFFICE DOG INTERACTION
+// ─────────────────────────────────────────────
+function interactWithDog() {
+  if (!office.officeDog) {
+    showNotification('No dog in the office yet. Maybe one will visit...');
+    return;
+  }
+  var actions = [
+    'You pet ' + office.dogName + '. Tail wags happily! +1 Rep',
+    office.dogName + ' fetches your hat. Good boy!',
+    office.dogName + ' rolls over for belly rubs.',
+    'You toss ' + office.dogName + ' a treat.',
+    office.dogName + ' barks excitedly and runs in circles!',
+    office.dogName + ' licks your hand affectionately.',
+  ];
+  var msg = actions[rand(0, actions.length - 1)];
+  showNotification(msg);
+  if (msg.indexOf('+1 Rep') >= 0) {
+    game.reputation = clamp((game.reputation || 50) + 1, 0, REPUTATION_MAX);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §35  SPITTOON CHALLENGE
+// ─────────────────────────────────────────────
+function useSpittoon() {
+  if (office._spittoonDay === (game.dayCount || 1)) {
+    showNotification('Already used the spittoon today, partner.');
+    return;
+  }
+  office._spittoonDay = game.dayCount || 1;
+  var hit = Math.random() < 0.6;
+  if (hit) {
+    office.spittoonStreak++;
+    var reward = office.spittoonStreak * 2;
+    game.gold = (game.gold || 0) + reward;
+    game.totalGoldEarned = (game.totalGoldEarned || 0) + reward;
+    showNotification('DING! Hit the spittoon! Streak: ' + office.spittoonStreak + ' (+$' + reward + ')');
+    if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+  } else {
+    office.spittoonStreak = 0;
+    showNotification('Missed the spittoon. Streak reset!');
+  }
+}
+
+// ─────────────────────────────────────────────
+// §36  OFFICE SAFE
+// ─────────────────────────────────────────────
+// Safe accessed from drawers with upgrade
+function depositToSafe(amount) {
+  if ((game.gold || 0) < amount) {
+    showNotification('Not enough gold to deposit.');
+    return;
+  }
+  game.gold -= amount;
+  office.safeGold += amount;
+  showNotification('Deposited $' + amount + ' in safe. Safe total: $' + office.safeGold);
+}
+
+function withdrawFromSafe(amount) {
+  if (office.safeGold < amount) {
+    showNotification('Not enough in the safe.');
+    return;
+  }
+  office.safeGold -= amount;
+  game.gold = (game.gold || 0) + amount;
+  showNotification('Withdrew $' + amount + ' from safe. Remaining: $' + office.safeGold);
+}
+
