@@ -16,7 +16,15 @@ var office = {
   sittingAtDesk: false,
   selectedZone: 0,
   zones: ['desk', 'caseBoard', 'gunRack', 'jailCells', 'bed', 'records', 'wanted', 'notices', 'exit'],
-  zoneLabels: ['Desk [1]', 'Case Board [2]', 'Gun Rack [3]', 'Jail Cells [4]', 'Bed [5]', 'Records [6]', 'Wanted Board [7]', 'Notice Board [8]', 'Exit [ESC]'],
+  zoneLabels: ['Desk', 'Case Board', 'Gun Rack', 'Jail Cells', 'Bed', 'Records', 'Wanted Board', 'Notice Board', 'Exit'],
+
+  // Walkable office player state
+  playerX: 400,
+  playerY: 520,
+  playerDir: 0,  // 0=down,1=up,2=left,3=right
+  playerMoving: false,
+  playerAnimTimer: 0,
+  nearFurniture: null,  // name of nearest interactable, or null
 
   // Case system
   activeCases: [],
@@ -165,6 +173,79 @@ var office = {
   spittoonStreak: 0,
   _spittoonDay: -1,
 };
+
+// ─────────────────────────────────────────────
+// §1b  WALKABLE OFFICE — FURNITURE LAYOUT
+// ─────────────────────────────────────────────
+// Each item: { key, label, action, x/y/w/h as fractions of room W/H }
+// x,y is top-left corner. Player interacts when within INTERACT_DIST of center.
+var OFFICE_FURNITURE = [
+  { key: 'desk',       label: 'Desk',           x: 0.30, y: 0.50, w: 0.40, h: 0.16 },
+  { key: 'caseBoard',  label: 'Case Board',     x: 0.18, y: 0.04, w: 0.13, h: 0.16 },
+  { key: 'gunRack',    label: 'Gun Rack',       x: 0.78, y: 0.04, w: 0.17, h: 0.16 },
+  { key: 'jailCells',  label: 'Jail Cells',     x: 0.62, y: 0.24, w: 0.32, h: 0.20 },
+  { key: 'bed',        label: 'Bed',            x: 0.80, y: 0.56, w: 0.16, h: 0.12 },
+  { key: 'records',    label: 'Filing Cabinet',  x: 0.04, y: 0.36, w: 0.09, h: 0.28 },
+  { key: 'wanted',     label: 'Wanted Board',   x: 0.34, y: 0.04, w: 0.10, h: 0.14 },
+  { key: 'notices',    label: 'Notice Board',   x: 0.46, y: 0.04, w: 0.10, h: 0.14 },
+  { key: 'bookshelf',  label: 'Bookshelf',      x: 0.15, y: 0.36, w: 0.10, h: 0.24 },
+  { key: 'stove',      label: 'Stove',          x: 0.04, y: 0.70, w: 0.08, h: 0.16 },
+  { key: 'exit',       label: 'Exit Door',      x: 0.44, y: 0.90, w: 0.12, h: 0.08 },
+];
+
+var OFFICE_INTERACT_DIST = 50; // pixel distance to show [E] prompt
+var OFFICE_PLAYER_SPEED = 2.8;
+var OFFICE_PLAYER_SIZE = 10; // half-size of player collision box
+
+// Check if any sub-view is currently active (player is interacting with furniture)
+function isOfficeSubViewActive() {
+  return office.sittingAtDesk || office.viewingBoard || office.viewingGunRack ||
+         office.viewingJail || office.viewingBed || office.viewingStats ||
+         office.viewingDeputies || office.craftingOpen || office.readingBook ||
+         office.viewingWanted || office.viewingNotices || office.upgradeMenuOpen ||
+         office.sleeping || office.showingOutcome || office.currentCase ||
+         office.currentMeeting || office.officeEvent || office.prisonerEvent ||
+         office.playingSolitaire || office.playingDarts || office.targetPractice;
+}
+
+// Find nearest furniture within interaction range
+function findNearFurniture(W, H) {
+  var bestDist = Infinity;
+  var best = null;
+  for (var i = 0; i < OFFICE_FURNITURE.length; i++) {
+    var f = OFFICE_FURNITURE[i];
+    var fcx = f.x * W + (f.w * W) / 2;
+    var fcy = f.y * H + (f.h * H) / 2;
+    var dx = office.playerX - fcx;
+    var dy = office.playerY - fcy;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < OFFICE_INTERACT_DIST && dist < bestDist) {
+      bestDist = dist;
+      best = f;
+    }
+  }
+  return best;
+}
+
+// Check collision with furniture bounding box (returns true if blocked)
+function officeCollides(px, py, W, H) {
+  var ps = OFFICE_PLAYER_SIZE;
+  // Room walls
+  if (px - ps < 0 || px + ps > W || py - ps < 0 || py + ps > H) return true;
+  // Furniture collision
+  for (var i = 0; i < OFFICE_FURNITURE.length; i++) {
+    var f = OFFICE_FURNITURE[i];
+    if (f.key === 'exit') continue; // exit door has no collision
+    var fx = f.x * W, fy = f.y * H, fw = f.w * W, fh = f.h * H;
+    // Shrink collision box slightly so player can get close
+    var margin = 2;
+    if (px + ps > fx + margin && px - ps < fx + fw - margin &&
+        py + ps > fy + margin && py - ps < fy + fh - margin) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // ─────────────────────────────────────────────
 // §2  UPGRADE DEFINITIONS
@@ -1077,6 +1158,14 @@ function enterSheriffOffice() {
   office.playingDarts = false;
   office.targetPractice = false;
   office.fadeIn = 1;
+  office.nearFurniture = null;
+  // Start player near the exit door (bottom center)
+  var W = gameCanvas.width, H = gameCanvas.height;
+  office.playerX = W * 0.50;
+  office.playerY = H * 0.86;
+  office.playerDir = 1; // facing up
+  office.playerMoving = false;
+  office.playerAnimTimer = 0;
   game.state = 'office';
   initDustMotes();
   initFlies();
@@ -1784,26 +1873,33 @@ function updateOffice(dt) {
     return;
   }
 
-  // ── MAIN ZONE NAV ──
-  if (consumeKey('Digit1')) { office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; return; }
-  if (consumeKey('Digit2')) { office.viewingBoard = true; office.boardScroll = 0; return; }
-  if (consumeKey('Digit3')) { office.viewingGunRack = true; return; }
-  if (consumeKey('Digit4')) { office.viewingJail = true; office.selectedPrisoner = 0; return; }
-  if (consumeKey('Digit5')) { office.viewingBed = true; return; }
-  if (consumeKey('Digit6')) { office.viewingStats = true; office.statsTab = 0; return; }
-  if (consumeKey('Digit7')) { office.viewingWanted = true; generateWantedPosters(); return; }
-  if (consumeKey('Digit8')) { office.viewingNotices = true; generateNotices(); return; }
-  if (consumeKey('Escape')) { exitSheriffOffice(); return; }
-  if (consumeKey('KeyU')) { office.upgradeMenuOpen = true; office.selectedUpgrade = 0; return; }
+  // ── WALKABLE OFFICE — WASD MOVEMENT ──
+  var W = gameCanvas.width, H = gameCanvas.height;
+  var dx = 0, dy = 0;
 
-  if (consumeKey('ArrowLeft') || consumeKey('KeyA')) {
-    office.selectedZone = (office.selectedZone - 1 + office.zones.length) % office.zones.length;
+  if (keys['KeyW'] || keys['ArrowUp'])    { dy = -1; office.playerDir = 1; }
+  if (keys['KeyS'] || keys['ArrowDown'])   { dy = 1;  office.playerDir = 0; }
+  if (keys['KeyA'] || keys['ArrowLeft'])   { dx = -1; office.playerDir = 2; }
+  if (keys['KeyD'] || keys['ArrowRight'])  { dx = 1;  office.playerDir = 3; }
+
+  office.playerMoving = dx !== 0 || dy !== 0;
+
+  if (office.playerMoving) {
+    var len = Math.hypot(dx, dy);
+    dx /= len; dy /= len;
+    var nx = office.playerX + dx * OFFICE_PLAYER_SPEED;
+    var ny = office.playerY + dy * OFFICE_PLAYER_SPEED;
+    if (!officeCollides(nx, office.playerY, W, H)) office.playerX = nx;
+    if (!officeCollides(office.playerX, ny, W, H)) office.playerY = ny;
+    office.playerAnimTimer++;
   }
-  if (consumeKey('ArrowRight') || consumeKey('KeyD')) {
-    office.selectedZone = (office.selectedZone + 1) % office.zones.length;
-  }
-  if (consumeKey('KeyE') || consumeKey('Enter')) {
-    switch (office.zones[office.selectedZone]) {
+
+  // Find nearest furniture
+  office.nearFurniture = findNearFurniture(W, H);
+
+  // E key — interact with nearest furniture
+  if (office.nearFurniture && consumeKey('KeyE')) {
+    switch (office.nearFurniture.key) {
       case 'desk': office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; break;
       case 'caseBoard': office.viewingBoard = true; office.boardScroll = 0; break;
       case 'gunRack': office.viewingGunRack = true; break;
@@ -1812,9 +1908,21 @@ function updateOffice(dt) {
       case 'records': office.viewingStats = true; office.statsTab = 0; break;
       case 'wanted': office.viewingWanted = true; generateWantedPosters(); break;
       case 'notices': office.viewingNotices = true; generateNotices(); break;
+      case 'bookshelf': office.readingBook = true; office.selectedBook = 0; break;
+      case 'stove': office.deskMode = 'coffee'; office.sittingAtDesk = true; break;
       case 'exit': exitSheriffOffice(); break;
     }
+    return;
   }
+
+  // ESC — only exit if near exit door, otherwise do nothing
+  if (consumeKey('Escape')) {
+    exitSheriffOffice();
+    return;
+  }
+
+  // U key for upgrades while walking
+  if (consumeKey('KeyU')) { office.upgradeMenuOpen = true; office.selectedUpgrade = 0; return; }
 }
 
 // ─────────────────────────────────────────────
@@ -2084,7 +2192,10 @@ function renderOfficeOverlay() {
   } else if (office.sittingAtDesk) {
     drawDeskView(W, H);
   } else {
-    drawMainNavigation(W, H);
+    // Walkable mode — draw player and interaction prompts
+    drawOfficePlayer(W, H);
+    drawOfficeInteractPrompt(W, H);
+    drawOfficeHUD(W, H);
   }
 
   // Dust motes overlay
@@ -2787,34 +2898,137 @@ function wrapTextLines(text, maxWidth, fontSize) {
 // §16  SUB-VIEW RENDERERS
 // ─────────────────────────────────────────────
 
-// ── Main navigation (zone selection) ──
-function drawMainNavigation(W, H) {
-  var pw = Math.min(W * 0.55, 520), ph = Math.min(H * 0.42, 340);
-  var px = (W - pw) / 2, py = H * 0.52;
-  drawUIPanel(px, py, pw, ph, "SHERIFF'S OFFICE");
+// ── Draw player character inside office ──
+function drawOfficePlayer(W, H) {
+  var px = office.playerX;
+  var py = office.playerY;
+  var now = Date.now();
+  var bobOffset = office.playerMoving ? Math.sin(now * 0.01) * 2 : 0;
+  var facingRight = office.playerDir === 0 || office.playerDir === 3;
 
-  var fs = Math.max(10, Math.min(14, pw * 0.025));
-  var spacing = Math.min(fs + 7, (ph - 80) / office.zoneLabels.length);
+  ctx.save();
+  ctx.translate(px, py);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 12, 9, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  var oy = bobOffset;
+  var lBob = office.playerMoving ? Math.sin(now * 0.01) * 2 : 0;
+
+  // Boots
+  ctx.fillStyle = '#3a2a14';
+  ctx.fillRect(-4, 8 + oy - lBob, 3, 5);
+  ctx.fillRect(1, 8 + oy + lBob, 3, 5);
+  ctx.fillStyle = '#2a1a0a';
+  ctx.fillRect(-4, 11 + oy - lBob, 3, 2);
+  ctx.fillRect(1, 11 + oy + lBob, 3, 2);
+
+  // Pants
+  ctx.fillStyle = PALETTE.denim || '#4a5a8a';
+  ctx.fillRect(-4, 2 + oy, 3, 7);
+  ctx.fillRect(1, 2 + oy, 3, 7);
+
+  // Belt
+  ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+  ctx.fillRect(-5, 1 + oy, 10, 2);
+  ctx.fillStyle = PALETTE.badge;
+  ctx.fillRect(-1, 1 + oy, 2, 2);
+
+  // Torso
+  ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
+  ctx.fillRect(-5, -6 + oy, 10, 8);
+  ctx.fillStyle = '#d8c8a0';
+  ctx.fillRect(-4, -5 + oy, 8, 6);
+  ctx.fillStyle = PALETTE.clothDark || '#5b0a0a';
+  ctx.fillRect(-5, -6 + oy, 2, 8);
+  ctx.fillRect(3, -6 + oy, 2, 8);
+  // Badge
+  ctx.fillStyle = PALETTE.badge;
+  ctx.fillRect(facingRight ? 1 : -3, -4 + oy, 2, 2);
+
+  // Arms
+  ctx.fillStyle = '#d8c8a0';
+  ctx.fillRect(-7, -4 + oy, 2, 5);
+  ctx.fillRect(5, -4 + oy, 2, 5);
+  ctx.fillStyle = PALETTE.skin;
+  ctx.fillRect(-7, 1 + oy, 2, 2);
+  ctx.fillRect(5, 1 + oy, 2, 2);
+
+  // Head
+  ctx.fillStyle = PALETTE.skin;
+  ctx.fillRect(-3, -12 + oy, 6, 6);
+  // Eyes
+  ctx.fillStyle = '#000';
+  if (facingRight) {
+    ctx.fillRect(0, -10 + oy, 1, 1);
+    ctx.fillRect(-2, -10 + oy, 1, 1);
+  } else {
+    ctx.fillRect(-2, -10 + oy, 1, 1);
+    ctx.fillRect(1, -10 + oy, 1, 1);
+  }
+  // Mustache
+  ctx.fillStyle = '#3a2a14';
+  ctx.fillRect(-2, -8 + oy, 4, 1);
+
+  // Hat
+  ctx.fillStyle = PALETTE.hat;
+  ctx.fillRect(-7, -16 + oy, 14, 3);
+  ctx.fillRect(-4, -19 + oy, 8, 3);
+  ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
+  ctx.fillRect(-8, -16 + oy, 16, 1);
+  ctx.fillStyle = PALETTE.badge;
+  ctx.fillRect(-4, -17 + oy, 8, 1);
+
+  ctx.restore();
+}
+
+// ── Draw interaction prompt above nearest furniture ──
+function drawOfficeInteractPrompt(W, H) {
+  if (!office.nearFurniture) return;
+  var f = office.nearFurniture;
+  var fcx = f.x * W + (f.w * W) / 2;
+  var fcy = f.y * H;
+
+  var label = '[E] ' + f.label;
+  var fs = Math.max(11, Math.min(15, W * 0.018));
+  ctx.font = 'bold ' + fs + 'px monospace';
   ctx.textAlign = 'center';
 
-  for (var i = 0; i < office.zoneLabels.length; i++) {
-    var sel = i === office.selectedZone;
-    ctx.fillStyle = sel ? PALETTE.uiHighlight : PALETTE.uiText;
-    ctx.font = (sel ? 'bold ' : '') + fs + 'px monospace';
-    var label = (sel ? '>> ' : '   ') + office.zoneLabels[i] + (sel ? ' <<' : '');
-    ctx.fillText(label, px + pw / 2, py + 48 + i * spacing);
-  }
+  // Background pill
+  var tw = ctx.measureText(label).width + 16;
+  var th = fs + 8;
+  var tx = fcx - tw / 2;
+  var ty = fcy - th - 6;
+  ctx.fillStyle = 'rgba(20, 12, 4, 0.85)';
+  ctx.fillRect(tx, ty, tw, th);
+  ctx.strokeStyle = PALETTE.uiHighlight;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(tx, ty, tw, th);
 
-  // Trophy count & dog indicator
-  var statusLine = 'Trophies: ' + office.trophies.length + '/' + TROPHY_DEFS.length;
-  if (office.officeDog) statusLine += '  |  Dog: ' + office.dogName;
-  if (office.musicBoxOn) statusLine += '  |  ♪ Music';
+  // Text
+  ctx.fillStyle = PALETTE.uiHighlight;
+  ctx.fillText(label, fcx, ty + th - 5);
 
+  // Highlight furniture outline
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(f.x * W, f.y * H, f.w * W, f.h * H);
+}
+
+// ── Draw office HUD (gold, rep, controls) ──
+function drawOfficeHUD(W, H) {
+  var fs = Math.max(9, Math.min(12, W * 0.014));
+  ctx.font = fs + 'px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(20, 12, 4, 0.7)';
+  ctx.fillRect(0, H - 22, W, 22);
   ctx.fillStyle = PALETTE.uiTextDim;
-  ctx.font = (fs - 2) + 'px monospace';
-  ctx.fillText('A/D: Select  |  E: Enter  |  U: Upgrades  |  ESC: Leave', px + pw / 2, py + ph - 38);
-  ctx.fillText(statusLine, px + pw / 2, py + ph - 24);
-  ctx.fillText('Gold: $' + (game.gold || 0) + '  |  Rep: ' + (game.reputation || 50) + '  |  Day ' + (game.dayCount || 1), px + pw / 2, py + ph - 10);
+  var statusLine = 'WASD: Move  |  E: Interact  |  ESC: Leave  |  U: Upgrades';
+  statusLine += '  |  Gold: $' + (game.gold || 0) + '  |  Rep: ' + (game.reputation || 50) + '  |  Day ' + (game.dayCount || 1);
+  ctx.fillText(statusLine, W / 2, H - 7);
 }
 
 // ── Sitting at desk ──
