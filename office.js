@@ -1353,8 +1353,14 @@ function updateOffice(dt) {
       var px = game.player.x / TILE;
       var py = game.player.y / TILE;
       var ddx = Math.abs(px - sheriffBuilding.doorX);
-      var ddy = Math.abs(py - sheriffBuilding.doorY);
-      if (ddx < 2 && ddy < 2 && consumeKey('KeyE')) {
+      var ddy = Math.abs(py - (sheriffBuilding.doorY + 1));
+      // Auto-enter when walking right into the door
+      if (ddx < 1.2 && ddy < 1.2) {
+        enterSheriffOffice();
+        return;
+      }
+      // Also allow E key from a bit further away
+      if (ddx < 3 && ddy < 3 && consumeKey('KeyE')) {
         enterSheriffOffice();
         return;
       }

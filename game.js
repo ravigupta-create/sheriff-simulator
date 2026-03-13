@@ -7274,7 +7274,7 @@ function render() {
     ctx.fillText('TRAIN: ' + trainRemaining + 's remaining', canvas.width / 2, 70);
   }
 
-  // "Press E" prompt near sheriff office
+  // "Press E / Walk in" prompt near sheriff office
   if (game.state === 'playing' && game.player) {
     var sheriffB = null;
     for (var sbi = 0; sbi < game.buildings.length; sbi++) {
@@ -7282,20 +7282,34 @@ function render() {
     }
     if (sheriffB) {
       var pxT = game.player.x / TILE, pyT = game.player.y / TILE;
-      if (Math.abs(pxT - sheriffB.doorX) < 2.5 && Math.abs(pyT - sheriffB.doorY) < 2.5) {
+      var distToSheriff = Math.abs(pxT - sheriffB.doorX) + Math.abs(pyT - (sheriffB.doorY + 1));
+      if (distToSheriff < 6) {
         var promptX = sheriffB.doorX * TILE - camX;
-        var promptY = sheriffB.doorY * TILE - camY - 28;
-        var promptPulse = 0.7 + Math.sin(Date.now() * 0.004) * 0.3;
+        var promptY = sheriffB.doorY * TILE - camY - 20;
+        var promptPulse = 0.8 + Math.sin(Date.now() * 0.005) * 0.2;
         ctx.globalAlpha = promptPulse;
-        ctx.fillStyle = 'rgba(20,15,5,0.85)';
-        ctx.fillRect(promptX - 60, promptY - 8, 120, 20);
+        // Big dark background panel
+        ctx.fillStyle = 'rgba(10,8,2,0.9)';
+        ctx.fillRect(promptX - 110, promptY - 32, 220, 50);
         ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(promptX - 60, promptY - 8, 120, 20);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(promptX - 110, promptY - 32, 220, 50);
+        // Arrow pointing down
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 11px monospace';
+        ctx.beginPath();
+        ctx.moveTo(promptX - 6, promptY + 20);
+        ctx.lineTo(promptX + 6, promptY + 20);
+        ctx.lineTo(promptX, promptY + 30);
+        ctx.closePath();
+        ctx.fill();
+        // Text
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 14px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('[E] Enter Sheriff Office', promptX, promptY + 6);
+        ctx.fillText('ENTER SHERIFF OFFICE', promptX, promptY - 12);
+        ctx.fillStyle = '#e8d8b8';
+        ctx.font = '11px monospace';
+        ctx.fillText('Walk to door or press [E]', promptX, promptY + 4);
         ctx.globalAlpha = 1;
       }
     }
