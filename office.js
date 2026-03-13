@@ -1319,6 +1319,17 @@ function exitSheriffOffice() {
   office.currentCase = null;
   office.showingOutcome = false;
   game.state = 'playing';
+  // Move player south of the door so auto-enter doesn't re-trigger
+  var sheriffB = null;
+  for (var bi = 0; bi < game.buildings.length; bi++) {
+    if (game.buildings[bi].type === BUILDING_TYPES.SHERIFF) { sheriffB = game.buildings[bi]; break; }
+  }
+  if (sheriffB) {
+    game.player.x = sheriffB.doorX * TILE;
+    game.player.y = (sheriffB.doorY + 3) * TILE;
+  }
+  // Cooldown to prevent immediate re-entry
+  office._exitCooldown = 1.5;
 }
 
 // ─────────────────────────────────────────────
@@ -1430,6 +1441,12 @@ function updateOffice(dt) {
     // Draw hidden crate indicators
     if (game._hiddenCrates && game._hiddenCrates.length > 0) {
       game._hasHiddenCrates = true;
+    }
+
+    // Exit cooldown — prevent re-entering immediately after leaving
+    if (office._exitCooldown > 0) {
+      office._exitCooldown -= dt;
+      return;
     }
 
     var sheriffBuilding = null;
