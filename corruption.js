@@ -206,26 +206,10 @@ function _attemptShakedown(npc) {
   }
 
   var corruption = game.corruption || 0;
-  // Success chance: 40% base + corruption bonus
-  var successChance = 0.4 + (corruption / 200);
-  // Shopkeepers may fight back if corruption is low
-  var fightBackChance = corruption < 40 ? 0.4 : (corruption < 60 ? 0.15 : 0.05);
 
   var priceMult = _shakedownPriceIncrease[npc.name] || 1;
 
-  if (Math.random() < fightBackChance) {
-    // Shopkeeper fights back!
-    npc.hostile = true;
-    npc.weapon = 'pistol';
-    npc.hp = Math.max(npc.hp, 4);
-    showNotification(npc.name + ' fights back!', 'bad');
-    addJournalEntry(npc.name + ' resisted your shakedown!');
-    if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
-    _shakedownCooldown = 3;
-    return;
-  }
-
-  // Success
+  // Shopkeepers never fight back — they always comply
   var goldAmount = rand(20, 80);
   // More gold at higher corruption
   goldAmount = Math.floor(goldAmount * (1 + corruption / 100));
