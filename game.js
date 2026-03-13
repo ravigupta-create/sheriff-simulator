@@ -7464,6 +7464,7 @@ let loopStarted = false;
 function gameLoop(timestamp) {
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;
+  game._gameTime = (game._gameTime || 0) + dt;
 
   try {
   switch (game.state) {
@@ -7627,9 +7628,10 @@ function gameLoop(timestamp) {
 
     case 'office':
       if (typeof updateOffice === 'function') updateOffice(dt);
-      render();
+      // Don't render the world — office overlay fills the whole screen
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
-      if (consumeKey('Escape')) { game.state = 'playing'; }
       break;
 
     case 'title':

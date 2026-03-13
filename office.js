@@ -1076,7 +1076,7 @@ function enterSheriffOffice() {
   office.deskMode = 'main';
   office.playingDarts = false;
   office.targetPractice = false;
-  office.fadeIn = 0;
+  office.fadeIn = 1;
   game.state = 'office';
   initDustMotes();
   initFlies();
@@ -1354,8 +1354,8 @@ function updateOffice(dt) {
       var py = game.player.y / TILE;
       var ddx = Math.abs(px - sheriffBuilding.doorX);
       var ddy = Math.abs(py - (sheriffBuilding.doorY + 1));
-      // Auto-enter when walking right into the door
-      if (ddx < 1.2 && ddy < 1.2) {
+      // Auto-enter when walking right into the door (skip first 2 seconds to avoid spawn-enter)
+      if (ddx < 1.2 && ddy < 1.2 && (game._gameTime || 0) > 2) {
         enterSheriffOffice();
         return;
       }
