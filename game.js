@@ -4406,6 +4406,7 @@ function updateNPCs(dt) {
           if (canMove(nnx, npc.y, 5)) npc.x = nnx;
           if (canMove(npc.x, nny, 5)) npc.y = nny;
           npc.state = 'walking';
+          npc.facingRight = cdx >= 0;
           npc.animTimer++;
         }
         // Shoot at player occasionally (difficulty-scaled accuracy)
@@ -4440,6 +4441,7 @@ function updateNPCs(dt) {
       if (canMove(wnx, wny, 5) && wnx > TILE && wnx < (MAP_W - 1) * TILE && wny > TILE && wny < (MAP_H - 1) * TILE) {
         npc.x = wnx;
         npc.y = wny;
+        npc.facingRight = npc.dir === 3 || npc.dir === 0;
       } else {
         npc.dir = rand(0, 3);
       }
@@ -5036,15 +5038,21 @@ function showTutorial(key, text) {
 
   // Save current state so we can restore it on dismiss
   _preTutorialState = game.state;
+  game.state = 'tutorial';
 
   var overlay = document.getElementById('tutorial-overlay');
   var textEl = document.getElementById('tutorial-text');
   textEl.textContent = text;
   overlay.classList.remove('hidden');
 
+  var _dismissed = false;
   var dismissBtn = document.getElementById('tutorial-dismiss');
   var dismiss = function() {
+    if (_dismissed) return;
+    _dismissed = true;
     overlay.classList.add('hidden');
+    game.state = _preTutorialState || 'playing';
+    _preTutorialState = null;
     dismissBtn.removeEventListener('click', dismiss);
     document.removeEventListener('keydown', dismissKey);
   };
@@ -6087,7 +6095,8 @@ function render() {
       drawPlayer(game.player, camX, camY);
       playerDrawn = true;
     }
-    drawNPC(npc, camX, camY);
+    var npcPlayerDist = dist(game.player, npc);
+    drawNPC(npc, camX, camY, npcPlayerDist);
   }
   if (!playerDrawn) {
     if (game.horse && !game.mounted) {
@@ -6401,6 +6410,12 @@ function gameLoop(timestamp) {
       updateDailyChallenge();
       updateAmbientParticles();
       bullets.update(game.npcs, game.player, particles, game, game.map);
+      // Check if player died from bullets
+      if (game.player.dead && game.player.hp <= 0 && !game._cheatMode) {
+        game.state = 'gameover';
+        game.gameOverReason = 'You were gunned down!';
+        break;
+      }
       particles.update();
       updateCamera();
       updateUI();
@@ -6519,6 +6534,13 @@ function gameLoop(timestamp) {
         const pokerBtn = document.querySelector('#poker-content button:nth-child(3)');
         if (pokerBtn) pokerBtn.click();
       }
+      break;
+
+    case 'tutorial':
+      render();
+      if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
+      if (typeof renderCorruptionOverlay === 'function') renderCorruptionOverlay();
+      if (typeof renderFeaturesOverlay === 'function') renderFeaturesOverlay();
       break;
 
     case 'gameover':
@@ -6840,15 +6862,7 @@ if (shopCloseBtn) {
 }
 
 // 12. Tutorial dismiss
-var tutorialDismissBtn = document.getElementById('tutorial-dismiss');
-if (tutorialDismissBtn) {
-  tutorialDismissBtn.addEventListener('click', function() {
-    document.getElementById('tutorial-overlay').classList.add('hidden');
-    // Restore the state that was active before the tutorial popped up
-    game.state = _preTutorialState || 'playing';
-    _preTutorialState = null;
-  });
-}
+// Tutorial dismiss is handled inside showTutorial() directly
 
 // 13. Volume sliders
 var volMaster = document.getElementById('vol-master');
