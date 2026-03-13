@@ -5440,8 +5440,8 @@ function updateTime(dt) {
       generateWantedList();
     }
 
-    // Train spawn check every 3 days
-    if (!game.train && (game.dayCount || 1) % 3 === 0 && Math.random() < 0.3) {
+    // Train spawn check every 2 days
+    if (!game.train && (game.dayCount || 1) % 2 === 0 && Math.random() < 0.6) {
       spawnTrain();
     }
   }
@@ -7476,6 +7476,12 @@ function gameLoop(timestamp) {
       updateCamera();
       updateUI();
       // Update extension systems
+      // Periodic train spawn timer (every ~90 seconds of gameplay)
+      game._trainSpawnTimer = (game._trainSpawnTimer || 0) + dt;
+      if (!game.train && game._trainSpawnTimer > 90) {
+        game._trainSpawnTimer = 0;
+        if (Math.random() < 0.5) spawnTrain();
+      }
       if (game.train) updateTrain(dt);
       if (typeof updateOffice === 'function') updateOffice(dt);
       if (typeof updateCorruption === 'function') updateCorruption(dt);
