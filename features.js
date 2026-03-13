@@ -1270,6 +1270,37 @@ function renderFeaturesOverlay() {
     ctx.font = '8px monospace';
     ctx.fillText('Rival: ' + f.rivalName + ' (' + f.rivalRep + ')', w - 150, 82);
   }
+
+  // ── Hidden Crates from telegram events ──
+  if (game._hiddenCrates && game._hiddenCrates.length > 0) {
+    var now = Date.now();
+    for (var ci = 0; ci < game._hiddenCrates.length; ci++) {
+      var crate = game._hiddenCrates[ci];
+      if (crate.found) continue;
+      var cx = crate.x - camX;
+      var cy = crate.y - camY;
+      if (cx < -30 || cx > w + 30 || cy < -30 || cy > h + 30) continue;
+      // Sparkle effect to hint at location
+      var sparkle = 0.3 + Math.sin(now * 0.005 + ci * 2) * 0.3;
+      ctx.globalAlpha = sparkle;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.arc(cx, cy - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(cx + Math.sin(now * 0.003 + ci) * 5, cy - 8, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Crate box
+      ctx.fillStyle = '#5a3a1a';
+      ctx.fillRect(cx - 6, cy - 2, 12, 10);
+      ctx.fillStyle = '#7a5a3a';
+      ctx.fillRect(cx - 5, cy - 1, 10, 8);
+      ctx.fillStyle = '#3a2a0a';
+      ctx.fillRect(cx - 6, cy + 2, 12, 1);
+    }
+  }
 }
 
 // ── Newspaper Close ──

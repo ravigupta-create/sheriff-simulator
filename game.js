@@ -943,6 +943,12 @@ function generateTown() {
     }
   }
 
+  // --- Train tracks at y=54-55 ---
+  for (let x = 0; x < MAP_W; x++) {
+    if (map[54][x] === 0 || map[54][x] === 1) map[54][x] = 11;
+    if (map[55][x] === 0 || map[55][x] === 1) map[55][x] = 11;
+  }
+
   return { map: map, buildings: buildings };
 }
 
@@ -2367,6 +2373,33 @@ function drawTile(x, y, camX, camY, tileType, timeOfDay) {
       ctx.fillRect(sx + TILE - 5, sy + 21, 1, 1);
       break;
     }
+    case 11: { // Railroad track
+      // Gravel base
+      ctx.fillStyle = '#7a7060';
+      ctx.fillRect(sx, sy, TILE, TILE);
+      // Gravel texture
+      for (var gi = 0; gi < 6; gi++) {
+        var gx2 = _tileRand(x, y, gi + 90) * (TILE - 2) + 1;
+        var gy2 = _tileRand(x, y, gi + 100) * (TILE - 2) + 1;
+        ctx.fillStyle = _tileRand(x, y, gi + 110) > 0.5 ? '#6a6050' : '#8a8070';
+        ctx.fillRect(sx + gx2, sy + gy2, 2, 1);
+      }
+      // Wooden ties (horizontal brown rectangles)
+      ctx.fillStyle = '#5a3a1a';
+      for (var ti = 0; ti < TILE; ti += 8) {
+        ctx.fillRect(sx + ti, sy + 6, 6, 3);
+        ctx.fillRect(sx + ti, sy + TILE - 9, 6, 3);
+      }
+      // Steel rails (two thin grey lines)
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(sx, sy + 8, TILE, 2);
+      ctx.fillRect(sx, sy + TILE - 10, TILE, 2);
+      // Rail highlight
+      ctx.fillStyle = '#cccccc';
+      ctx.fillRect(sx, sy + 8, TILE, 1);
+      ctx.fillRect(sx, sy + TILE - 10, TILE, 1);
+      break;
+    }
     default: {
       ctx.fillStyle = PALETTE.sand;
       ctx.fillRect(sx, sy, TILE, TILE);
@@ -2391,19 +2424,173 @@ function drawBuildingRoof(b, camX, camY, timeOfDay) {
   const roofColor = colors ? colors.roof : PALETTE.roof;
   const trimColor = colors ? colors.trim : PALETTE.gold;
 
-  // Overhanging roof
-  const overhang = 6;
+  // Wooden boardwalk / porch floor in front of building
+  const porchY = sy + sh;
+  ctx.fillStyle = PALETTE.woodLight || '#8b6340';
+  ctx.fillRect(sx - 4, porchY, sw + 8, 5);
+  ctx.fillStyle = PALETTE.woodDark;
+  ctx.fillRect(sx - 4, porchY, sw + 8, 1);
+  // Plank lines on boardwalk
+  for (let pi = 0; pi < sw + 8; pi += 8) {
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(sx - 4 + pi, porchY, 1, 5);
+  }
+
+  // Awning / porch overhang with support posts
+  const awningDepth = 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(sx - 2, porchY - awningDepth, sw + 4, awningDepth); // shadow under awning
   ctx.fillStyle = roofColor;
-  ctx.fillRect(sx - overhang, sy - 10, sw + overhang * 2, 12);
+  ctx.fillRect(sx - 4, porchY - awningDepth - 2, sw + 8, 3); // awning top
+  ctx.fillStyle = PALETTE.roofDark;
+  ctx.fillRect(sx - 4, porchY - awningDepth - 2, sw + 8, 1);
+  // Support posts
+  ctx.fillStyle = PALETTE.wood;
+  ctx.fillRect(sx - 2, porchY - awningDepth, 3, awningDepth);
+  ctx.fillRect(sx + sw - 1, porchY - awningDepth, 3, awningDepth);
+  // Post highlight
+  ctx.fillStyle = PALETTE.woodLight || '#8b6340';
+  ctx.fillRect(sx - 1, porchY - awningDepth, 1, awningDepth);
+  ctx.fillRect(sx + sw, porchY - awningDepth, 1, awningDepth);
+
+  // Hitching post in front of porch
+  ctx.fillStyle = PALETTE.wood;
+  ctx.fillRect(sx + 4, porchY + 5, 2, 8); // left post
+  ctx.fillRect(sx + sw - 6, porchY + 5, 2, 8); // right post
+  ctx.fillStyle = PALETTE.woodLight || '#8b6340';
+  ctx.fillRect(sx + 4, porchY + 8, sw - 8, 2); // horizontal bar
+  ctx.fillStyle = PALETTE.woodDark;
+  ctx.fillRect(sx + 4, porchY + 10, sw - 8, 1); // bar shadow
+
+  // Overhanging roof
+  const overhang = 8;
+  ctx.fillStyle = roofColor;
+  ctx.fillRect(sx - overhang, sy - 14, sw + overhang * 2, 16);
+  // Roof ridge (lighter top edge)
+  ctx.fillStyle = PALETTE.roofLight;
+  ctx.fillRect(sx - overhang + 1, sy - 13, sw + overhang * 2 - 2, 2);
   // Roof shading
   ctx.fillStyle = PALETTE.roofDark;
-  ctx.fillRect(sx - overhang, sy - 10, sw + overhang * 2, 2);
-  ctx.fillRect(sx - overhang, sy, sw + overhang * 2, 2);
-  // Roof light edge
-  ctx.fillStyle = PALETTE.roofLight;
-  ctx.fillRect(sx - overhang, sy - 8, sw + overhang * 2, 1);
+  ctx.fillRect(sx - overhang, sy - 14, sw + overhang * 2, 2);
+  ctx.fillRect(sx - overhang, sy + 1, sw + overhang * 2, 2);
+  // Roof tile lines
+  for (let ri = 0; ri < sw + overhang * 2; ri += 6) {
+    ctx.fillStyle = PALETTE.roofDark;
+    ctx.fillRect(sx - overhang + ri, sy - 12, 1, 14);
+  }
 
-  // Building name sign
+  // Building-specific top details
+  if (b.type === BUILDING_TYPES.CHURCH) {
+    // Steeple + cross
+    const cx = sx + sw / 2;
+    ctx.fillStyle = PALETTE.wallAdobe || '#c8a882';
+    ctx.fillRect(cx - 4, sy - 30, 8, 16);
+    ctx.fillStyle = PALETTE.wallAdobeD || '#a88862';
+    ctx.fillRect(cx - 4, sy - 30, 8, 1);
+    ctx.fillRect(cx - 4, sy - 30, 1, 16);
+    // Cross
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - 1, sy - 38, 2, 10);
+    ctx.fillRect(cx - 4, sy - 35, 8, 2);
+  }
+
+  // Chimney on some buildings
+  if (b.type === BUILDING_TYPES.SALOON || b.type === BUILDING_TYPES.BLACKSMITH || b.type === BUILDING_TYPES.HOTEL || b.type === BUILDING_TYPES.HOUSE) {
+    const chimX = sx + sw - 12;
+    ctx.fillStyle = PALETTE.stoneDark;
+    ctx.fillRect(chimX, sy - 22, 6, 10);
+    ctx.fillStyle = PALETTE.stone;
+    ctx.fillRect(chimX + 1, sy - 22, 4, 1);
+    ctx.fillRect(chimX + 1, sy - 18, 4, 1);
+    // Smoke (subtle)
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#aaaaaa';
+    const smokeT = Date.now() * 0.001;
+    ctx.fillRect(chimX + 1 + Math.sin(smokeT) * 2, sy - 26, 3, 3);
+    ctx.fillRect(chimX + Math.sin(smokeT + 1) * 3, sy - 30, 2, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // SALOON: balcony with railing + swinging doors
+  if (b.type === BUILDING_TYPES.SALOON) {
+    // Balcony
+    ctx.fillStyle = PALETTE.wood;
+    ctx.fillRect(sx, sy + 2, sw, 3); // balcony floor
+    // Railing posts
+    for (let rp = 0; rp < sw; rp += 8) {
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(sx + rp, sy + 2, 2, -8);
+    }
+    // Railing bar
+    ctx.fillStyle = PALETTE.woodLight || '#8b6340';
+    ctx.fillRect(sx, sy - 4, sw, 2);
+    // Swinging doors at entrance
+    const doorX = sx + sw / 2 - 6;
+    const doorSwing = Math.sin(Date.now() * 0.002) * 0.5;
+    ctx.fillStyle = PALETTE.wood;
+    ctx.fillRect(doorX, porchY - 10, 5 + doorSwing, 10);
+    ctx.fillRect(doorX + 7, porchY - 10, 5 - doorSwing, 10);
+    // Door slats
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(doorX, porchY - 7, 5, 1);
+    ctx.fillRect(doorX + 7, porchY - 7, 5, 1);
+  }
+
+  // BANK: columns/pillars
+  if (b.type === BUILDING_TYPES.BANK) {
+    ctx.fillStyle = PALETTE.stoneLight;
+    ctx.fillRect(sx + 2, sy + 2, 4, sh - 2);
+    ctx.fillRect(sx + sw - 6, sy + 2, 4, sh - 2);
+    // Column caps
+    ctx.fillStyle = PALETTE.stone;
+    ctx.fillRect(sx + 1, sy + 2, 6, 2);
+    ctx.fillRect(sx + sw - 7, sy + 2, 6, 2);
+    ctx.fillRect(sx + 1, porchY - 2, 6, 2);
+    ctx.fillRect(sx + sw - 7, porchY - 2, 6, 2);
+  }
+
+  // SHERIFF: porch badge symbol
+  if (b.type === BUILDING_TYPES.SHERIFF) {
+    ctx.fillStyle = PALETTE.badge;
+    const bx = sx + sw / 2;
+    const by = porchY - awningDepth + 4;
+    // Simple 5-point star shape
+    ctx.beginPath();
+    for (let si = 0; si < 5; si++) {
+      const angle = -Math.PI / 2 + si * (Math.PI * 2 / 5);
+      const px = bx + Math.cos(angle) * 4;
+      const ppy = by + Math.sin(angle) * 4;
+      if (si === 0) ctx.moveTo(px, ppy); else ctx.lineTo(px, ppy);
+      const innerAngle = angle + Math.PI / 5;
+      ctx.lineTo(bx + Math.cos(innerAngle) * 2, by + Math.sin(innerAngle) * 2);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // HOTEL: second-floor windows with curtains
+  if (b.type === BUILDING_TYPES.HOTEL) {
+    const numFloorWins = Math.max(2, Math.floor(sw / 16));
+    for (let wi = 0; wi < numFloorWins; wi++) {
+      const wx = sx + 6 + wi * Math.floor((sw - 12) / numFloorWins);
+      const wy = sy + 4;
+      // Window frame
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(wx - 1, wy - 1, 10, 12);
+      ctx.fillStyle = '#aabbcc';
+      ctx.fillRect(wx, wy, 8, 10);
+      // Cross pane
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(wx + 3, wy, 2, 10);
+      ctx.fillRect(wx, wy + 4, 8, 2);
+      // Curtains (small colored triangles on sides)
+      ctx.fillStyle = '#cc4444';
+      ctx.fillRect(wx, wy, 2, 6);
+      ctx.fillRect(wx + 6, wy, 2, 6);
+    }
+  }
+
+  // Building name sign - wooden hanging board
   const names = {
     [BUILDING_TYPES.SHERIFF]: 'SHERIFF',
     [BUILDING_TYPES.SALOON]: 'SALOON',
@@ -2422,10 +2609,29 @@ function drawBuildingRoof(b, camX, camY, timeOfDay) {
   const name = names[b.type] || 'BUILDING';
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#000000';
-  ctx.fillText(name, sx + sw / 2 + 1, sy - 1);
+  const signW = ctx.measureText(name).width + 10;
+  const signX = sx + sw / 2 - signW / 2;
+  const signY = sy - 16;
+  // Hanging chains/lines
+  ctx.fillStyle = '#888888';
+  ctx.fillRect(signX + 2, signY - 4, 1, 4);
+  ctx.fillRect(signX + signW - 3, signY - 4, 1, 4);
+  // Wooden sign board
+  ctx.fillStyle = PALETTE.woodDark;
+  ctx.fillRect(signX, signY, signW, 12);
+  ctx.fillStyle = PALETTE.wood;
+  ctx.fillRect(signX + 1, signY + 1, signW - 2, 10);
+  // Sign border
   ctx.fillStyle = trimColor;
-  ctx.fillText(name, sx + sw / 2, sy - 2);
+  ctx.fillRect(signX, signY, signW, 1);
+  ctx.fillRect(signX, signY + 11, signW, 1);
+  ctx.fillRect(signX, signY, 1, 12);
+  ctx.fillRect(signX + signW - 1, signY, 1, 12);
+  // Sign text
+  ctx.fillStyle = '#000000';
+  ctx.fillText(name, sx + sw / 2 + 1, signY + 9);
+  ctx.fillStyle = trimColor;
+  ctx.fillText(name, sx + sw / 2, signY + 8);
   ctx.textAlign = 'left';
 
   // Night: lit windows
@@ -2441,7 +2647,7 @@ function drawBuildingRoof(b, camX, camY, timeOfDay) {
       // Glow
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = winGlow;
-      ctx.fillRect(wx - 2, wy - 2, 12, 14);
+      ctx.fillRect(wx - 3, wy - 3, 14, 16);
       ctx.globalAlpha = 1;
       // Window
       ctx.fillStyle = winColor;
@@ -2450,6 +2656,10 @@ function drawBuildingRoof(b, camX, camY, timeOfDay) {
       ctx.fillStyle = PALETTE.woodDark;
       ctx.fillRect(wx + 3, wy, 2, 10);
       ctx.fillRect(wx, wy + 4, 8, 2);
+      // Shutters
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(wx - 2, wy, 2, 10);
+      ctx.fillRect(wx + 8, wy, 2, 10);
     }
   }
 }
@@ -2476,130 +2686,360 @@ function drawPlayer(player, camX, camY) {
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, 10, 18, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 14, 22, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Horse body
-    const hBob = player.moving ? Math.sin(now * 0.015) * 1.5 : 0;
+    const hBob = player.moving ? Math.sin(now * 0.015) * 2 : 0;
+    const gallop = player.moving ? 1 : 0;
+    // Horse body - rounded contour using multiple rects
     ctx.fillStyle = '#8b5e3c';
-    ctx.fillRect(-12, 2 + hBob, 24, 10);
-    // Horse head
-    const headX = facingRight ? 12 : -18;
-    ctx.fillRect(headX, -2 + hBob, 6, 8);
+    ctx.fillRect(-14, 2 + hBob, 28, 12);
+    ctx.fillStyle = '#7e5434';
+    ctx.fillRect(-12, 0 + hBob, 24, 2); // upper body contour
+    ctx.fillRect(-12, 14 + hBob, 24, 1); // belly
+    // Horse belly highlight
+    ctx.fillStyle = '#9a6e4c';
+    ctx.fillRect(-10, 8 + hBob, 20, 3);
+
+    // Horse legs - 4 distinct legs with hoof animation
+    ctx.fillStyle = '#6b4226';
+    const legPhase1 = player.moving ? Math.sin(now * 0.02) * 4 : 0;
+    const legPhase2 = player.moving ? Math.sin(now * 0.02 + Math.PI) * 4 : 0;
+    // Front legs
+    ctx.fillRect(facingRight ? 8 : -12, 14 + hBob, 3, 9 + legPhase1 * gallop);
+    ctx.fillRect(facingRight ? 12 : -16, 14 + hBob, 3, 9 + legPhase2 * gallop);
+    // Rear legs
+    ctx.fillRect(facingRight ? -10 : 6, 14 + hBob, 3, 9 + legPhase2 * gallop);
+    ctx.fillRect(facingRight ? -6 : 2, 14 + hBob, 3, 9 + legPhase1 * gallop);
+    // Hooves (darker tips)
+    ctx.fillStyle = '#2a1a0a';
+    const h1 = 9 + legPhase1 * gallop;
+    const h2 = 9 + legPhase2 * gallop;
+    ctx.fillRect(facingRight ? 8 : -12, 14 + hBob + h1 - 2, 3, 2);
+    ctx.fillRect(facingRight ? 12 : -16, 14 + hBob + h2 - 2, 3, 2);
+    ctx.fillRect(facingRight ? -10 : 6, 14 + hBob + h2 - 2, 3, 2);
+    ctx.fillRect(facingRight ? -6 : 2, 14 + hBob + h1 - 2, 3, 2);
+
+    // Horse neck
+    const neckX = facingRight ? 12 : -18;
+    ctx.fillStyle = '#8b5e3c';
+    ctx.fillRect(neckX, -4 + hBob, 8, 10);
+    // Horse head - rounded snout
+    const headX = facingRight ? 16 : -24;
+    ctx.fillStyle = '#8b5e3c';
+    ctx.fillRect(headX, -6 + hBob, 8, 8);
+    ctx.fillStyle = '#7e5434';
+    ctx.fillRect(headX + (facingRight ? 6 : 0), -4 + hBob, 3, 5); // snout extension
+    // Nostril
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(headX + (facingRight ? 7 : 1), -2 + hBob, 1, 1);
+    // Horse eye
+    ctx.fillStyle = '#1a1008';
+    ctx.fillRect(headX + (facingRight ? 4 : 2), -4 + hBob, 2, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(headX + (facingRight ? 5 : 2), -4 + hBob, 1, 1);
     // Horse ears
     ctx.fillStyle = '#7a4e2c';
-    ctx.fillRect(headX + 1, -5 + hBob, 2, 3);
-    ctx.fillRect(headX + 3, -5 + hBob, 2, 3);
-    // Horse legs
-    ctx.fillStyle = '#6b4226';
-    const legBob = player.moving ? Math.sin(now * 0.02) * 3 : 0;
-    ctx.fillRect(-8, 12 + hBob, 3, 8 + legBob);
-    ctx.fillRect(6, 12 + hBob, 3, 8 - legBob);
-    // Horse tail
-    const tailX = facingRight ? -14 : 14;
-    ctx.fillStyle = '#3a2a14';
-    ctx.fillRect(tailX, 3 + hBob, 3, 7);
+    ctx.fillRect(headX + 1, -9 + hBob, 2, 4);
+    ctx.fillRect(headX + 4, -9 + hBob, 2, 4);
+    // Ear inner
+    ctx.fillStyle = '#9a6e5c';
+    ctx.fillRect(headX + 1, -8 + hBob, 1, 2);
+    ctx.fillRect(headX + 4, -8 + hBob, 1, 2);
+
+    // Mane flowing
+    ctx.fillStyle = '#2a1a0a';
+    const maneWave = player.moving ? Math.sin(now * 0.01) * 2 : 0;
+    ctx.fillRect(neckX + 2, -6 + hBob + maneWave, 3, 2);
+    ctx.fillRect(neckX + 1, -4 + hBob - maneWave, 3, 2);
+    ctx.fillRect(neckX, -2 + hBob + maneWave, 3, 2);
+    ctx.fillRect(neckX - 1, 0 + hBob, 3, 2);
+
+    // Saddle blanket
+    ctx.fillStyle = '#cc4444';
+    ctx.fillRect(-6, -1 + hBob, 14, 4);
+    ctx.fillStyle = '#aa3333';
+    ctx.fillRect(-6, 0 + hBob, 14, 1); // blanket stripe
+    // Saddle
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(-4, -3 + hBob, 10, 4);
+    ctx.fillStyle = '#4a2508';
+    ctx.fillRect(-4, -3 + hBob, 10, 1); // saddle top edge
+    // Saddle horn
+    ctx.fillStyle = '#6a4020';
+    ctx.fillRect(facingRight ? 4 : -3, -5 + hBob, 2, 3);
+
+    // Stirrups
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(-3, 10 + hBob, 1, 4);
+    ctx.fillRect(3, 10 + hBob, 1, 4);
+    ctx.fillRect(-4, 13 + hBob, 3, 1);
+    ctx.fillRect(2, 13 + hBob, 3, 1);
+
+    // Bridle/reins
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(headX + 2, -1 + hBob, 4, 1); // bridle on face
+    ctx.fillRect(headX + (facingRight ? 2 : 4), -1 + hBob, 1, 3);
+    // Reins line from head to player hands
+    ctx.strokeStyle = '#3a2010';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(headX + 3, 1 + hBob);
+    ctx.lineTo(facingRight ? 4 : -4, -4 + hBob + bobOffset);
+    ctx.stroke();
+
+    // Horse tail with swish
+    const tailSwish = Math.sin(now * 0.008) * 3;
+    const tailBaseX = facingRight ? -16 : 16;
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(tailBaseX, 2 + hBob, 3, 4);
+    ctx.fillRect(tailBaseX + tailSwish * (facingRight ? -1 : 1), 6 + hBob, 2, 5);
+    ctx.fillRect(tailBaseX + tailSwish * (facingRight ? -1.5 : 1.5), 10 + hBob, 2, 3);
 
     // Player on top of horse
-    const py = -12 + hBob + bobOffset;
+    const py = -14 + hBob + bobOffset;
+    // Player legs hanging down (on stirrups)
+    ctx.fillStyle = PALETTE.denim || '#4a5a8a';
+    ctx.fillRect(-4, py + 10, 3, 6);
+    ctx.fillRect(2, py + 10, 3, 6);
+    // Boots on stirrups
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(-5, py + 15, 4, 3);
+    ctx.fillRect(2, py + 15, 4, 3);
     // Torso/vest
     ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
-    ctx.fillRect(-5, py, 10, 8);
+    ctx.fillRect(-6, py, 12, 10);
     // Shirt
     ctx.fillStyle = '#d8c8a0';
-    ctx.fillRect(-4, py + 1, 8, 5);
-    // Badge
+    ctx.fillRect(-5, py + 1, 10, 7);
+    // Vest edges
+    ctx.fillStyle = PALETTE.clothDark || '#5b0a0a';
+    ctx.fillRect(-6, py, 2, 10);
+    ctx.fillRect(4, py, 2, 10);
+    // Vest buttons
+    ctx.fillStyle = '#c8a050';
+    ctx.fillRect(0, py + 2, 1, 1);
+    ctx.fillRect(0, py + 5, 1, 1);
+    // Badge star
     ctx.fillStyle = PALETTE.badge;
-    ctx.fillRect(facingRight ? 1 : -3, py + 2, 3, 3);
+    ctx.fillRect(facingRight ? 1 : -4, py + 2, 3, 3);
     ctx.fillStyle = PALETTE.badgeShine || '#fff8c0';
-    ctx.fillRect(facingRight ? 2 : -2, py + 3, 1, 1);
+    ctx.fillRect(facingRight ? 2 : -3, py + 3, 1, 1);
+    // Arms
+    ctx.fillStyle = '#d8c8a0';
+    ctx.fillRect(-8, py + 2, 2, 5);
+    ctx.fillRect(6, py + 2, 2, 5);
+    // Hands (holding reins)
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(-8, py + 7, 2, 2);
+    ctx.fillRect(6, py + 7, 2, 2);
     // Head
     ctx.fillStyle = PALETTE.skin;
-    ctx.fillRect(-3, py - 6, 6, 6);
+    ctx.fillRect(-4, py - 7, 8, 7);
+    // Hat shadow on face
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(-4, py - 7, 8, 2);
     // Eyes
     ctx.fillStyle = '#000000';
     if (facingRight) {
-      ctx.fillRect(1, py - 4, 1, 1);
+      ctx.fillRect(1, py - 5, 2, 1);
+      ctx.fillRect(-2, py - 5, 2, 1);
     } else {
-      ctx.fillRect(-2, py - 4, 1, 1);
+      ctx.fillRect(-3, py - 5, 2, 1);
+      ctx.fillRect(0, py - 5, 2, 1);
     }
+    // Mustache
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(-2, py - 2, 4, 1);
     // Hat
     ctx.fillStyle = PALETTE.hat;
-    ctx.fillRect(-6, py - 9, 12, 3);
-    ctx.fillRect(-3, py - 12, 6, 3);
+    ctx.fillRect(-8, py - 11, 16, 4);
+    ctx.fillRect(-5, py - 15, 10, 4);
+    // Hat crease
+    ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
+    ctx.fillRect(-4, py - 14, 8, 1);
     // Hat brim
     ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
-    ctx.fillRect(-7, py - 9, 14, 1);
+    ctx.fillRect(-9, py - 11, 18, 1);
+    // Hat band with star
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(-5, py - 12, 10, 1);
+    ctx.fillRect(-1, py - 13, 2, 1); // tiny star on band
   } else {
     // ── On foot ──
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, 12, 10, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 16, 12, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const py = bobOffset;
 
-    // Boots
+    // Boots - detailed with heels and spurs
     ctx.fillStyle = '#3a2a14';
-    const lBob = player.moving ? Math.sin(now * 0.01) * 2 : 0;
-    ctx.fillRect(-4, 8 + py - lBob, 3, 4);
-    ctx.fillRect(1, 8 + py + lBob, 3, 4);
+    const lBob = player.moving ? Math.sin(now * 0.01) * 3 : 0;
+    // Left boot
+    ctx.fillRect(-5, 10 + py - lBob, 4, 6);
+    // Right boot
+    ctx.fillRect(1, 10 + py + lBob, 4, 6);
+    // Boot heels (darker, slightly back)
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(-5, 14 + py - lBob, 4, 2);
+    ctx.fillRect(1, 14 + py + lBob, 4, 2);
+    // Darker toe cap
+    ctx.fillStyle = '#1a1008';
+    ctx.fillRect(facingRight ? -3 : -5, 12 + py - lBob, 2, 2);
+    ctx.fillRect(facingRight ? 3 : 1, 12 + py + lBob, 2, 2);
+    // Spur circles
+    ctx.fillStyle = '#cccccc';
+    ctx.beginPath();
+    ctx.arc(-5, 14 + py - lBob, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(5, 14 + py + lBob, 1, 0, Math.PI * 2);
+    ctx.fill();
 
     // Pants / denim
     ctx.fillStyle = PALETTE.denim || '#4a5a8a';
-    ctx.fillRect(-4, 3 + py, 3, 6);
-    ctx.fillRect(1, 3 + py, 3, 6);
+    ctx.fillRect(-5, 3 + py, 4, 8);
+    ctx.fillRect(1, 3 + py, 4, 8);
+    // Denim seam
+    ctx.fillStyle = '#3a4a7a';
+    ctx.fillRect(-3, 3 + py, 1, 8);
+    ctx.fillRect(3, 3 + py, 1, 8);
+
+    // Belt with buckle
+    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+    ctx.fillRect(-6, 2 + py, 12, 2);
+    // Belt buckle
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(-1, 2 + py, 2, 2);
+
+    // Gun belt (diagonal across hips)
+    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+    ctx.fillRect(-6, 3 + py, 12, 1);
+    // Gun holster on side
+    const holsterX = facingRight ? 6 : -8;
+    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+    ctx.fillRect(holsterX, 1 + py, 3, 6);
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(holsterX, 1 + py, 3, 3); // gun handle visible
 
     // Vest / torso
     ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
-    ctx.fillRect(-5, -4 + py, 10, 8);
-
-    // Shirt underneath
+    ctx.fillRect(-6, -6 + py, 12, 9);
+    // Shirt underneath (visible in front)
     ctx.fillStyle = '#d8c8a0';
-    ctx.fillRect(-4, -3 + py, 8, 6);
+    ctx.fillRect(-4, -5 + py, 8, 7);
+    // Vest edges (lapels)
+    ctx.fillStyle = PALETTE.clothDark || '#5b0a0a';
+    ctx.fillRect(-6, -6 + py, 2, 9);
+    ctx.fillRect(4, -6 + py, 2, 9);
+    // Vest buttons
+    ctx.fillStyle = '#c8a050';
+    ctx.fillRect(0, -4 + py, 1, 1);
+    ctx.fillRect(0, -2 + py, 1, 1);
+    ctx.fillRect(0, 0 + py, 1, 1);
+
+    // Bandolier / ammo belt across chest (diagonal dots)
+    ctx.fillStyle = '#6a4a2a';
+    for (let ai = 0; ai < 5; ai++) {
+      const ax = -4 + ai * 2;
+      const ay = -5 + ai * 1 + py;
+      ctx.fillRect(ax, ay, 1, 2);
+    }
+    // Ammo shells (brass color)
+    ctx.fillStyle = '#b8943a';
+    for (let ai = 0; ai < 5; ai++) {
+      const ax = -4 + ai * 2;
+      const ay = -5 + ai * 1 + py;
+      ctx.fillRect(ax, ay, 1, 1);
+    }
 
     // Star badge
     ctx.fillStyle = PALETTE.badge;
-    ctx.fillRect(facingRight ? 1 : -4, -2 + py, 3, 3);
+    const badgeX = facingRight ? 1 : -4;
+    const badgeY = -3 + py;
+    // Draw small star shape
+    ctx.beginPath();
+    for (let si = 0; si < 5; si++) {
+      const angle = -Math.PI / 2 + si * (Math.PI * 2 / 5);
+      const px = badgeX + 1.5 + Math.cos(angle) * 2;
+      const ppy = badgeY + 1.5 + Math.sin(angle) * 2;
+      if (si === 0) ctx.moveTo(px, ppy); else ctx.lineTo(px, ppy);
+      const innerAngle = angle + Math.PI / 5;
+      ctx.lineTo(badgeX + 1.5 + Math.cos(innerAngle) * 1, badgeY + 1.5 + Math.sin(innerAngle) * 1);
+    }
+    ctx.closePath();
+    ctx.fill();
     ctx.fillStyle = PALETTE.badgeShine || '#fff8c0';
-    ctx.fillRect(facingRight ? 2 : -3, -1 + py, 1, 1);
+    ctx.fillRect(badgeX + 1, badgeY + 1, 1, 1);
 
-    // Gun holster on side
-    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
-    const holsterX = facingRight ? 5 : -7;
-    ctx.fillRect(holsterX, 0 + py, 2, 5);
-    ctx.fillStyle = '#555555';
-    ctx.fillRect(holsterX, 0 + py, 2, 2);
+    // Arms on both sides
+    ctx.fillStyle = '#d8c8a0'; // shirt sleeve
+    ctx.fillRect(-8, -5 + py, 2, 7);
+    ctx.fillRect(6, -5 + py, 2, 7);
+    // Hands (skin colored dots)
+    ctx.fillStyle = PALETTE.skin;
+    ctx.beginPath();
+    ctx.arc(-7, 3 + py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7, 3 + py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
 
     // Head
     ctx.fillStyle = PALETTE.skin;
-    ctx.fillRect(-3, -10 + py, 6, 6);
+    ctx.fillRect(-4, -13 + py, 8, 7);
+    // Hat brim shadow on face
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(-4, -13 + py, 8, 2);
 
     // Darker jaw line
     ctx.fillStyle = PALETTE.skinDark;
-    ctx.fillRect(-3, -5 + py, 6, 1);
+    ctx.fillRect(-4, -7 + py, 8, 1);
 
-    // Eyes based on direction
+    // Eyes based on direction (two eyes)
     ctx.fillStyle = '#000000';
     if (facingRight) {
-      ctx.fillRect(1, -8 + py, 1, 1);
-      ctx.fillRect(-1, -8 + py, 1, 1);
+      ctx.fillRect(1, -11 + py, 2, 1);
+      ctx.fillRect(-2, -11 + py, 2, 1);
     } else {
-      ctx.fillRect(-2, -8 + py, 1, 1);
-      ctx.fillRect(0, -8 + py, 1, 1);
+      ctx.fillRect(-3, -11 + py, 2, 1);
+      ctx.fillRect(0, -11 + py, 2, 1);
     }
+    // Eyebrows (thin dark lines above eyes)
+    ctx.fillStyle = '#2a1a0a';
+    if (facingRight) {
+      ctx.fillRect(0, -12 + py, 3, 1);
+      ctx.fillRect(-3, -12 + py, 3, 1);
+    } else {
+      ctx.fillRect(-4, -12 + py, 3, 1);
+      ctx.fillRect(-1, -12 + py, 3, 1);
+    }
+    // Mustache
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(-2, -9 + py, 5, 1);
+    ctx.fillRect(-3, -8 + py, 2, 1);
+    ctx.fillRect(2, -8 + py, 2, 1);
 
-    // Hat (wide brim)
+    // Hat (wider brim, more detail)
     ctx.fillStyle = PALETTE.hat;
-    ctx.fillRect(-7, -14 + py, 14, 3);
-    ctx.fillRect(-4, -17 + py, 8, 3);
-    // Hat brim shadow
+    ctx.fillRect(-9, -17 + py, 18, 4); // brim
+    ctx.fillRect(-5, -21 + py, 10, 4); // crown
+    // Hat crease in crown (darker line)
     ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
-    ctx.fillRect(-8, -14 + py, 16, 1);
-    // Hat band
+    ctx.fillRect(-4, -20 + py, 8, 1);
+    // Hat brim edge
+    ctx.fillStyle = PALETTE.hatBrim || '#2a1a0a';
+    ctx.fillRect(-10, -17 + py, 20, 1);
+    // Hat band with star
     ctx.fillStyle = PALETTE.badge;
-    ctx.fillRect(-4, -14 + py, 8, 1);
+    ctx.fillRect(-5, -17 + py, 10, 1);
+    // Small star on hat band
+    ctx.fillRect(-1, -18 + py, 2, 1);
+    ctx.fillRect(0, -19 + py, 1, 1);
   }
 
   // HP bar when damaged
@@ -2654,24 +3094,36 @@ function drawNPC(npc, camX, camY, playerDist) {
     // Body on ground
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.ellipse(0, 2, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 2, 14, 5, 0, 0, Math.PI * 2);
     ctx.fill();
     // Blood pool
     ctx.fillStyle = PALETTE.blood;
     ctx.globalAlpha = 0.6;
     ctx.beginPath();
-    ctx.ellipse(2, 3, 8, 5, 0.3, 0, Math.PI * 2);
+    ctx.ellipse(2, 3, 10, 6, 0.3, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     // Fallen body (side view)
     const isOutlaw = npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY;
     ctx.fillStyle = isOutlaw ? PALETTE.outlaw : PALETTE.cloth || '#8b1a1a';
-    ctx.fillRect(-8, -2, 16, 5);
+    ctx.fillRect(-10, -3, 20, 6);
+    // Fallen arms
+    ctx.fillStyle = '#d8c8a0';
+    ctx.fillRect(-12, -1, 3, 2);
+    ctx.fillRect(10, -1, 3, 2);
+    // Head
     ctx.fillStyle = PALETTE.skin;
-    ctx.fillRect(-10, -1, 4, 3);
+    ctx.fillRect(-14, -2, 5, 4);
+    // X eyes on dead NPC
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(-13, -1, 1, 1);
+    ctx.fillRect(-12, 0, 1, 1);
+    ctx.fillRect(-12, -1, 1, 1);
+    ctx.fillRect(-13, 0, 1, 1);
     // Hat fallen off
     ctx.fillStyle = isOutlaw ? PALETTE.outlawHat : PALETTE.hat;
-    ctx.fillRect(8, -3, 5, 3);
+    ctx.fillRect(10, -5, 6, 3);
+    ctx.fillRect(11, -7, 4, 2);
     ctx.restore();
     return;
   }
@@ -2703,22 +3155,56 @@ function drawNPC(npc, camX, camY, playerDist) {
   const isShopkeeper = npc.type === NPC_TYPES.SHOPKEEPER || npc.type === NPC_TYPES.BARTENDER || npc.type === NPC_TYPES.BANKER;
   const facingRight = npc.facingRight !== undefined ? npc.facingRight : true;
 
+  // Breathing animation for idle NPCs (subtle scale)
+  const breathScale = (!npc.moving && npc.state !== 'walking') ? 1 + Math.sin(now * 0.003 + npc.x * 7) * 0.008 : 1;
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(0, 10, 8, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 14, 10, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Boots
-  ctx.fillStyle = isOutlaw ? '#222222' : '#5a3a1a';
-  const lBob = (npc.moving || npc.state === 'walking') ? Math.sin(now * 0.008 + npc.x) * 2 : 0;
-  ctx.fillRect(-3, 7 + bobOffset - lBob, 3, 3);
-  ctx.fillRect(1, 7 + bobOffset + lBob, 3, 3);
+  // Body size variety based on NPC hash
+  const npcHash = ((npc.x * 37 + npc.y * 17) & 0xff);
+  const bodyW = 8 + (npcHash % 3); // 8-10 wide
+  const halfW = bodyW / 2;
 
-  // Pants
-  ctx.fillStyle = isOutlaw ? '#333333' : (isShopkeeper ? '#5a4a3a' : '#4a5a8a');
-  ctx.fillRect(-3, 2 + bobOffset, 3, 6);
-  ctx.fillRect(1, 2 + bobOffset, 3, 6);
+  // Determine if female townsperson (for dress variation)
+  const isFemale = npc.type === NPC_TYPES.TOWNSPERSON && (npcHash % 4 === 0);
+
+  // Boots
+  ctx.fillStyle = isOutlaw ? '#1a1a1a' : '#5a3a1a';
+  const lBob = (npc.moving || npc.state === 'walking') ? Math.sin(now * 0.008 + npc.x) * 3 : 0;
+  if (!isFemale) {
+    ctx.fillRect(-4, 10 + bobOffset - lBob, 4, 5);
+    ctx.fillRect(1, 10 + bobOffset + lBob, 4, 5);
+    // Boot heels
+    ctx.fillStyle = isOutlaw ? '#111111' : '#3a2010';
+    ctx.fillRect(-4, 13 + bobOffset - lBob, 4, 2);
+    ctx.fillRect(1, 13 + bobOffset + lBob, 4, 2);
+  } else {
+    // Smaller boots for dress NPCs
+    ctx.fillRect(-3, 12 + bobOffset - lBob, 3, 3);
+    ctx.fillRect(1, 12 + bobOffset + lBob, 3, 3);
+  }
+
+  // Pants / legs
+  if (isFemale) {
+    // Dress (longer, wider)
+    const dressHue = (npcHash * 3) & 0xff;
+    const dr = 120 + (dressHue & 0x3f);
+    const dg = 80 + ((dressHue >> 2) & 0x3f);
+    const db = 90 + ((dressHue >> 4) & 0x3f);
+    ctx.fillStyle = 'rgb(' + dr + ',' + dg + ',' + db + ')';
+    ctx.fillRect(-halfW - 1, 0 + bobOffset, bodyW + 2, 13);
+    // Dress hem detail
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(-halfW - 1, 11 + bobOffset, bodyW + 2, 2);
+  } else {
+    ctx.fillStyle = isOutlaw ? '#2a2a2a' : (isShopkeeper ? '#5a4a3a' : PALETTE.denim || '#4a5a8a');
+    ctx.fillRect(-4, 3 + bobOffset, 4, 8);
+    ctx.fillRect(1, 3 + bobOffset, 4, 8);
+  }
 
   // Torso
   if (isOutlaw) {
@@ -2731,69 +3217,253 @@ function drawNPC(npc, camX, camY, playerDist) {
     ctx.fillStyle = '#4a3a6a';
   } else if (npc.type === NPC_TYPES.DEPUTY) {
     ctx.fillStyle = '#5a4a2a';
+  } else if (npc.type === NPC_TYPES.STRANGER) {
+    ctx.fillStyle = '#5a4a3a';
+  } else if (isFemale) {
+    const dressHue = (npcHash * 3) & 0xff;
+    const dr = 120 + (dressHue & 0x3f);
+    const dg = 80 + ((dressHue >> 2) & 0x3f);
+    const db = 90 + ((dressHue >> 4) & 0x3f);
+    ctx.fillStyle = 'rgb(' + dr + ',' + dg + ',' + db + ')';
   } else {
-    // Townsperson with variety
-    const hue = ((npc.x * 37 + npc.y * 17) & 0xff);
-    const r = 80 + (hue & 0x3f);
-    const g = 60 + ((hue >> 2) & 0x3f);
-    const b = 50 + ((hue >> 4) & 0x3f);
+    const r = 80 + (npcHash & 0x3f);
+    const g = 60 + ((npcHash >> 2) & 0x3f);
+    const b = 50 + ((npcHash >> 4) & 0x3f);
     ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
   }
-  ctx.fillRect(-4, -5 + bobOffset, 8, 8);
+  ctx.save();
+  ctx.translate(0, 0);
+  ctx.scale(breathScale, breathScale);
+  ctx.fillRect(-halfW, -6 + bobOffset, bodyW, 10);
+  ctx.restore();
 
-  // Bandana for outlaws
+  // Bartender apron
+  if (npc.type === NPC_TYPES.BARTENDER) {
+    ctx.fillStyle = '#d8d0c0';
+    ctx.fillRect(-halfW + 1, -2 + bobOffset, bodyW - 2, 10);
+    ctx.fillStyle = '#c8c0b0';
+    ctx.fillRect(-halfW + 1, -2 + bobOffset, bodyW - 2, 1);
+    ctx.fillStyle = '#b8b0a0';
+    ctx.fillRect(-halfW, -2 + bobOffset, 1, 2);
+    ctx.fillRect(halfW - 1, -2 + bobOffset, 1, 2);
+  }
+
+  // Stranger poncho/cloak
+  if (npc.type === NPC_TYPES.STRANGER) {
+    ctx.fillStyle = '#7a6a4a';
+    ctx.fillRect(-halfW - 3, -6 + bobOffset, bodyW + 6, 8);
+    ctx.fillStyle = '#6a5a3a';
+    ctx.fillRect(-halfW - 3, -5 + bobOffset, bodyW + 6, 1);
+    ctx.fillRect(-halfW - 3, -2 + bobOffset, bodyW + 6, 1);
+    ctx.fillStyle = '#8a7a5a';
+    for (let fi = 0; fi < bodyW + 6; fi += 2) {
+      ctx.fillRect(-halfW - 3 + fi, 2 + bobOffset, 1, 2);
+    }
+  }
+
+  // Townsperson clothing variety
+  if (npc.type === NPC_TYPES.TOWNSPERSON && !isFemale) {
+    const clothStyle = npcHash % 3;
+    if (clothStyle === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(-halfW, -6 + bobOffset, 2, 10);
+      ctx.fillRect(halfW - 2, -6 + bobOffset, 2, 10);
+    } else if (clothStyle === 1) {
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(-halfW + 1, -6 + bobOffset, 2, 16);
+      ctx.fillRect(halfW - 3, -6 + bobOffset, 2, 16);
+    }
+  }
+
+  // Outlaw crossed ammo belts + skull bandana
   if (isOutlaw) {
+    ctx.fillStyle = '#4a3a2a';
+    for (let ai = 0; ai < 5; ai++) {
+      ctx.fillRect(-halfW + ai * 2, -5 + ai + bobOffset, 2, 2);
+    }
+    for (let ai = 0; ai < 5; ai++) {
+      ctx.fillRect(halfW - 2 - ai * 2, -5 + ai + bobOffset, 2, 2);
+    }
+    ctx.fillStyle = '#b8943a';
+    for (let ai = 0; ai < 5; ai++) {
+      ctx.fillRect(-halfW + ai * 2, -5 + ai + bobOffset, 1, 1);
+      ctx.fillRect(halfW - 2 - ai * 2, -5 + ai + bobOffset, 1, 1);
+    }
     ctx.fillStyle = PALETTE.bandana || '#8b0000';
+    ctx.fillRect(-4, -7 + bobOffset, 8, 2);
+    ctx.fillStyle = '#dddddd';
+    ctx.fillRect(-1, -7 + bobOffset, 2, 1);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(-1, -7 + bobOffset, 1, 1);
+    ctx.fillRect(1, -7 + bobOffset, 1, 1);
+  }
+
+  // Mayor fancy vest + pocket watch
+  if (npc.type === NPC_TYPES.MAYOR) {
+    ctx.fillStyle = '#6a4a8a';
+    ctx.fillRect(-halfW, -6 + bobOffset, 2, 10);
+    ctx.fillRect(halfW - 2, -6 + bobOffset, 2, 10);
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(-1, -3 + bobOffset, 1, 1);
+    ctx.fillRect(0, -2 + bobOffset, 1, 1);
+    ctx.fillRect(1, -1 + bobOffset, 1, 1);
+    ctx.fillRect(2, -1 + bobOffset, 2, 2);
+  }
+
+  // Preacher white collar + book
+  if (npc.type === NPC_TYPES.PREACHER) {
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(-3, -6 + bobOffset, 6, 2);
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(facingRight ? halfW + 1 : -halfW - 4, -2 + bobOffset, 3, 4);
+    ctx.fillStyle = '#f0e8d0';
+    ctx.fillRect(facingRight ? halfW + 2 : -halfW - 3, -1 + bobOffset, 1, 2);
+  }
+
+  // Shopkeeper suspenders
+  if (npc.type === NPC_TYPES.SHOPKEEPER) {
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(-halfW + 1, -6 + bobOffset, 2, 14);
+    ctx.fillRect(halfW - 3, -6 + bobOffset, 2, 14);
+  }
+
+  // Deputy holster
+  if (npc.type === NPC_TYPES.DEPUTY) {
+    ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+    const depHolsterX = facingRight ? halfW : -halfW - 2;
+    ctx.fillRect(depHolsterX, 0 + bobOffset, 2, 5);
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(depHolsterX, 0 + bobOffset, 2, 2);
+  }
+
+  // Arms (not for stranger - poncho covers them)
+  if (npc.type !== NPC_TYPES.STRANGER) {
+    ctx.fillStyle = isOutlaw ? '#2a2a2a' : '#d8c8a0';
+    ctx.fillRect(-halfW - 2, -4 + bobOffset, 2, 6);
+    ctx.fillRect(halfW, -4 + bobOffset, 2, 6);
+    ctx.fillStyle = PALETTE.skin;
+    ctx.beginPath();
+    ctx.arc(-halfW - 1, 3 + bobOffset, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(halfW + 1, 3 + bobOffset, 1.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Head
   ctx.fillStyle = PALETTE.skin;
-  ctx.fillRect(-3, -11 + bobOffset, 6, 6);
+  ctx.fillRect(-4, -13 + bobOffset, 8, 7);
 
-  // Eyes
+  // Eyes (both visible)
   ctx.fillStyle = '#000000';
   if (facingRight) {
-    ctx.fillRect(1, -9 + bobOffset, 1, 1);
+    ctx.fillRect(1, -11 + bobOffset, 2, 1);
+    ctx.fillRect(-2, -11 + bobOffset, 2, 1);
   } else {
-    ctx.fillRect(-2, -9 + bobOffset, 1, 1);
+    ctx.fillRect(-3, -11 + bobOffset, 2, 1);
+    ctx.fillRect(0, -11 + bobOffset, 2, 1);
+  }
+
+  // Mayor monocle
+  if (npc.type === NPC_TYPES.MAYOR) {
+    ctx.strokeStyle = PALETTE.badge;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.arc(facingRight ? 2 : -2, -10 + bobOffset, 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.badge;
+    ctx.fillRect(facingRight ? 3 : -4, -9 + bobOffset, 1, 3);
+  }
+
+  // Beard for some NPCs
+  const hasBeard = (npcHash % 5 === 0) && !isFemale;
+  if (hasBeard) {
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(-3, -7 + bobOffset, 6, 3);
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(-2, -6 + bobOffset, 4, 2);
   }
 
   // Hat variation
   if (isOutlaw) {
     ctx.fillStyle = PALETTE.outlawHat;
-    ctx.fillRect(-5, -14 + bobOffset, 10, 3);
-    ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+    ctx.fillRect(-6, -17 + bobOffset, 12, 4);
+    ctx.fillRect(-4, -20 + bobOffset, 8, 3);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(-7, -17 + bobOffset, 14, 1);
   } else if (npc.type === NPC_TYPES.PREACHER) {
-    // Tall black hat
     ctx.fillStyle = '#111111';
-    ctx.fillRect(-4, -17 + bobOffset, 8, 6);
-    ctx.fillRect(-5, -12 + bobOffset, 10, 1);
+    ctx.fillRect(-5, -21 + bobOffset, 10, 8);
+    ctx.fillRect(-6, -14 + bobOffset, 12, 1);
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(-5, -15 + bobOffset, 10, 1);
   } else if (npc.type === NPC_TYPES.MAYOR) {
-    // Top hat
     ctx.fillStyle = '#2a2a4a';
-    ctx.fillRect(-4, -18 + bobOffset, 8, 7);
-    ctx.fillRect(-5, -12 + bobOffset, 10, 1);
-  } else if (npc.type === NPC_TYPES.DEPUTY) {
-    // Deputy hat + badge
-    ctx.fillStyle = '#4a3a2a';
-    ctx.fillRect(-5, -14 + bobOffset, 10, 3);
-    ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+    ctx.fillRect(-5, -22 + bobOffset, 10, 9);
+    ctx.fillRect(-6, -14 + bobOffset, 12, 1);
     ctx.fillStyle = PALETTE.badge;
-    ctx.fillRect(0, -5 + bobOffset, 2, 2);
-  } else if (isShopkeeper) {
-    // Visor / cap
+    ctx.fillRect(-5, -15 + bobOffset, 10, 1);
+  } else if (npc.type === NPC_TYPES.DEPUTY) {
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(-6, -17 + bobOffset, 12, 4);
+    ctx.fillRect(-4, -20 + bobOffset, 8, 3);
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(-7, -17 + bobOffset, 14, 1);
+    // Proper star badge
+    ctx.fillStyle = PALETTE.badge;
+    const starX = facingRight ? 1 : -3;
+    const starY = -4 + bobOffset;
+    ctx.beginPath();
+    for (let si = 0; si < 5; si++) {
+      const angle = -Math.PI / 2 + si * (Math.PI * 2 / 5);
+      const px = starX + 1 + Math.cos(angle) * 2;
+      const ppy = starY + 1 + Math.sin(angle) * 2;
+      if (si === 0) ctx.moveTo(px, ppy); else ctx.lineTo(px, ppy);
+      const innerAngle = angle + Math.PI / 5;
+      ctx.lineTo(starX + 1 + Math.cos(innerAngle) * 1, starY + 1 + Math.sin(innerAngle) * 1);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (npc.type === NPC_TYPES.SHOPKEEPER) {
     ctx.fillStyle = '#6a5040';
-    ctx.fillRect(-4, -13 + bobOffset, 8, 2);
-    ctx.fillRect(facingRight ? -1 : -5, -13 + bobOffset, 6, 1);
+    ctx.fillRect(-5, -15 + bobOffset, 10, 2);
+    ctx.fillStyle = '#7a6050';
+    ctx.fillRect(facingRight ? -2 : -7, -15 + bobOffset, 8, 1);
+    ctx.fillRect(-4, -16 + bobOffset, 8, 2);
+  } else if (npc.type === NPC_TYPES.BARTENDER) {
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(-4, -14 + bobOffset, 8, 2);
+    ctx.fillRect(facingRight ? -4 : 2, -13 + bobOffset, 3, 1);
+  } else if (npc.type === NPC_TYPES.STRANGER) {
+    ctx.fillStyle = '#3a3028';
+    ctx.fillRect(-7, -17 + bobOffset, 14, 4);
+    ctx.fillRect(-4, -20 + bobOffset, 8, 3);
+    ctx.fillStyle = '#2a2018';
+    ctx.fillRect(-8, -17 + bobOffset, 16, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(-4, -13 + bobOffset, 8, 3);
+  } else if (isFemale) {
+    const bonnetHue = (npcHash * 5) & 0xff;
+    const br = 140 + (bonnetHue & 0x3f);
+    const bg = 100 + ((bonnetHue >> 2) & 0x3f);
+    const bb = 120 + ((bonnetHue >> 4) & 0x3f);
+    ctx.fillStyle = 'rgb(' + br + ',' + bg + ',' + bb + ')';
+    ctx.fillRect(-5, -15 + bobOffset, 10, 3);
+    ctx.fillRect(-4, -16 + bobOffset, 8, 2);
+    ctx.fillStyle = 'rgb(' + (br - 20) + ',' + (bg - 20) + ',' + (bb - 20) + ')';
+    ctx.fillRect(-5, -13 + bobOffset, 1, 2);
+    ctx.fillRect(4, -13 + bobOffset, 1, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-4, -15 + bobOffset, 8, 1);
   } else {
-    // Random hat or no hat based on NPC
     const hasHat = ((npc.x * 13 + npc.y * 7) % 3) !== 0;
     if (hasHat) {
       const hatShade = 30 + ((npc.x * 17 + npc.y * 31) & 0x3f);
       ctx.fillStyle = 'rgb(' + hatShade + ',' + Math.floor(hatShade * 0.8) + ',' + Math.floor(hatShade * 0.5) + ')';
-      ctx.fillRect(-5, -14 + bobOffset, 10, 3);
-      ctx.fillRect(-3, -16 + bobOffset, 6, 2);
+      ctx.fillRect(-6, -17 + bobOffset, 12, 4);
+      ctx.fillRect(-4, -20 + bobOffset, 8, 3);
+      ctx.fillStyle = 'rgb(' + Math.floor(hatShade * 0.7) + ',' + Math.floor(hatShade * 0.5) + ',' + Math.floor(hatShade * 0.3) + ')';
+      ctx.fillRect(-7, -17 + bobOffset, 14, 1);
     }
   }
 
@@ -3068,6 +3738,15 @@ function drawMinimap(game) {
     mmCtx.fillRect(hx - 1.5, hy - 1.5, 3, 3);
   }
 
+  // Train on minimap
+  if (game.train) {
+    mmCtx.fillStyle = '#ffd700';
+    var trainMX = game.train.x * scaleX;
+    var trainMY = game.train.y * scaleY;
+    var trainML = (game.train.cars + 1) * 80 * scaleX;
+    mmCtx.fillRect(trainMX - trainML, trainMY - 1, trainML + 10, 3);
+  }
+
   // Player as gold dot
   if (game.player) {
     mmCtx.fillStyle = PALETTE.gold;
@@ -3161,7 +3840,9 @@ const game = {
   speedResolveTime: Infinity,
   noDamageDays: 0,
   prayedToday: false,
-  crimeStartTime: 0
+  crimeStartTime: 0,
+  train: null,
+  _nearTrain: false
 };
 
 // ─────────────────────────────────────────────
@@ -4758,6 +5439,11 @@ function updateTime(dt) {
     if (game.dayCount % 5 === 0) {
       generateWantedList();
     }
+
+    // Train spawn check every 3 days
+    if (!game.train && (game.dayCount || 1) % 3 === 0 && Math.random() < 0.3) {
+      spawnTrain();
+    }
   }
 
   // Update rank
@@ -4778,6 +5464,253 @@ function updateTime(dt) {
     game.state = 'gameover';
     game.gameOverReason = 'Your reputation hit rock bottom. The town ran you out.';
   }
+}
+
+// J.5b - Train System
+function spawnTrain() {
+  if (game.train) return;
+  game.train = {
+    x: -400,
+    y: 54 * TILE + TILE / 2,
+    speed: 120,
+    state: 'arriving',
+    timer: 0,
+    stopX: 38 * TILE,
+    cars: rand(3, 5),
+    lootGold: rand(100, 400),
+    robbed: false,
+    passengers: rand(5, 15)
+  };
+  showNotification('A TRAIN is approaching town!');
+  addJournalEntry('A train is heading into town.');
+}
+
+function updateTrain(dt) {
+  var t = game.train;
+  if (!t) return;
+
+  if (t.state === 'arriving') {
+    t.x += t.speed * dt;
+    if (t.x > t.stopX - 200) {
+      t.speed = Math.max(10, t.speed - 80 * dt);
+    }
+    if (t.x >= t.stopX) {
+      t.x = t.stopX;
+      t.state = 'stopped';
+      t.timer = 0;
+      t.speed = 0;
+      showNotification('Train stopped at the station! (1 minute)');
+    }
+  } else if (t.state === 'stopped') {
+    t.timer += dt;
+    if (t.timer >= 60) {
+      t.state = 'departing';
+      t.speed = 0;
+      showNotification('The train is departing!');
+    }
+  } else if (t.state === 'departing') {
+    t.speed = Math.min(200, t.speed + 60 * dt);
+    t.x += t.speed * dt;
+    if (t.x > MAP_W * TILE + 500) {
+      game.train = null;
+      game._nearTrain = false;
+    }
+  }
+
+  // Train interaction check
+  if (game.train && game.train.state === 'stopped') {
+    var tr = game.train;
+    var nearTrain = Math.abs(game.player.y - tr.y) < 50 &&
+                    game.player.x > tr.x - 20 &&
+                    game.player.x < tr.x + (tr.cars + 1) * 80 + 20;
+    if (nearTrain) {
+      game._nearTrain = true;
+      if (consumeKey('KeyR') && !tr.robbed) {
+        tr.robbed = true;
+        var loot = tr.lootGold;
+        game.gold = (game.gold || 0) + loot;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + loot;
+        game.corruption = clamp((game.corruption || 0) + 15, 0, 100);
+        game.reputation = clamp((game.reputation || 50) - 20, 0, REPUTATION_MAX);
+        showNotification('TRAIN ROBBERY! Stole $' + loot + '! +15 Corruption, -20 Rep');
+        addJournalEntry('Robbed a train for $' + loot);
+        // Spawn hostile guards
+        for (var gi = 0; gi < 3; gi++) {
+          var guard = createNPC(
+            game.npcs.length, NPC_TYPES.OUTLAW,
+            'Train Guard',
+            Math.floor(tr.x / TILE) + gi * 2, 53, null
+          );
+          guard.hostile = true;
+          guard.hp = 5;
+          guard.maxHp = 5;
+          game.npcs.push(guard);
+        }
+        tr.state = 'departing';
+        tr.speed = 20;
+      }
+      if (consumeKey('KeyE') && !tr.robbed) {
+        showNotification('The train is stopped. Press [R] to rob it, or wait and let it pass.');
+      }
+    } else {
+      game._nearTrain = false;
+    }
+  }
+}
+
+function drawTrain(camX, camY) {
+  var t = game.train;
+  if (!t) return;
+
+  var sx = t.x - camX;
+  var sy = t.y - camY;
+
+  var trainLen = (t.cars + 1) * 80;
+  if (sx + trainLen < -50 || sx > canvas.width + 50) return;
+  if (sy < -80 || sy > canvas.height + 80) return;
+
+  ctx.save();
+
+  var lx = sx, ly = sy;
+
+  // Smoke (when moving)
+  if (t.state !== 'stopped' || t.speed > 0) {
+    var now = Date.now();
+    for (var si = 0; si < 5; si++) {
+      var smokeAge = (now * 0.003 + si * 0.5) % 3;
+      var smokeX = lx + 10 - smokeAge * 20;
+      var smokeY = ly - 35 - smokeAge * 15;
+      var smokeSize = 4 + smokeAge * 6;
+      ctx.globalAlpha = Math.max(0, 0.4 - smokeAge * 0.13);
+      ctx.fillStyle = '#888888';
+      ctx.beginPath();
+      ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Locomotive body
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(lx - 10, ly - 20, 70, 28);
+  // Boiler
+  ctx.fillStyle = '#333333';
+  ctx.fillRect(lx + 40, ly - 24, 25, 32);
+  ctx.beginPath();
+  ctx.arc(lx + 65, ly - 8, 16, -Math.PI / 2, Math.PI / 2);
+  ctx.fill();
+  // Cab
+  ctx.fillStyle = '#4a2a1a';
+  ctx.fillRect(lx - 10, ly - 28, 30, 8);
+  ctx.fillStyle = '#6a4a2a';
+  ctx.fillRect(lx - 8, ly - 26, 12, 6);
+  // Smokestack
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(lx + 30, ly - 34, 8, 14);
+  ctx.fillRect(lx + 27, ly - 37, 14, 4);
+  // Cowcatcher
+  ctx.fillStyle = '#555555';
+  ctx.beginPath();
+  ctx.moveTo(lx + 65, ly + 4);
+  ctx.lineTo(lx + 78, ly + 8);
+  ctx.lineTo(lx + 65, ly + 12);
+  ctx.closePath();
+  ctx.fill();
+  // Headlight
+  ctx.fillStyle = '#ffdd44';
+  ctx.beginPath();
+  ctx.arc(lx + 68, ly - 6, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(lx + 68, ly - 6, 2, 0, Math.PI * 2);
+  ctx.fill();
+  // Wheels
+  ctx.fillStyle = '#1a1a1a';
+  for (var wi = 0; wi < 3; wi++) {
+    ctx.beginPath();
+    ctx.arc(lx + 10 + wi * 22, ly + 12, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#444444';
+    ctx.lineWidth = 1;
+    var rot = t.x * 0.05 + wi;
+    ctx.beginPath();
+    ctx.moveTo(lx + 10 + wi * 22 + Math.cos(rot) * 5, ly + 12 + Math.sin(rot) * 5);
+    ctx.lineTo(lx + 10 + wi * 22 - Math.cos(rot) * 5, ly + 12 - Math.sin(rot) * 5);
+    ctx.stroke();
+  }
+  // Connecting rod
+  ctx.strokeStyle = '#666666';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(lx + 10, ly + 12);
+  ctx.lineTo(lx + 54, ly + 12);
+  ctx.stroke();
+  // Red trim
+  ctx.fillStyle = '#8b0000';
+  ctx.fillRect(lx - 10, ly - 20, 70, 2);
+  ctx.fillRect(lx - 10, ly + 6, 70, 2);
+
+  // Cars
+  for (var ci = 0; ci < t.cars; ci++) {
+    var cx2 = lx - 25 - ci * 80;
+    // Coupling
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(cx2 + 55, ly + 2, 10, 3);
+
+    if (ci === 0 && !t.robbed) {
+      // Gold/cargo car
+      ctx.fillStyle = '#5a4a2a';
+      ctx.fillRect(cx2, ly - 16, 55, 24);
+      ctx.fillStyle = '#4a3a1a';
+      ctx.fillRect(cx2 + 2, ly - 14, 51, 20);
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', cx2 + 27, ly + 2);
+    } else {
+      // Passenger car
+      ctx.fillStyle = '#6a3a1a';
+      ctx.fillRect(cx2, ly - 16, 55, 24);
+      ctx.fillStyle = '#8a5a2a';
+      ctx.fillRect(cx2 + 2, ly - 14, 51, 20);
+      // Windows
+      ctx.fillStyle = '#aaccee';
+      for (var ww = 0; ww < 4; ww++) {
+        ctx.fillRect(cx2 + 6 + ww * 13, ly - 12, 8, 8);
+      }
+    }
+
+    // Car wheels
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(cx2 + 12, ly + 12, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx2 + 42, ly + 12, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Rob prompt
+  if (game._nearTrain && t.state === 'stopped' && !t.robbed) {
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[R] ROB TRAIN  |  [E] Inspect', sx + trainLen / 2, sy - 40);
+    var remaining = Math.max(0, Math.ceil(60 - t.timer));
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px monospace';
+    ctx.fillText('Departing in: ' + remaining + 's', sx + trainLen / 2, sy - 52);
+  }
+
+  if (t.robbed) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ROBBED!', sx + 20, sy - 35);
+  }
+
+  ctx.restore();
 }
 
 // J.6 - Update Achievements
@@ -5273,6 +6206,8 @@ function initGame(difficulty, ngPlus) {
   game.ambientParticles = [];
   game.prayedToday = false;
   game.crimeStartTime = 0;
+  game.train = null;
+  game._nearTrain = false;
   game.shopOpen = false;
   game.shopType = null;
   game.pokerState = null;
@@ -5954,6 +6889,9 @@ function render() {
     drawBuildingRoof(b, camX, camY);
   }
 
+  // 6b. Draw train
+  if (game.train) drawTrain(camX, camY);
+
   // 7. Crime indicator (pulsing red circle + offscreen arrow)
   if (game.activeCrime) {
     const cx = game.activeCrime.x - camX;
@@ -6322,6 +7260,20 @@ function render() {
     if (timerEl) timerEl.classList.add('hidden');
   }
 
+  // Train countdown HUD
+  if (game.train && game.train.state === 'stopped') {
+    var trainRemaining = Math.max(0, Math.ceil(60 - game.train.timer));
+    ctx.fillStyle = 'rgba(40,30,10,0.85)';
+    ctx.fillRect(canvas.width / 2 - 100, 50, 200, 30);
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(canvas.width / 2 - 100, 50, 200, 30);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('TRAIN: ' + trainRemaining + 's remaining', canvas.width / 2, 70);
+  }
+
   // Draw HP display
   if (game.player) {
     const hpEl = document.getElementById('hp-display');
@@ -6334,43 +7286,120 @@ if (typeof drawHorse === 'undefined') {
   var drawHorse = function(horse, camX, camY) {
     const sx = horse.x - camX;
     const sy = horse.y - camY;
-    const bob = Math.sin(Date.now() * 0.003) * 1;
+    const now = Date.now();
+    const bob = Math.sin(now * 0.003) * 1;
 
     // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(sx - 14, sy + 14, 28, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 18, 20, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Body
-    ctx.fillStyle = '#6a4a2a';
-    ctx.fillRect(sx - 12, sy - 4 + bob, 24, 14);
-
-    // Head/neck
-    ctx.fillStyle = '#7a5a3a';
-    ctx.fillRect(sx + 10, sy - 14 + bob, 8, 14);
-    ctx.fillRect(sx + 14, sy - 18 + bob, 8, 10);
-
-    // Legs
+    // Legs - 4 distinct with hooves and idle sway
     ctx.fillStyle = '#5a3a1a';
-    ctx.fillRect(sx - 10, sy + 8 + bob, 3, 8);
-    ctx.fillRect(sx - 4, sy + 8 + bob, 3, 8);
-    ctx.fillRect(sx + 4, sy + 8 + bob, 3, 8);
-    ctx.fillRect(sx + 10, sy + 8 + bob, 3, 8);
-
-    // Tail
+    const legSway = Math.sin(now * 0.004) * 1;
+    // Back left
+    ctx.fillRect(sx - 11, sy + 8 + bob, 3, 10 + legSway);
+    // Back right
+    ctx.fillRect(sx - 5, sy + 8 + bob, 3, 10 - legSway);
+    // Front left
+    ctx.fillRect(sx + 5, sy + 8 + bob, 3, 10 - legSway);
+    // Front right
+    ctx.fillRect(sx + 11, sy + 8 + bob, 3, 10 + legSway);
+    // Hooves (dark)
     ctx.fillStyle = '#2a1a0a';
-    ctx.fillRect(sx - 14, sy - 2 + bob, 4, 8);
+    ctx.fillRect(sx - 11, sy + 16 + bob + legSway, 3, 2);
+    ctx.fillRect(sx - 5, sy + 16 + bob - legSway, 3, 2);
+    ctx.fillRect(sx + 5, sy + 16 + bob - legSway, 3, 2);
+    ctx.fillRect(sx + 11, sy + 16 + bob + legSway, 3, 2);
+
+    // Body - rounded contour with multiple rects
+    ctx.fillStyle = '#7a5a3a';
+    ctx.fillRect(sx - 14, sy - 2 + bob, 28, 12);
+    ctx.fillStyle = '#6a4a2a';
+    ctx.fillRect(sx - 12, sy - 4 + bob, 24, 4); // upper body
+    ctx.fillStyle = '#8a6a4a';
+    ctx.fillRect(sx - 10, sy + 4 + bob, 20, 3); // belly highlight
+
+    // Neck
+    ctx.fillStyle = '#7a5a3a';
+    ctx.fillRect(sx + 12, sy - 14 + bob, 8, 16);
+    // Neck highlight
+    ctx.fillStyle = '#8a6a4a';
+    ctx.fillRect(sx + 13, sy - 12 + bob, 2, 12);
+
+    // Head - detailed shape
+    ctx.fillStyle = '#7a5a3a';
+    ctx.fillRect(sx + 16, sy - 20 + bob, 10, 10);
+    // Snout (extending forward)
+    ctx.fillStyle = '#8a6a4a';
+    ctx.fillRect(sx + 22, sy - 18 + bob, 6, 7);
+    // Mouth line
+    ctx.fillStyle = '#4a2a10';
+    ctx.fillRect(sx + 23, sy - 12 + bob, 5, 1);
+    // Nostril
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(sx + 26, sy - 15 + bob, 2, 1);
+    // Eye
+    ctx.fillStyle = '#1a1008';
+    ctx.fillRect(sx + 20, sy - 18 + bob, 2, 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(sx + 21, sy - 18 + bob, 1, 1);
+    // Ears
+    ctx.fillStyle = '#6a4a2a';
+    ctx.fillRect(sx + 17, sy - 23 + bob, 2, 4);
+    ctx.fillRect(sx + 21, sy - 23 + bob, 2, 4);
+    // Ear inner
+    ctx.fillStyle = '#9a7a5a';
+    ctx.fillRect(sx + 17, sy - 22 + bob, 1, 2);
+    ctx.fillRect(sx + 21, sy - 22 + bob, 1, 2);
 
     // Mane
     ctx.fillStyle = '#2a1a0a';
-    ctx.fillRect(sx + 10, sy - 16 + bob, 3, 10);
+    const maneWave = Math.sin(now * 0.005) * 1;
+    ctx.fillRect(sx + 12, sy - 18 + bob, 3, 2);
+    ctx.fillRect(sx + 11 + maneWave, sy - 16 + bob, 3, 2);
+    ctx.fillRect(sx + 12 - maneWave, sy - 14 + bob, 3, 2);
+    ctx.fillRect(sx + 11, sy - 12 + bob, 3, 2);
+    ctx.fillRect(sx + 12 + maneWave, sy - 10 + bob, 3, 2);
+    ctx.fillRect(sx + 11, sy - 8 + bob, 3, 2);
 
-    // Eye
-    ctx.fillStyle = '#1a1008';
-    ctx.fillRect(sx + 18, sy - 16 + bob, 2, 2);
+    // Saddle blanket
+    ctx.fillStyle = '#cc4444';
+    ctx.fillRect(sx - 6, sy - 5 + bob, 16, 4);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(sx - 6, sy - 4 + bob, 16, 1); // decorative stripe
 
     // Saddle
-    ctx.fillStyle = '#8b4513';
-    ctx.fillRect(sx - 4, sy - 6 + bob, 12, 4);
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(sx - 4, sy - 8 + bob, 12, 5);
+    ctx.fillStyle = '#4a2508';
+    ctx.fillRect(sx - 4, sy - 8 + bob, 12, 1); // top edge
+    // Saddle horn
+    ctx.fillStyle = '#6a4020';
+    ctx.fillRect(sx + 6, sy - 10 + bob, 2, 3);
+    // Stirrups
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(sx - 2, sy + 2 + bob, 1, 6);
+    ctx.fillRect(sx + 6, sy + 2 + bob, 1, 6);
+    ctx.fillRect(sx - 3, sy + 7 + bob, 3, 1);
+    ctx.fillRect(sx + 5, sy + 7 + bob, 3, 1);
+
+    // Bridle/reins hanging down
+    ctx.strokeStyle = '#3a2010';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx + 22, sy - 12 + bob);
+    ctx.lineTo(sx + 18, sy - 6 + bob);
+    ctx.lineTo(sx + 10, sy - 4 + bob);
+    ctx.stroke();
+
+    // Tail with swish
+    const tailSwish = Math.sin(now * 0.006) * 3;
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(sx - 16, sy - 2 + bob, 4, 4);
+    ctx.fillRect(sx - 18 + tailSwish, sy + 2 + bob, 3, 4);
+    ctx.fillRect(sx - 19 + tailSwish * 1.5, sy + 6 + bob, 2, 4);
 
     // Interaction hint if player is close
     if (game.player) {
@@ -6379,7 +7408,7 @@ if (typeof drawHorse === 'undefined') {
         ctx.fillStyle = '#ffd700';
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('[H] Mount', sx, sy - 24);
+        ctx.fillText('[H] Mount', sx, sy - 28);
       }
     }
   };
@@ -6420,6 +7449,7 @@ function gameLoop(timestamp) {
       updateCamera();
       updateUI();
       // Update extension systems
+      if (game.train) updateTrain(dt);
       if (typeof updateOffice === 'function') updateOffice(dt);
       if (typeof updateCorruption === 'function') updateCorruption(dt);
       if (typeof updateFeatures === 'function') updateFeatures(dt);

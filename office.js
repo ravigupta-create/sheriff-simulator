@@ -908,16 +908,18 @@ var DEPUTY_NAMES = [
 var DOG_NAMES = ['Bandit', 'Dusty', 'Scout', 'Copper', 'Rex', 'Sheriff Jr.', 'Whiskey', 'Bullet'];
 
 var TELEGRAM_TEMPLATES = [
-  'STOP — Gang of 8 heading your direction from Tombstone STOP — Armed and dangerous STOP — Be prepared STOP',
-  'STOP — Federal bounty increased on Rattlesnake Hank STOP — Now $500 dead or alive STOP',
-  'STOP — Governor commends your service STOP — Keep up the good work STOP — Promotion pending review STOP',
-  'STOP — Smallpox outbreak in Silver Creek STOP — Quarantine advised STOP — Do not accept travelers STOP',
-  'STOP — Railroad expansion approved STOP — New station coming to your town STOP — Expect increased traffic STOP',
-  'STOP — State prison break STOP — Three convicts heading west STOP — Descriptions attached STOP',
-  'STOP — Gold discovered in hills north of town STOP — Expect prospector influx STOP — Prepare for trouble STOP',
-  'STOP — Circuit judge arriving Thursday STOP — Prepare prisoners for trial STOP — Formal attire required STOP',
-  'STOP — Your request for reinforcements DENIED STOP — Budget constraints STOP — You\'re on your own STOP',
-  'STOP — Congratulations STOP — Your town ranked safest in territory STOP — $100 bonus enclosed STOP',
+  { text: 'STOP — Gang heading your direction from Tombstone STOP — Armed and dangerous STOP — Be prepared STOP', event: 'gang_raid' },
+  { text: 'STOP — Federal bounty increased on a wanted outlaw STOP — Now $500 dead or alive STOP', event: 'bounty_target' },
+  { text: 'STOP — Governor commends your service STOP — Keep up the good work STOP — $100 bonus enclosed STOP', event: 'governor_bonus' },
+  { text: 'STOP — Smallpox outbreak in Silver Creek STOP — Quarantine advised STOP — Sick traveler heading your way STOP', event: 'sick_traveler' },
+  { text: 'STOP — Railroad sending train through your town STOP — Expect arrival today STOP — High value cargo STOP', event: 'train_arriving' },
+  { text: 'STOP — State prison break STOP — Three convicts heading west STOP — Armed and dangerous STOP', event: 'prison_break' },
+  { text: 'STOP — Gold discovered in hills north of town STOP — Prospectors flooding in STOP — Prepare for trouble STOP', event: 'gold_rush' },
+  { text: 'STOP — Circuit judge arriving STOP — Will hold trial for any prisoners STOP — Formal attire required STOP', event: 'judge_arrival' },
+  { text: 'STOP — A stranger is hiding stolen goods in your town STOP — Investigate buildings STOP', event: 'hidden_goods' },
+  { text: 'STOP — Mysterious drifter spotted heading toward town STOP — May be dangerous STOP — Watch closely STOP', event: 'mysterious_stranger' },
+  { text: 'STOP — Cattle baron sending herd through town STOP — Keep roads clear STOP — Paying $50 for safe passage STOP', event: 'cattle_drive' },
+  { text: 'STOP — Weapons shipment en route STOP — Bandits may intercept STOP — Guard the road STOP', event: 'arms_shipment' },
 ];
 
 var LORE_BOOKS = [
@@ -1126,12 +1128,15 @@ function enterSheriffOffice() {
     }
   }
 
-  // Generate daily telegram
+  // Generate daily telegram (now triggers real world events)
   if (office.telegrams.length === 0 || (office.telegrams[office.telegrams.length - 1].day !== (game.dayCount || 1) && Math.random() < 0.5)) {
+    var tmpl = TELEGRAM_TEMPLATES[rand(0, TELEGRAM_TEMPLATES.length - 1)];
     office.telegrams.push({
-      text: TELEGRAM_TEMPLATES[rand(0, TELEGRAM_TEMPLATES.length - 1)],
+      text: tmpl.text,
+      event: tmpl.event,
       day: game.dayCount || 1,
       read: false,
+      triggered: false,
     });
     if (office.telegrams.length > 10) office.telegrams.shift();
   }
@@ -1329,6 +1334,14 @@ function getMaxPrisoners() {
 function updateOffice(dt) {
   // ── Check if player is near sheriff office door and presses E ──
   if (game.state === 'playing' && !office.active) {
+    // Check for world events from telegrams
+    updateHiddenCrates();
+    updateMysteryStrangers();
+    // Draw hidden crate indicators
+    if (game._hiddenCrates && game._hiddenCrates.length > 0) {
+      game._hasHiddenCrates = true;
+    }
+
     var sheriffBuilding = null;
     for (var bi = 0; bi < game.buildings.length; bi++) {
       if (game.buildings[bi].type === BUILDING_TYPES.SHERIFF) {
@@ -1663,8 +1676,14 @@ function updateOffice(dt) {
   if (office.sittingAtDesk) {
     if (office.deskMode === 'telegraph') {
       if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
-      // Mark telegrams read
-      for (var ti = 0; ti < office.telegrams.length; ti++) office.telegrams[ti].read = true;
+      // Mark telegrams read and trigger events
+      for (var ti = 0; ti < office.telegrams.length; ti++) {
+        office.telegrams[ti].read = true;
+        if (!office.telegrams[ti].triggered && office.telegrams[ti].event) {
+          office.telegrams[ti].triggered = true;
+          triggerTelegramEvent(office.telegrams[ti].event);
+        }
+      }
       return;
     }
     if (office.deskMode === 'drawers') {
@@ -2826,7 +2845,8 @@ function drawDeskView(W, H) {
         var tg = office.telegrams[ti];
         ctx.fillStyle = tg.read ? PALETTE.uiTextDim : PALETTE.uiHighlight;
         ctx.font = (fs - 1) + 'px monospace';
-        var tLines = wrapTextLines('Day ' + tg.day + ': ' + tg.text, pw - 40, fs - 1);
+        var eventTag = (tg.event && !tg.triggered) ? ' [!]' : (tg.triggered ? ' [ACTIVE]' : '');
+        var tLines = wrapTextLines('Day ' + tg.day + ': ' + tg.text + eventTag, pw - 40, fs - 1);
         for (var tl = 0; tl < tLines.length; tl++) {
           if (ty > py + ph - 30) break;
           ctx.fillText(tLines[tl], px + 18, ty);
@@ -4226,7 +4246,7 @@ function drawBookshelfView(W, H) {
   ctx.font = (fs - 1) + 'px monospace';
   var book = LORE_BOOKS[office.selectedBook];
   if (office.bookRead[office.selectedBook]) {
-    var lines = wrapTextLines(book.content, pw - margin * 2, fs - 1);
+    var lines = wrapTextLines(book.text || book.content || '', pw - margin * 2, fs - 1);
     for (var li = 0; li < lines.length; li++) {
       if (y > py + ph - 30) break;
       ctx.fillText(lines[li], px + margin, y);
@@ -4696,5 +4716,275 @@ function withdrawFromSafe(amount) {
   office.safeGold -= amount;
   game.gold = (game.gold || 0) + amount;
   showNotification('Withdrew $' + amount + ' from safe. Remaining: $' + office.safeGold);
+}
+
+// ─────────────────────────────────────────────
+// §37  TELEGRAM WORLD EVENTS
+// ─────────────────────────────────────────────
+// When a telegram is read, this triggers real gameplay events in the world
+function triggerTelegramEvent(eventType) {
+  if (!game || !game.npcs) return;
+  var MAP_W = 80, MAP_H = 60, TILE_SZ = typeof TILE !== 'undefined' ? TILE : 32;
+
+  switch (eventType) {
+
+    case 'gang_raid':
+      // Spawn 4-6 hostile outlaws at edge of map heading toward town
+      var gangSize = rand(4, 6);
+      for (var gi = 0; gi < gangSize; gi++) {
+        var spawnEdge = Math.random() < 0.5 ? 2 : MAP_W - 3;
+        var gangNpc = createNPC(
+          game.npcs.length, NPC_TYPES.OUTLAW,
+          'Tombstone Gang #' + (gi + 1),
+          spawnEdge, rand(25, 35), null
+        );
+        gangNpc.hostile = true;
+        gangNpc.hp = 4 + rand(0, 2);
+        gangNpc.maxHp = gangNpc.hp;
+        gangNpc.targetX = 40 * TILE_SZ;
+        gangNpc.targetY = 30 * TILE_SZ;
+        game.npcs.push(gangNpc);
+      }
+      showNotification('ALERT: Armed gang of ' + gangSize + ' spotted heading toward town!');
+      addJournalEntry('Gang raid incoming — ' + gangSize + ' armed outlaws approaching from Tombstone.');
+      break;
+
+    case 'bounty_target':
+      // Spawn a high-value bounty target NPC hiding in town
+      var bountyNames = ['Rattlesnake Hank', 'Dead-Eye Dixon', 'Mad Dog Murphy', 'Iron Jack Keller'];
+      var bName = bountyNames[rand(0, bountyNames.length - 1)];
+      var bountyNpc = createNPC(
+        game.npcs.length, NPC_TYPES.BOUNTY,
+        bName,
+        rand(10, 65), rand(10, 50), null
+      );
+      bountyNpc.hostile = false; // Not hostile until confronted
+      bountyNpc.hp = 6;
+      bountyNpc.maxHp = 6;
+      bountyNpc._isBountyTarget = true;
+      bountyNpc._bountyReward = 500;
+      game.npcs.push(bountyNpc);
+      showNotification('WANTED: ' + bName + ' — $500 bounty. Last seen near town.');
+      addJournalEntry('Bounty target ' + bName + ' reported in area. $500 reward.');
+      break;
+
+    case 'governor_bonus':
+      // Actually give the $100 bonus
+      game.gold = (game.gold || 0) + 100;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + 100;
+      game.reputation = clamp((game.reputation || 50) + 5, 0, REPUTATION_MAX);
+      showNotification('Governor\'s bonus received: +$100, +5 Rep!');
+      addJournalEntry('Received $100 bonus and commendation from the Governor.');
+      break;
+
+    case 'sick_traveler':
+      // Spawn a sick stranger NPC — if player interacts, choice to help or turn away
+      var sickNpc = createNPC(
+        game.npcs.length, NPC_TYPES.STRANGER,
+        'Sick Traveler',
+        rand(3, 8), rand(26, 34), null
+      );
+      sickNpc._isSick = true;
+      sickNpc.state = 'walking';
+      game.npcs.push(sickNpc);
+      showNotification('A sick traveler has been spotted approaching from the east.');
+      addJournalEntry('Sick traveler approaching town. Smallpox outbreak reported nearby.');
+      break;
+
+    case 'train_arriving':
+      // Spawn a train if the game supports it
+      if (typeof spawnTrain === 'function') {
+        spawnTrain();
+      } else {
+        // Fallback: gold shipment arrives
+        game.gold = (game.gold || 0) + 75;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + 75;
+        showNotification('Train cargo delivered: +$75 from railroad company.');
+        addJournalEntry('Railroad shipment delivered to town.');
+      }
+      break;
+
+    case 'prison_break':
+      // Spawn 3 hostile escaped convicts
+      var convictNames = ['Convict #117', 'Convict #232', 'Convict #089'];
+      for (var ci = 0; ci < 3; ci++) {
+        var convict = createNPC(
+          game.npcs.length, NPC_TYPES.OUTLAW,
+          convictNames[ci],
+          rand(1, 5), rand(20, 40), null
+        );
+        convict.hostile = true;
+        convict.hp = 5;
+        convict.maxHp = 5;
+        convict._isEscapee = true;
+        game.npcs.push(convict);
+      }
+      showNotification('ALERT: 3 escaped convicts heading this way! Armed and dangerous!');
+      addJournalEntry('State prison break — 3 convicts heading west toward town.');
+      break;
+
+    case 'gold_rush':
+      // Spawn several prospector NPCs (non-hostile but cause trouble)
+      var prospectorCount = rand(4, 7);
+      for (var pi = 0; pi < prospectorCount; pi++) {
+        var prospector = createNPC(
+          game.npcs.length, NPC_TYPES.STRANGER,
+          'Prospector',
+          rand(5, MAP_W - 10), rand(5, MAP_H - 10), null
+        );
+        prospector._isProspector = true;
+        game.npcs.push(prospector);
+      }
+      // Also scatter some gold nuggets if the feature exists
+      if (game.goldNuggets) {
+        for (var gn = 0; gn < 5; gn++) {
+          game.goldNuggets.push({
+            x: rand(5, MAP_W - 5) * TILE_SZ,
+            y: rand(5, MAP_H - 5) * TILE_SZ,
+            value: rand(10, 30),
+            collected: false,
+          });
+        }
+      }
+      showNotification(prospectorCount + ' prospectors flooding into town! Gold fever has taken hold.');
+      addJournalEntry('Gold rush — ' + prospectorCount + ' prospectors arrived. Expect increased crime.');
+      break;
+
+    case 'judge_arrival':
+      // Spawn a judge NPC and auto-process prisoners
+      var judge = createNPC(
+        game.npcs.length, NPC_TYPES.STRANGER,
+        'Circuit Judge Williams',
+        38, 26, null
+      );
+      judge._isJudge = true;
+      game.npcs.push(judge);
+      // Process prisoners: release those with high mood, keep dangerous ones
+      var releasedCount = 0;
+      for (var ji = office.prisoners.length - 1; ji >= 0; ji--) {
+        var pr = office.prisoners[ji];
+        if ((pr.mood || 50) > 40 && Math.random() < 0.5) {
+          office.prisonerLog.push({ name: pr.name, day: game.dayCount || 1, fate: 'Released by judge' });
+          office.prisoners.splice(ji, 1);
+          releasedCount++;
+        }
+      }
+      var judgeGold = releasedCount * 15;
+      game.gold = (game.gold || 0) + judgeGold;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + judgeGold;
+      game.reputation = clamp((game.reputation || 50) + releasedCount * 2, 0, REPUTATION_MAX);
+      showNotification('Circuit Judge arrived! ' + releasedCount + ' prisoners processed. +$' + judgeGold);
+      addJournalEntry('Judge Williams held court. ' + releasedCount + ' prisoners sentenced/released.');
+      break;
+
+    case 'hidden_goods':
+      // Spawn hidden loot crates near random buildings
+      var crateCount = rand(2, 4);
+      if (!game._hiddenCrates) game._hiddenCrates = [];
+      for (var hi = 0; hi < crateCount; hi++) {
+        var bldg = game.buildings ? game.buildings[rand(0, game.buildings.length - 1)] : null;
+        if (bldg) {
+          game._hiddenCrates.push({
+            x: (bldg.x + bldg.w / 2) * TILE_SZ + rand(-40, 40),
+            y: (bldg.y + bldg.h) * TILE_SZ + rand(10, 30),
+            gold: rand(20, 60),
+            found: false,
+          });
+        }
+      }
+      showNotification('Stolen goods hidden somewhere in town. Investigate!');
+      addJournalEntry('Report of stolen goods hidden in town. Search near buildings.');
+      break;
+
+    case 'mysterious_stranger':
+      // Spawn a mysterious armed stranger who may be friendly or hostile
+      var strangerNames = ['The Man With No Name', 'Shadow Walker', 'Pale Rider', 'The Drifter'];
+      var mystNpc = createNPC(
+        game.npcs.length, NPC_TYPES.STRANGER,
+        strangerNames[rand(0, strangerNames.length - 1)],
+        rand(1, 5), rand(26, 34), null
+      );
+      mystNpc.hp = 8;
+      mystNpc.maxHp = 8;
+      mystNpc._isMystery = true;
+      // 30% chance they turn hostile later
+      if (Math.random() < 0.3) {
+        mystNpc._turnsHostile = true;
+        mystNpc._hostileDay = (game.dayCount || 1) + 1;
+      }
+      game.npcs.push(mystNpc);
+      showNotification('A mysterious drifter has entered town. Watch them carefully.');
+      addJournalEntry('Mysterious stranger arrived. Could be trouble.');
+      break;
+
+    case 'cattle_drive':
+      // Give $50 for safe passage, spawn some "cattle" decoration NPCs
+      game.gold = (game.gold || 0) + 50;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + 50;
+      showNotification('Cattle baron paid $50 for safe passage through town.');
+      addJournalEntry('Cattle drive passed through. Earned $50 for keeping the peace.');
+      // Spawn a friendly rancher
+      var rancher = createNPC(
+        game.npcs.length, NPC_TYPES.STRANGER,
+        'Cattle Baron McAllister',
+        rand(35, 45), 28, null
+      );
+      game.npcs.push(rancher);
+      break;
+
+    case 'arms_shipment':
+      // Give the player bonus ammo + spawn bandits trying to steal it
+      game.ammo = Math.min((game.ammo || 0) + 20, typeof MAX_AMMO_CAP !== 'undefined' ? MAX_AMMO_CAP : 99);
+      showNotification('Weapons shipment arrived: +20 ammo! But bandits are after it!');
+      addJournalEntry('Arms shipment received. Bandits reported en route to intercept.');
+      // Spawn 2-3 bandits
+      var banditCount = rand(2, 3);
+      for (var bi = 0; bi < banditCount; bi++) {
+        var bandit = createNPC(
+          game.npcs.length, NPC_TYPES.OUTLAW,
+          'Bandit',
+          rand(MAP_W - 5, MAP_W - 2), rand(25, 35), null
+        );
+        bandit.hostile = true;
+        bandit.hp = 4;
+        bandit.maxHp = 4;
+        game.npcs.push(bandit);
+      }
+      break;
+  }
+}
+
+// Handle hidden crates discovery (check each frame from features or main update)
+// This is called from the update loop to check if player walks over hidden crates
+function updateHiddenCrates() {
+  if (!game._hiddenCrates || game._hiddenCrates.length === 0) return;
+  var px = game.player.x, py = game.player.y;
+  for (var i = game._hiddenCrates.length - 1; i >= 0; i--) {
+    var c = game._hiddenCrates[i];
+    if (!c.found && Math.abs(px - c.x) < 30 && Math.abs(py - c.y) < 30) {
+      c.found = true;
+      game.gold = (game.gold || 0) + c.gold;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + c.gold;
+      game.reputation = clamp((game.reputation || 50) + 3, 0, REPUTATION_MAX);
+      showNotification('Found hidden stolen goods! +$' + c.gold + ', +3 Rep');
+      addJournalEntry('Recovered stolen goods worth $' + c.gold);
+      game._hiddenCrates.splice(i, 1);
+    }
+  }
+}
+
+// Handle mysterious stranger turning hostile (check periodically)
+function updateMysteryStrangers() {
+  if (!game.npcs) return;
+  for (var i = 0; i < game.npcs.length; i++) {
+    var npc = game.npcs[i];
+    if (npc._turnsHostile && !npc.hostile && !npc.dead &&
+        (game.dayCount || 1) >= npc._hostileDay) {
+      npc.hostile = true;
+      npc._turnsHostile = false;
+      showNotification(npc.name + ' has turned hostile! They were a bandit all along!');
+      addJournalEntry(npc.name + ' revealed as a dangerous outlaw.');
+    }
+  }
 }
 
