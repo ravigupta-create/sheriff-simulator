@@ -802,6 +802,18 @@ var BOSS_NAMES = [
   'Black Jack Barnes', 'Iron Fist Fontaine', 'Red Widow', 'The Colonel',
 ];
 
+// Schedulable meeting categories the player can request
+var SCHEDULE_CATEGORIES = [
+  { key: 'council',        label: 'Town Council',         desc: 'Request a meeting with the town council' },
+  { key: 'informant',      label: 'Meet an Informant',    desc: 'Send word you\'re looking for tips' },
+  { key: 'merchant',       label: 'Merchant Visit',       desc: 'Invite a traveling merchant to your office' },
+  { key: 'bounty_hunter',  label: 'Bounty Hunter',        desc: 'Put out a call for bounty hunters' },
+  { key: 'journalist',     label: 'Newspaper Interview',  desc: 'Invite the Frontier Gazette reporter' },
+  { key: 'deputy_report',  label: 'Deputy Report',        desc: 'Call your deputy in for a status report' },
+  { key: 'petition',       label: 'Hear Citizen Petition', desc: 'Open your door to citizen requests' },
+  { key: 'boss',           label: 'Crime Boss (CORRUPT)', desc: 'Send word to the underworld...', corrupt: true },
+];
+
 var MEETING_TEMPLATES = [
   // Crime Boss Meetings (show bodyguards)
   { type: 'boss', name: 'Territory Negotiation', bodyguards: 2,
@@ -1833,6 +1845,7 @@ function updateOffice(dt) {
     }
     if (office.deskMode === 'meetings') {
       if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; }
+      if (consumeKey('KeyS')) { office.deskMode = 'schedule'; return; }
       if (office.meetingQueue.length > 0) {
         for (var mqi = 0; mqi < Math.min(office.meetingQueue.length, 3); mqi++) {
           if (consumeKey('Digit' + (mqi + 1))) {
@@ -1844,6 +1857,44 @@ function updateOffice(dt) {
             office.deskMode = 'main';
             return;
           }
+        }
+      }
+      return;
+    }
+    if (office.deskMode === 'schedule') {
+      if (consumeKey('Escape') || consumeKey('KeyQ')) { office.deskMode = 'main'; return; }
+      var corruption = game.corruption || 0;
+      var corruptMode = game._corruptStart || game._corruptMode;
+      var availCats = SCHEDULE_CATEGORIES.filter(function(c) {
+        if (c.corrupt && corruption < 20 && !corruptMode) return false;
+        return true;
+      });
+      for (var sci = 0; sci < availCats.length; sci++) {
+        if (consumeKey('Digit' + (sci + 1))) {
+          var cat = availCats[sci];
+          // Find a matching meeting template
+          var matchingTemplates = MEETING_TEMPLATES.filter(function(mt) { return mt.type === cat.key; });
+          if (matchingTemplates.length > 0) {
+            var mt = matchingTemplates[rand(0, matchingTemplates.length - 1)];
+            var bossName = BOSS_NAMES[rand(0, BOSS_NAMES.length - 1)];
+            var scheduled = {
+              type: mt.type,
+              name: mt.name,
+              bodyguards: mt.bodyguards || 0,
+              desc: mt.desc.replace(/\{boss\}/g, bossName),
+              choices: mt.choices.map(function(c) {
+                return {
+                  text: c.text, outcome: c.outcome.replace(/\{boss\}/g, bossName),
+                  gold: c.gold, rep: c.rep, corruption: c.corruption || 0
+                };
+              }),
+              bossName: bossName,
+            };
+            office.meetingQueue.push(scheduled);
+            showNotification('Meeting scheduled: ' + mt.name + (cat.corrupt ? ' (with ' + bossName + ')' : ''));
+            office.deskMode = 'meetings';
+          }
+          return;
         }
       }
       return;
@@ -1876,6 +1927,7 @@ function updateOffice(dt) {
       if (consumeKey('KeyT')) { office.deskMode = 'telegraph'; }
       if (consumeKey('KeyX')) { office.deskMode = 'drawers'; }
       if (consumeKey('KeyM')) { office.deskMode = 'meetings'; }
+      if (consumeKey('KeyS')) { office.deskMode = 'schedule'; }
       if (consumeKey('KeyN')) { office.craftingOpen = true; }
       if (consumeKey('KeyP')) { office.viewingDeputies = true; office.selectedDeputy = 0; }
       if (consumeKey('KeyB')) { office.readingBook = true; office.selectedBook = 0; }
@@ -3160,6 +3212,35 @@ function drawDeskView(W, H) {
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.uiTextDim;
     ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('[S] Schedule New Meeting  |  [Q/ESC] Back', px + pw / 2, py + ph - 10);
+  } else if (office.deskMode === 'schedule') {
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold ' + fs + 'px monospace';
+    ctx.fillText('SCHEDULE A MEETING', px + pw / 2, py + 48);
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
+    ctx.fillText('Choose who to summon to your office:', px + pw / 2, py + 64);
+    var corruption2 = game.corruption || 0;
+    var corruptMode2 = game._corruptStart || game._corruptMode;
+    var availCats2 = SCHEDULE_CATEGORIES.filter(function(c) {
+      if (c.corrupt && corruption2 < 20 && !corruptMode2) return false;
+      return true;
+    });
+    ctx.textAlign = 'left';
+    var sy2 = py + 82;
+    for (var sci2 = 0; sci2 < availCats2.length; sci2++) {
+      var cat2 = availCats2[sci2];
+      ctx.fillStyle = cat2.corrupt ? '#cc3030' : PALETTE.uiText;
+      ctx.font = 'bold ' + (fs - 1) + 'px monospace';
+      ctx.fillText('[' + (sci2 + 1) + '] ' + cat2.label, px + 18, sy2);
+      ctx.fillStyle = PALETTE.uiTextDim;
+      ctx.font = (fs - 2) + 'px monospace';
+      ctx.fillText('    ' + cat2.desc, px + 18, sy2 + fs);
+      sy2 += fs * 2 + 6;
+    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.uiTextDim;
+    ctx.font = (fs - 2) + 'px monospace';
     ctx.fillText('[Q/ESC] Back', px + pw / 2, py + ph - 10);
   } else {
     // Main desk menu
@@ -3172,6 +3253,7 @@ function drawDeskView(W, H) {
     var menuItems = [
       { key: 'E', label: 'Wait for a case', highlight: true },
       { key: 'M', label: 'Meetings' + (pendingMeetings > 0 ? ' (' + pendingMeetings + ' waiting)' : ''), warn: pendingMeetings > 0 },
+      { key: 'S', label: 'Schedule a Meeting', highlight: false },
       { key: 'C', label: 'Brew Coffee' + (office._coffeeBrewedDay === (game.dayCount || 1) ? ' (done)' : '') },
       { key: 'T', label: 'Telegraph' + (unreadTelegrams > 0 ? ' (' + unreadTelegrams + ' NEW)' : '') },
       { key: 'X', label: 'Search Drawers' },
