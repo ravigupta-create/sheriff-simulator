@@ -180,6 +180,7 @@ var office = {
 // Each item: { key, label, action, x/y/w/h as fractions of room W/H }
 // x,y is top-left corner. Player interacts when within INTERACT_DIST of center.
 var OFFICE_FURNITURE = [
+  { key: 'chair',      label: 'Sit at Desk',    x: 0.44, y: 0.66, w: 0.12, h: 0.08 },
   { key: 'desk',       label: 'Desk',           x: 0.30, y: 0.50, w: 0.40, h: 0.16 },
   { key: 'caseBoard',  label: 'Case Board',     x: 0.18, y: 0.04, w: 0.13, h: 0.16 },
   { key: 'gunRack',    label: 'Gun Rack',       x: 0.78, y: 0.04, w: 0.17, h: 0.16 },
@@ -235,7 +236,7 @@ function officeCollides(px, py, W, H) {
   // Furniture collision
   for (var i = 0; i < OFFICE_FURNITURE.length; i++) {
     var f = OFFICE_FURNITURE[i];
-    if (f.key === 'exit') continue; // exit door has no collision
+    if (f.key === 'exit' || f.key === 'chair') continue; // no collision — player walks to these
     var fx = f.x * W, fy = f.y * H, fw = f.w * W, fh = f.h * H;
     // Shrink collision box slightly so player can get close
     var margin = 2;
@@ -1900,6 +1901,7 @@ function updateOffice(dt) {
   // E key — interact with nearest furniture
   if (office.nearFurniture && consumeKey('KeyE')) {
     switch (office.nearFurniture.key) {
+      case 'chair': office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; break;
       case 'desk': office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; break;
       case 'caseBoard': office.viewingBoard = true; office.boardScroll = 0; break;
       case 'gunRack': office.viewingGunRack = true; break;
