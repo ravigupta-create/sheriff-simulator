@@ -3910,6 +3910,21 @@ function isSolidTile(tileX, tileY) {
   return t === 3 || t === 5 || t === 6 || t === 7 || t === 10;
 }
 
+// Add arrested NPC to prisoners list (office.prisoners + game.prisoners)
+function addPrisoner(name, crime, npc) {
+  var prisoner = {
+    name: name,
+    crime: crime || 'Unknown',
+    day: game.dayCount || 1,
+    interrogated: false,
+    npcRef: npc || null
+  };
+  game.prisoners.push(prisoner);
+  if (typeof office !== 'undefined' && office.prisoners) {
+    office.prisoners.push(prisoner);
+  }
+}
+
 function canMove(x, y, radius) {
   const r = radius || 6;
   const corners = [
@@ -4119,6 +4134,7 @@ function handleDialogChoice(action, npc) {
       game.gold += 30;
       game.totalGoldEarned += 30;
       game.outlawsArrested++;
+      addPrisoner(npc.name, npc.type === NPC_TYPES.BOUNTY ? 'Wanted Criminal' : (npc.type === NPC_TYPES.OUTLAW ? 'Outlaw' : 'Civilian'), npc);
       if (npc.type === NPC_TYPES.BOUNTY) {
         game.bountiesCaptured++;
         game.gold += 70;
@@ -4842,12 +4858,15 @@ function playerMelee() {
           game.gold += 20;
           game.totalGoldEarned += 20;
           if (npc.type === NPC_TYPES.BOUNTY) game.bountiesCaptured++;
+          addPrisoner(npc.name, npc.type === NPC_TYPES.BOUNTY ? 'Wanted Criminal' : 'Outlaw', npc);
           showNotification(npc.name + ' knocked out and arrested! +5 Rep');
           addJournalEntry('Melee arrested ' + npc.name + '.');
         } else {
-          npc.state = 'dead';
+          npc.state = 'arrested';
+          npc.hostile = false;
           game.reputation = clamp(game.reputation - 15, 0, REPUTATION_MAX);
-          showNotification('You knocked out an innocent! -15 Rep');
+          addPrisoner(npc.name, 'Wrongful Arrest', npc);
+          showNotification('You arrested an innocent! -15 Rep');
           audio.playBad();
         }
       } else if (npc.hp === 1 && (npc.hostile || npc.type === NPC_TYPES.OUTLAW)) {
@@ -4859,6 +4878,7 @@ function playerMelee() {
         game.gold += 30;
         game.totalGoldEarned += 30;
         if (npc.type === NPC_TYPES.BOUNTY) game.bountiesCaptured++;
+        addPrisoner(npc.name, npc.type === NPC_TYPES.BOUNTY ? 'Wanted Criminal' : 'Outlaw', npc);
         showNotification(npc.name + ' subdued and arrested! +8 Rep');
         addJournalEntry('Subdued and arrested ' + npc.name + '.');
       }
@@ -5016,11 +5036,22 @@ function updatePlayer(dt) {
           }
           if (building) {
             game.visitedBuildings.add(building.type);
-            showNotification('Entered ' + building.name);
             if (typeof audio.playDoorOpen === 'function') audio.playDoorOpen();
             // Quest progress
             if (game.activeQuest && (game.activeQuest.type === 'patrol' || game.activeQuest.type === 'visit')) {
               game.activeQuest.visited.add(building.type);
+            }
+            // Jail building → open jail interior
+            if (building.type === BUILDING_TYPES.JAIL && typeof office !== 'undefined') {
+              game.state = 'jail';
+              game._jailInterior = true;
+              game._jailPlayerX = gameCanvas.width * 0.5;
+              game._jailPlayerY = gameCanvas.height * 0.75;
+              game._jailNearCell = -1;
+              game._jailBribeOffer = null;
+              showNotification('Entered Jail — ' + (office.prisoners.length > 0 ? office.prisoners.length + ' prisoner(s)' : 'Empty'));
+            } else {
+              showNotification('Entered ' + building.name);
             }
           }
         }
@@ -7519,6 +7550,263 @@ if (typeof drawHorse === 'undefined') {
 }
 
 // ─────────────────────────────────────────────
+// §B.0  JAIL INTERIOR (standalone, entered from jail building)
+// ─────────────────────────────────────────────
+function updateJailInterior(dt) {
+  var W = gameCanvas.width;
+  var H = gameCanvas.height;
+  var prisoners = (typeof office !== 'undefined' && office.prisoners) ? office.prisoners : game.prisoners;
+  var jSpeed = 3 * dt * 60;
+
+  // WASD movement
+  if (keys['KeyW'] || keys['ArrowUp']) game._jailPlayerY -= jSpeed;
+  if (keys['KeyS'] || keys['ArrowDown']) game._jailPlayerY += jSpeed;
+  if (keys['KeyA'] || keys['ArrowLeft']) game._jailPlayerX -= jSpeed;
+  if (keys['KeyD'] || keys['ArrowRight']) game._jailPlayerX += jSpeed;
+  game._jailPlayerX = clamp(game._jailPlayerX, 30, W - 30);
+  game._jailPlayerY = clamp(game._jailPlayerY, 80, H - 30);
+
+  // Find nearest cell
+  game._jailNearCell = -1;
+  var cellCount = prisoners.length;
+  if (cellCount > 0) {
+    var cellW = Math.min(100, (W - 80) / cellCount);
+    var cellStartX = 40;
+    var cellY = 80;
+    var bestDist = 80;
+    for (var ci = 0; ci < cellCount; ci++) {
+      var cx = cellStartX + ci * (cellW + 10) + cellW / 2;
+      var cy = cellY + 50;
+      var d = Math.hypot(game._jailPlayerX - cx, game._jailPlayerY - cy);
+      if (d < bestDist) {
+        bestDist = d;
+        game._jailNearCell = ci;
+      }
+    }
+  }
+
+  // E to interact with prisoner (bribe if have key)
+  if (game._jailNearCell >= 0 && consumeKey('KeyE')) {
+    var pr = prisoners[game._jailNearCell];
+    if (game._hasJailKey) {
+      if (!game._jailBribeOffer) {
+        var bribeAmt = rand(30, 150);
+        game._jailBribeOffer = { index: game._jailNearCell, name: pr.name, crime: pr.crime, amount: bribeAmt };
+      }
+    } else {
+      showNotification(pr.name + ' — Jailed for: ' + pr.crime + ' (Day ' + pr.day + ')');
+    }
+  }
+
+  // Bribe dialog
+  if (game._jailBribeOffer) {
+    if (consumeKey('KeyY') || consumeKey('Digit1')) {
+      var bribe = game._jailBribeOffer;
+      game.gold += bribe.amount;
+      game.totalGoldEarned += bribe.amount;
+      game.corruption = clamp((game.corruption || 0) + 8, 0, 100);
+      showNotification('Accepted $' + bribe.amount + ' bribe. Released ' + bribe.name + '. +Corruption');
+      prisoners.splice(bribe.index, 1);
+      game._jailBribeOffer = null;
+      game._jailNearCell = -1;
+    } else if (consumeKey('KeyN') || consumeKey('Digit2') || consumeKey('Escape')) {
+      game.reputation = clamp((game.reputation || 50) + 4, 0, REPUTATION_MAX);
+      showNotification('Refused bribe from ' + game._jailBribeOffer.name + '. +4 Rep');
+      game._jailBribeOffer = null;
+    }
+    return;
+  }
+
+  // ESC to exit
+  if (consumeKey('Escape')) {
+    game.state = 'playing';
+    game._jailInterior = false;
+    // Move player south of jail building to avoid re-entry
+    for (var bi = 0; bi < game.buildings.length; bi++) {
+      var b = game.buildings[bi];
+      if (b.type === BUILDING_TYPES.JAIL) {
+        game.player.x = (b.x + b.w / 2) * TILE;
+        game.player.y = (b.y + b.h + 2) * TILE;
+        break;
+      }
+    }
+  }
+}
+
+function renderJailInterior() {
+  var W = gameCanvas.width;
+  var H = gameCanvas.height;
+  var prisoners = (typeof office !== 'undefined' && office.prisoners) ? office.prisoners : game.prisoners;
+
+  // Background — stone floor
+  ctx.fillStyle = '#3a3228';
+  ctx.fillRect(0, 0, W, H);
+  // Stone floor tiles
+  ctx.strokeStyle = '#2a2218';
+  ctx.lineWidth = 1;
+  for (var fy = 0; fy < H; fy += 20) {
+    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(W, fy); ctx.stroke();
+  }
+  for (var fx = 0; fx < W; fx += 20) {
+    ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, H); ctx.stroke();
+  }
+
+  // Back wall
+  ctx.fillStyle = '#5a4a38';
+  ctx.fillRect(0, 0, W, 70);
+  ctx.fillStyle = '#4a3a28';
+  ctx.fillRect(0, 65, W, 5);
+
+  // Title
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 18px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('JAIL', W / 2, 30);
+  ctx.fillStyle = '#a09070';
+  ctx.font = '10px monospace';
+  ctx.fillText(prisoners.length + ' prisoner' + (prisoners.length !== 1 ? 's' : ''), W / 2, 48);
+  ctx.textAlign = 'left';
+
+  // Draw cells — auto-expand for each prisoner
+  var cellCount = prisoners.length;
+  if (cellCount === 0) {
+    ctx.fillStyle = '#8a7a5a';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('The jail is empty.', W / 2, H / 2);
+    ctx.fillText('Press ESC to leave.', W / 2, H / 2 + 20);
+    ctx.textAlign = 'left';
+  } else {
+    var maxPerRow = Math.floor((W - 60) / 110);
+    var cellW = Math.min(100, (W - 60) / Math.min(cellCount, maxPerRow));
+    var cellH = 100;
+    var cellStartX = 30;
+    var cellY = 80;
+
+    for (var ci = 0; ci < cellCount; ci++) {
+      var row = Math.floor(ci / maxPerRow);
+      var col = ci % maxPerRow;
+      var cx = cellStartX + col * (cellW + 10);
+      var cy = cellY + row * (cellH + 15);
+      var pr = prisoners[ci];
+      var isNear = (ci === game._jailNearCell);
+
+      // Cell background
+      ctx.fillStyle = isNear ? '#4a3a20' : '#2a1a0a';
+      ctx.fillRect(cx, cy, cellW, cellH);
+      ctx.strokeStyle = isNear ? '#ffd700' : '#6a5a3a';
+      ctx.lineWidth = isNear ? 2 : 1;
+      ctx.strokeRect(cx, cy, cellW, cellH);
+
+      // Bars
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 2;
+      var barSpacing = cellW / 5;
+      for (var bi2 = 1; bi2 < 5; bi2++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + bi2 * barSpacing, cy);
+        ctx.lineTo(cx + bi2 * barSpacing, cy + cellH);
+        ctx.stroke();
+      }
+
+      // Prisoner sprite (simple)
+      var px = cx + cellW / 2;
+      var py = cy + cellH / 2;
+      // Body (striped prison clothes)
+      ctx.fillStyle = '#cc8833';
+      ctx.fillRect(px - 5, py - 3, 10, 14);
+      // Stripes
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(px - 5, py, 10, 2);
+      ctx.fillRect(px - 5, py + 5, 10, 2);
+      ctx.fillRect(px - 5, py + 10, 10, 2);
+      // Head
+      ctx.fillStyle = '#d2a87a';
+      ctx.beginPath();
+      ctx.arc(px, py - 7, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Angry eyes
+      ctx.fillStyle = '#000';
+      ctx.fillRect(px - 3, py - 8, 2, 2);
+      ctx.fillRect(px + 1, py - 8, 2, 2);
+
+      // Name and crime
+      ctx.fillStyle = '#e8d5a3';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(pr.name, px, cy + cellH - 12);
+      ctx.fillStyle = '#aa8855';
+      ctx.font = '7px monospace';
+      ctx.fillText(pr.crime, px, cy + cellH - 3);
+      ctx.textAlign = 'left';
+
+      // Interaction prompt
+      if (isNear) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        if (game._hasJailKey) {
+          ctx.fillText('[E] Talk (have key)', px, cy - 5);
+        } else {
+          ctx.fillText('[E] Check prisoner', px, cy - 5);
+        }
+        ctx.textAlign = 'left';
+      }
+    }
+  }
+
+  // Bribe dialog overlay
+  if (game._jailBribeOffer) {
+    var bo = game._jailBribeOffer;
+    ctx.fillStyle = 'rgba(10, 6, 2, 0.9)';
+    ctx.fillRect(W / 2 - 140, H / 2 - 50, 280, 100);
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W / 2 - 140, H / 2 - 50, 280, 100);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(bo.name + ' offers $' + bo.amount, W / 2, H / 2 - 25);
+    ctx.fillStyle = '#e8d5a3';
+    ctx.font = '10px monospace';
+    ctx.fillText('"Let me out, Sheriff... I got money."', W / 2, H / 2 - 5);
+    ctx.fillStyle = '#44cc44';
+    ctx.fillText('[Y/1] Accept bribe (+Corruption)', W / 2, H / 2 + 20);
+    ctx.fillStyle = '#cc4444';
+    ctx.fillText('[N/2] Refuse (+4 Rep)', W / 2, H / 2 + 38);
+    ctx.textAlign = 'left';
+  }
+
+  // Player
+  var jpx = game._jailPlayerX;
+  var jpy = game._jailPlayerY;
+  // Body
+  ctx.fillStyle = '#5a4a2a';
+  ctx.fillRect(jpx - 5, jpy - 3, 10, 14);
+  // Head
+  ctx.fillStyle = '#d2a87a';
+  ctx.beginPath();
+  ctx.arc(jpx, jpy - 7, 5, 0, Math.PI * 2);
+  ctx.fill();
+  // Hat
+  ctx.fillStyle = '#3a2a14';
+  ctx.fillRect(jpx - 7, jpy - 14, 14, 4);
+  ctx.fillRect(jpx - 5, jpy - 18, 10, 5);
+  // Badge
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(jpx - 1, jpy, 3, 3);
+
+  // HUD
+  ctx.fillStyle = '#a09070';
+  ctx.font = '9px monospace';
+  ctx.fillText('WASD: Move | E: Interact | ESC: Exit Jail', 10, H - 10);
+  if (game._hasJailKey) {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('KEY', W - 40, H - 10);
+  }
+}
+
+// ─────────────────────────────────────────────
 // §B  MAIN GAME LOOP
 // ─────────────────────────────────────────────
 let lastTime = 0;
@@ -7703,6 +7991,11 @@ function gameLoop(timestamp) {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
+      break;
+
+    case 'jail':
+      updateJailInterior(dt);
+      renderJailInterior();
       break;
 
     case 'title':
