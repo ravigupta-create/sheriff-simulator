@@ -4883,16 +4883,17 @@ function updatePlayer(dt) {
 
   p.moving = dx !== 0 || dy !== 0;
 
-  // Speed calculation
+  // Speed calculation (dt-independent: multiply by dt*60 to normalize to 60fps)
   var speed = PLAYER_SPEED;
   if (game.hasSpeedBoots) speed *= 1.15;
   if (game.mounted) speed = HORSE_SPEED;
+  var dtSpeed = speed * dt * 60;
 
   if (p.moving) {
     var len = Math.hypot(dx, dy);
     dx /= len; dy /= len;
-    var nx = p.x + dx * speed;
-    var ny = p.y + dy * speed;
+    var nx = p.x + dx * dtSpeed;
+    var ny = p.y + dy * dtSpeed;
 
     if (canMove(nx, p.y, 6)) p.x = nx;
     if (canMove(p.x, ny, 6)) p.y = ny;
