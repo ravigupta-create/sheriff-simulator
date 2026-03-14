@@ -271,6 +271,7 @@ function spawnWildlife() {
 // ============================================================
 function updateFeatures(dt) {
   initFeatures();
+  if (game.state !== 'playing' && game.state !== 'dialog' && game.state !== 'tutorial') return;
   var f = game._features;
   var p = game.player;
 
@@ -298,16 +299,15 @@ function updateFeatures(dt) {
     f.dodgeDir = p.dir;
   }
 
-  // 2. Dynamite (Digit3 when not in dialog)
-  for (var di = f.dynamiteActive.length - 1; di >= 0; di--) {
+  // 2. Dynamite (Digit3 when not in dialog) — compact
+  var dynWrite = 0;
+  for (var di = 0; di < f.dynamiteActive.length; di++) {
     var dyn = f.dynamiteActive[di];
     dyn.timer -= dt;
     if (dyn.timer <= 0) {
-      // Explode
       particles.emit(dyn.x, dyn.y, 20, '#ff6600', 4, 30);
       particles.emit(dyn.x, dyn.y, 10, '#ffcc00', 3, 20);
       if (typeof audio !== 'undefined' && audio.playExplosion) audio.playExplosion();
-      // Damage nearby NPCs
       for (var ni = 0; ni < game.npcs.length; ni++) {
         var npc = game.npcs[ni];
         if (npc.state === 'dead') continue;
@@ -316,9 +316,11 @@ function updateFeatures(dt) {
           if (npc.hp <= 0) { npc.state = 'dead'; game.outlawsKilled++; }
         }
       }
-      f.dynamiteActive.splice(di, 1);
+    } else {
+      f.dynamiteActive[dynWrite++] = dyn;
     }
   }
+  f.dynamiteActive.length = dynWrite;
   if (f.dynamiteCount > 0 && game.state === 'playing' && consumeKey('Digit3')) {
     f.dynamiteCount--;
     var throwDist = 100;
@@ -374,44 +376,47 @@ function updateFeatures(dt) {
     showNotification('Smoke bomb! (' + f.smokeBombs + ' left)');
   }
 
-  // 8. Knife Throw (V key)
-  for (var ki = f.knives.length - 1; ki >= 0; ki--) {
+  // 8. Knife Throw (V key) — compact instead of splice
+  var knWrite = 0;
+  for (var ki = 0; ki < f.knives.length; ki++) {
     var kn = f.knives[ki];
     kn.x += kn.dx * 5;
     kn.y += kn.dy * 5;
     kn.life--;
-    if (kn.life <= 0) { f.knives.splice(ki, 1); continue; }
-    // Hit check
+    if (kn.life <= 0) continue;
+    var knHit = false;
     for (var kni = 0; kni < game.npcs.length; kni++) {
       var knpc = game.npcs[kni];
       if (knpc.state === 'dead' || !knpc.hostile) continue;
       if (dist(kn, knpc) < 20) {
         knpc.hp -= 3;
         if (knpc.hp <= 0) { knpc.state = 'dead'; game.outlawsKilled++; }
-        f.knives.splice(ki, 1);
+        knHit = true;
         break;
       }
     }
+    if (!knHit) f.knives[knWrite++] = kn;
   }
+  f.knives.length = knWrite;
   if (consumeKey('KeyV') && game.state === 'playing') {
     var kDirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
     var kd = kDirs[p.dir] || [1, 0];
     f.knives.push({ x: p.x, y: p.y, dx: kd[0], dy: kd[1], life: 40 });
   }
 
-  // 12. Explosive Barrels
-  for (var bi = 0; bi < f.explosiveBarrels.length; bi++) {
-    var barrel = f.explosiveBarrels[bi];
-    if (!barrel.active) continue;
-    // Check if bullet hit barrel (simplified — check bullet proximity)
-    if (typeof bullets !== 'undefined' && bullets.list) {
+  // 12. Explosive Barrels (throttled — check every 0.25s)
+  f._barrelTimer = (f._barrelTimer || 0) + dt;
+  if (f._barrelTimer > 0.25 && typeof bullets !== 'undefined' && bullets.list && bullets.list.length > 0) {
+    f._barrelTimer = 0;
+    for (var bi = 0; bi < f.explosiveBarrels.length; bi++) {
+      var barrel = f.explosiveBarrels[bi];
+      if (!barrel.active) continue;
       for (var bli = 0; bli < bullets.list.length; bli++) {
         var blt = bullets.list[bli];
         if (dist(blt, barrel) < 15) {
           barrel.active = false;
           particles.emit(barrel.x, barrel.y, 25, '#ff4400', 5, 25);
           particles.emit(barrel.x, barrel.y, 15, '#ffaa00', 3, 15);
-          // Damage nearby
           for (var bni = 0; bni < game.npcs.length; bni++) {
             if (game.npcs[bni].state !== 'dead' && dist(game.npcs[bni], barrel) < 70) {
               game.npcs[bni].hp -= 4;
@@ -579,34 +584,44 @@ function updateFeatures(dt) {
     }
   }
 
-  // 35. Deputy System
+  // 35. Deputy System (NPC scan throttled to every 0.5s, movement every frame)
+  f._deputyScanTimer = (f._deputyScanTimer || 0) + dt;
+  var depRescan = f._deputyScanTimer > 0.5;
+  if (depRescan) f._deputyScanTimer = 0;
+  var dpWrite = 0;
   for (var dpi = 0; dpi < f.deputies.length; dpi++) {
     var dep = f.deputies[dpi];
-    if (dep.state === 'dead') { f.deputies.splice(dpi, 1); dpi--; continue; }
-    // Deputies patrol and fight hostiles
-    var closestHostile = null, closestDist = 200;
-    for (var chi = 0; chi < game.npcs.length; chi++) {
-      var cn = game.npcs[chi];
-      if (cn.hostile && cn.state !== 'dead') {
-        var cd = dist(dep, cn);
-        if (cd < closestDist) { closestDist = cd; closestHostile = cn; }
+    if (dep.state === 'dead') continue;
+    f.deputies[dpWrite++] = dep;
+    // Rescan for hostile target periodically
+    if (depRescan || !dep._cachedTarget) {
+      dep._cachedTarget = null;
+      var closestDist = 200;
+      for (var chi = 0; chi < game.npcs.length; chi++) {
+        var cn = game.npcs[chi];
+        if (cn.hostile && cn.state !== 'dead') {
+          var cd = dist(dep, cn);
+          if (cd < closestDist) { closestDist = cd; dep._cachedTarget = cn; }
+        }
       }
     }
-    if (closestHostile) {
+    var closestHostile = dep._cachedTarget;
+    if (closestHostile && closestHostile.state !== 'dead') {
       var ddx = closestHostile.x - dep.x;
       var ddy = closestHostile.y - dep.y;
       var dlen = Math.hypot(ddx, ddy) || 1;
       dep.x += (ddx / dlen) * 1.5;
       dep.y += (ddy / dlen) * 1.5;
-      if (closestDist < 30) {
+      if (dlen < 30) {
         closestHostile.hp -= 1;
         if (closestHostile.hp <= 0) {
           closestHostile.state = 'dead';
           game.outlawsKilled++;
+          dep._cachedTarget = null;
         }
       }
     } else {
-      // Follow player loosely
+      dep._cachedTarget = null;
       var dpDist = dist(dep, p);
       if (dpDist > 80) {
         var dpx = p.x - dep.x;
@@ -617,6 +632,7 @@ function updateFeatures(dt) {
       }
     }
   }
+  f.deputies.length = dpWrite;
 
   // 39. Drunk NPCs at night
   if (game.time > 0.85 || game.time < 0.1) {
@@ -716,17 +732,20 @@ function updateFeatures(dt) {
     }
   }
 
-  // 60. Gold Nugget Drops from killed outlaws
-  for (var gni = f.goldNuggetDrops.length - 1; gni >= 0; gni--) {
+  // 60. Gold Nugget Drops from killed outlaws (compact)
+  var gnWrite = 0;
+  for (var gni = 0; gni < f.goldNuggetDrops.length; gni++) {
     var gn = f.goldNuggetDrops[gni];
     if (dist(p, gn) < 20) {
       game.gold += gn.value;
       game.totalGoldEarned += gn.value;
       showNotification('+$' + gn.value);
       particles.emit(gn.x, gn.y, 5, '#ffd700', 2, 15);
-      f.goldNuggetDrops.splice(gni, 1);
+    } else {
+      f.goldNuggetDrops[gnWrite++] = gn;
     }
   }
+  f.goldNuggetDrops.length = gnWrite;
 
   // ──────────── PROGRESSION FEATURES ────────────
 
@@ -927,8 +946,9 @@ function updateFeatures(dt) {
       f.wantedNPCs.push(wNPC);
     }
   }
-  // Check if wanted NPCs killed/arrested — award bounty
-  for (var wni = f.wantedNPCs.length - 1; wni >= 0; wni--) {
+  // Check if wanted NPCs killed/arrested — award bounty (compact)
+  var wnWrite = 0;
+  for (var wni = 0; wni < f.wantedNPCs.length; wni++) {
     var wn = f.wantedNPCs[wni];
     if (wn.state === 'dead' || wn.state === 'arrested') {
       if (!wn._bountyClaimed) {
@@ -941,12 +961,13 @@ function updateFeatures(dt) {
         showNotification('BOUNTY COLLECTED: $' + bountyReward + '!');
         addJournalEntry('Collected bounty on ' + wn.name + ' ($' + bountyReward + ')');
         if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
-        // Floating text handled in render
         f._bountyFloatText = { text: 'BOUNTY: $' + bountyReward, x: wn.x, y: wn.y, life: 90 };
       }
-      f.wantedNPCs.splice(wni, 1);
+    } else {
+      f.wantedNPCs[wnWrite++] = wn;
     }
   }
+  f.wantedNPCs.length = wnWrite;
   // Bounty float text decay
   if (f._bountyFloatText) {
     f._bountyFloatText.life--;
@@ -1248,29 +1269,35 @@ function updateFeatures(dt) {
       });
     }
   }
-  // Update world deputies — patrol, fight outlaws
-  for (var wdi = f.worldDeputies.length - 1; wdi >= 0; wdi--) {
+  // Update world deputies — patrol, fight outlaws (throttled NPC scan)
+  f._wdScanTimer = (f._wdScanTimer || 0) + dt;
+  var wdRescan = f._wdScanTimer > 0.5;
+  if (wdRescan) f._wdScanTimer = 0;
+  var wdWrite = 0;
+  for (var wdi = 0; wdi < f.worldDeputies.length; wdi++) {
     var wd = f.worldDeputies[wdi];
     if (wd.hp <= 0) {
       showNotification('Deputy ' + wd.name + ' has been killed!');
-      f.worldDeputies.splice(wdi, 1);
-      // Remove from office deputies too
       if (typeof office !== 'undefined' && office.deputies && office.deputies.length > wdi) {
         office.deputies.splice(wdi, 1);
       }
       continue;
     }
-    // Find nearest hostile NPC
-    var depClosest = null, depClosestDist = 250;
-    for (var dchi = 0; dchi < game.npcs.length; dchi++) {
-      var dcn = game.npcs[dchi];
-      if (dcn.hostile && dcn.state !== 'dead') {
-        var dcd = dist(wd, dcn);
-        if (dcd < depClosestDist) { depClosestDist = dcd; depClosest = dcn; }
+    f.worldDeputies[wdWrite++] = wd;
+    // Rescan for target periodically
+    if (wdRescan || !wd._cachedTarget) {
+      wd._cachedTarget = null;
+      var depClosestDist = 250;
+      for (var dchi = 0; dchi < game.npcs.length; dchi++) {
+        var dcn = game.npcs[dchi];
+        if (dcn.hostile && dcn.state !== 'dead') {
+          var dcd = dist(wd, dcn);
+          if (dcd < depClosestDist) { depClosestDist = dcd; wd._cachedTarget = dcn; }
+        }
       }
     }
-    if (depClosest) {
-      // Chase and fight
+    var depClosest = wd._cachedTarget;
+    if (depClosest && depClosest.state !== 'dead') {
       var wddx = depClosest.x - wd.x;
       var wddy = depClosest.y - wd.y;
       var wdlen = Math.hypot(wddx, wddy) || 1;
@@ -1278,18 +1305,18 @@ function updateFeatures(dt) {
       wd.y += (wddy / wdlen) * 2;
       wd.state = 'fighting';
       wd.animTimer++;
-      if (depClosestDist < 35) {
+      if (wdlen < 35) {
         depClosest.hp -= 1;
         if (depClosest.hp <= 0) {
           depClosest.state = 'dead';
           game.outlawsKilled++;
           showNotification(wd.name + ' took down ' + depClosest.name + '!');
+          wd._cachedTarget = null;
         }
-        // Deputy takes damage back
         if (Math.random() < 0.1) wd.hp--;
       }
     } else {
-      // Patrol — wander near player
+      wd._cachedTarget = null;
       var wdpDist = dist(wd, p);
       if (wdpDist > 120) {
         var wdpx = p.x - wd.x;
@@ -1304,15 +1331,16 @@ function updateFeatures(dt) {
           wd.moveTimer = rand(30, 90);
         }
         var wdDirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
-        var wdd = wdDirs[wd.dir];
-        var wdnx = wd.x + wdd[0] * 1.2;
-        var wdny = wd.y + wdd[1] * 1.2;
+        var wdd2 = wdDirs[wd.dir];
+        var wdnx = wd.x + wdd2[0] * 1.2;
+        var wdny = wd.y + wdd2[1] * 1.2;
         if (canMove(wdnx, wdny, 5)) { wd.x = wdnx; wd.y = wdny; }
       }
       wd.state = 'patrol';
       wd.animTimer++;
     }
   }
+  f.worldDeputies.length = wdWrite;
 
   // ── FEATURE 7: FISHING MINI-GAME ──
   if (f.fishingMiniGame) {
@@ -1782,10 +1810,11 @@ function updateFeatures(dt) {
       });
     }
   }
-  // Spawn queued revenge seekers
-  for (var rqi = f.revengeQueue.length - 1; rqi >= 0; rqi--) {
+  // Spawn queued revenge seekers (compact)
+  var rqWrite = 0;
+  for (var rqi = 0; rqi < f.revengeQueue.length; rqi++) {
     if (game.dayCount >= f.revengeQueue[rqi].spawnDay) {
-      var revInfo = f.revengeQueue.splice(rqi, 1)[0];
+      var revInfo = f.revengeQueue[rqi];
       var revNPC = createNPC(game.npcs.length + 950 + rqi, NPC_TYPES.OUTLAW, revInfo.name,
         rand(2, MAP_W - 2), rand(2, MAP_H - 2), null);
       revNPC.hostile = true;
@@ -1798,10 +1827,14 @@ function updateFeatures(dt) {
       showNotification('REVENGE! ' + revInfo.name + ' is hunting you!');
       addJournalEntry('A revenge seeker named ' + revInfo.name + ' is after you!');
       if (typeof audio !== 'undefined' && audio.playPanic) audio.playPanic();
+    } else {
+      f.revengeQueue[rqWrite++] = f.revengeQueue[rqi];
     }
   }
-  // Revenge seekers actively hunt player
-  for (var rsi = f.revengeSeekers.length - 1; rsi >= 0; rsi--) {
+  f.revengeQueue.length = rqWrite;
+  // Revenge seekers actively hunt player (compact)
+  var rsWrite = 0;
+  for (var rsi = 0; rsi < f.revengeSeekers.length; rsi++) {
     var rs = f.revengeSeekers[rsi];
     if (rs.state === 'dead') {
       if (!rs._revengeRewardGiven) {
@@ -1813,13 +1846,10 @@ function updateFeatures(dt) {
         f.revengeKills++;
         showNotification('Revenge seeker defeated! +$' + revReward + ', +5 Rep (FEARED)');
       }
-      f.revengeSeekers.splice(rsi, 1);
       continue;
     }
-    if (rs.state === 'arrested') {
-      f.revengeSeekers.splice(rsi, 1);
-      continue;
-    }
+    if (rs.state === 'arrested') continue;
+    f.revengeSeekers[rsWrite++] = rs;
     // Active hunting — move toward player
     var rsdx = p.x - rs.x;
     var rsdy = p.y - rs.y;
@@ -1831,6 +1861,7 @@ function updateFeatures(dt) {
       if (canMove(rs.x, rny, 5)) rs.y = rny;
     }
   }
+  f.revengeSeekers.length = rsWrite;
 
   // ── Track gold nugget drops from killed NPCs ──
   f._lastOutlawsKilled = f._lastOutlawsKilled || 0;
@@ -1946,11 +1977,14 @@ if (stCloseBtn) {
 // ============================================================
 function renderFeaturesOverlay() {
   if (!game._features) return;
+  if (game.state === 'office' || game.state === 'gameover' || game.state === 'paused') return;
   var f = game._features;
   var w = gameCanvas.width;
   var h = gameCanvas.height;
   var camX = game.camera ? game.camera.x : 0;
   var camY = game.camera ? game.camera.y : 0;
+  var now = Date.now();
+  var sinNow = Math.sin(now * 0.005);
 
   // ── Weather Effects ──
 
@@ -2063,10 +2097,10 @@ function renderFeaturesOverlay() {
     ctx.fillRect(tcx - 7, tcy - 5, 14, 10);
     ctx.fillStyle = '#ffd700';
     ctx.fillRect(tcx - 2, tcy - 2, 4, 4);
-    // Sparkle
-    if (Math.random() < 0.3) {
+    // Sparkle (reduced frequency)
+    if (sinNow > 0.3) {
       ctx.fillStyle = '#ffd700';
-      ctx.fillRect(tcx + rand(-8, 8), tcy + rand(-8, 0), 2, 2);
+      ctx.fillRect(tcx + 3, tcy - 4, 2, 2);
     }
   }
 
@@ -2077,7 +2111,7 @@ function renderFeaturesOverlay() {
     var gny = gn.y - camY;
     if (gnx < -20 || gnx > w + 20 || gny < -20 || gny > h + 20) continue;
     // Bobbing
-    gny += Math.sin(Date.now() * 0.005 + gni) * 2;
+    gny += sinNow * 2;
     // Gold nugget
     ctx.fillStyle = '#ffd700';
     ctx.beginPath();
@@ -2237,7 +2271,7 @@ function renderFeaturesOverlay() {
     ctx.fillStyle = '#5a3a1a';
     ctx.fillRect(dogX - 6, dogY - 2, 2, 2); // nose
     // Tail wag
-    var tailAngle = Math.sin(Date.now() * 0.01) * 0.5;
+    var tailAngle = sinNow * 0.5;
     ctx.fillStyle = '#8b6340';
     ctx.save();
     ctx.translate(dogX + 4, dogY);
@@ -2255,7 +2289,7 @@ function renderFeaturesOverlay() {
       ctx.font = 'bold 16px monospace';
       ctx.fillText('X', tmx - 5, tmy + 5);
       // Glow
-      ctx.fillStyle = 'rgba(255, 0, 0, ' + (0.2 + Math.sin(Date.now() * 0.005) * 0.1) + ')';
+      ctx.fillStyle = 'rgba(255, 0, 0, ' + (0.2 + sinNow * 0.1) + ')';
       ctx.beginPath();
       ctx.arc(tmx, tmy, 15, 0, Math.PI * 2);
       ctx.fill();
@@ -2284,7 +2318,7 @@ function renderFeaturesOverlay() {
 
   // ── Revenge Mode Indicator ──
   if (f.revengeMode) {
-    ctx.fillStyle = 'rgba(200, 0, 0, ' + (0.1 + Math.sin(Date.now() * 0.005) * 0.05) + ')';
+    ctx.fillStyle = 'rgba(200, 0, 0, ' + (0.1 + sinNow * 0.05) + ')';
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#ff4444';
     ctx.font = 'bold 10px monospace';
@@ -2341,7 +2375,7 @@ function renderFeaturesOverlay() {
     var wsy = wrn.y - camY;
     if (wsx < -30 || wsx > w + 30 || wsy < -30 || wsy > h + 30) continue;
     // Pulsing red "WANTED" label
-    ctx.fillStyle = 'rgba(200, 0, 0, ' + (0.6 + Math.sin(Date.now() * 0.005) * 0.3) + ')';
+    ctx.fillStyle = 'rgba(200, 0, 0, ' + (0.6 + sinNow * 0.3) + ')';
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('WANTED $' + (wrn._wantedBounty || 200), wsx, wsy - 22);
@@ -2835,7 +2869,7 @@ function renderFeaturesOverlay() {
     var rsy = rsr.y - camY;
     if (rsx < -30 || rsx > w + 30 || rsy < -30 || rsy > h + 30) continue;
     // Pulsing danger label
-    ctx.fillStyle = 'rgba(255, 0, 0, ' + (0.6 + Math.sin(Date.now() * 0.008) * 0.3) + ')';
+    ctx.fillStyle = 'rgba(255, 0, 0, ' + (0.6 + sinNow * 0.3) + ')';
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('REVENGE', rsx, rsy - 22);
@@ -2858,7 +2892,6 @@ function renderFeaturesOverlay() {
 
   // ── Hidden Crates from telegram events ──
   if (game._hiddenCrates && game._hiddenCrates.length > 0) {
-    var now = Date.now();
     for (var ci = 0; ci < game._hiddenCrates.length; ci++) {
       var crate = game._hiddenCrates[ci];
       if (crate.found) continue;
@@ -2866,7 +2899,7 @@ function renderFeaturesOverlay() {
       var cy = crate.y - camY;
       if (cx < -30 || cx > w + 30 || cy < -30 || cy > h + 30) continue;
       // Sparkle effect to hint at location
-      var sparkle = 0.3 + Math.sin(now * 0.005 + ci * 2) * 0.3;
+      var sparkle = 0.3 + sinNow * 0.3;
       ctx.globalAlpha = sparkle;
       ctx.fillStyle = '#ffd700';
       ctx.beginPath();
@@ -2874,7 +2907,7 @@ function renderFeaturesOverlay() {
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(cx + Math.sin(now * 0.003 + ci) * 5, cy - 8, 1.5, 0, Math.PI * 2);
+      ctx.arc(cx + sinNow * 5, cy - 8, 1.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       // Crate box
