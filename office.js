@@ -172,6 +172,13 @@ var office = {
   // Spittoon mini-game
   spittoonStreak: 0,
   _spittoonDay: -1,
+
+  // Walkable jail interior
+  inJail: false,
+  jailPlayerX: 0,
+  jailPlayerY: 0,
+  jailNearCell: -1,
+  jailBribeOffer: null,
 };
 
 // ─────────────────────────────────────────────
@@ -191,6 +198,7 @@ var OFFICE_FURNITURE = [
   { key: 'notices',    label: 'Notice Board',   x: 0.46, y: 0.04, w: 0.10, h: 0.14 },
   { key: 'bookshelf',  label: 'Bookshelf',      x: 0.15, y: 0.36, w: 0.10, h: 0.24 },
   { key: 'stove',      label: 'Stove',          x: 0.04, y: 0.70, w: 0.08, h: 0.16 },
+  { key: 'jailKey',    label: 'Jail Key',       x: 0.55, y: 0.52, w: 0.06, h: 0.06 },
   { key: 'exit',       label: 'Exit Door',      x: 0.44, y: 0.90, w: 0.12, h: 0.08 },
 ];
 
@@ -201,7 +209,7 @@ var OFFICE_PLAYER_SIZE = 10; // half-size of player collision box
 // Check if any sub-view is currently active (player is interacting with furniture)
 function isOfficeSubViewActive() {
   return office.sittingAtDesk || office.viewingBoard || office.viewingGunRack ||
-         office.viewingJail || office.viewingBed || office.viewingStats ||
+         office.viewingJail || office.inJail || office.viewingBed || office.viewingStats ||
          office.viewingDeputies || office.craftingOpen || office.readingBook ||
          office.viewingWanted || office.viewingNotices || office.upgradeMenuOpen ||
          office.sleeping || office.showingOutcome || office.currentCase ||
@@ -215,6 +223,8 @@ function findNearFurniture(W, H) {
   var best = null;
   for (var i = 0; i < OFFICE_FURNITURE.length; i++) {
     var f = OFFICE_FURNITURE[i];
+    // Hide jail key prompt once picked up
+    if (f.key === 'jailKey' && game._hasJailKey) continue;
     var fcx = f.x * W + (f.w * W) / 2;
     var fcy = f.y * H + (f.h * H) / 2;
     var dx = office.playerX - fcx;
@@ -236,7 +246,7 @@ function officeCollides(px, py, W, H) {
   // Furniture collision
   for (var i = 0; i < OFFICE_FURNITURE.length; i++) {
     var f = OFFICE_FURNITURE[i];
-    if (f.key === 'exit' || f.key === 'chair') continue; // no collision — player walks to these
+    if (f.key === 'exit' || f.key === 'chair' || f.key === 'jailKey') continue; // no collision — player walks to these
     var fx = f.x * W, fy = f.y * H, fw = f.w * W, fh = f.h * H;
     // Shrink collision box slightly so player can get close
     var margin = 2;
@@ -1200,6 +1210,15 @@ function enterSheriffOffice() {
     office._ammoGivenDay = game.dayCount;
   }
 
+  // Reset jail key each new day
+  if (!game._jailKeyDay || game._jailKeyDay !== game.dayCount) {
+    game._hasJailKey = false;
+  }
+
+  // Reset walkable jail state
+  office.inJail = false;
+  office.jailBribeOffer = null;
+
   // Record rep history
   if (office.repHistory.length === 0 || office.repHistory[office.repHistory.length - 1].day !== (game.dayCount || 1)) {
     office.repHistory.push({ day: game.dayCount || 1, rep: game.reputation || 50 });
@@ -1591,7 +1610,100 @@ function updateOffice(dt) {
     return;
   }
 
-  // ── JAIL VIEW ──
+  // ── WALKABLE JAIL INTERIOR ──
+  if (office.inJail) {
+    // Bribe dialog active
+    if (office.jailBribeOffer) {
+      if (consumeKey('KeyY') || consumeKey('Digit1')) {
+        // Accept bribe
+        var bribe = office.jailBribeOffer;
+        game.gold = (game.gold || 0) + bribe.amount;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + bribe.amount;
+        game.corruption = clamp((game.corruption || 0) + 8, 0, 100);
+        showNotification('Accepted $' + bribe.amount + ' bribe. Released ' + bribe.name + '. +Corruption');
+        addJournalEntry('Accepted bribe from ' + bribe.name + ' ($' + bribe.amount + ').');
+        office.prisonerLog.push({ name: bribe.name, crime: bribe.crime, fate: 'bribed release', day: game.dayCount || 1 });
+        office.prisoners.splice(bribe.index, 1);
+        office.jailBribeOffer = null;
+        office.jailNearCell = -1;
+        if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+        // If no prisoners left, exit jail
+        if (office.prisoners.length === 0) {
+          office.inJail = false;
+          showNotification('Jail is empty.');
+        }
+      } else if (consumeKey('KeyN') || consumeKey('Digit2') || consumeKey('Escape')) {
+        // Refuse bribe
+        var bribe2 = office.jailBribeOffer;
+        game.reputation = clamp((game.reputation || 50) + 4, 0, REPUTATION_MAX);
+        showNotification('Refused bribe from ' + bribe2.name + '. +4 Rep (integrity)');
+        addJournalEntry('Refused bribe from ' + bribe2.name + '.');
+        office.jailBribeOffer = null;
+        if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+      }
+      return;
+    }
+
+    // ESC to exit jail
+    if (consumeKey('Escape')) {
+      office.inJail = false;
+      return;
+    }
+
+    // WASD movement in jail
+    var jW = W, jH = H;
+    var jSpeed = OFFICE_PLAYER_SPEED;
+    var jnx = office.jailPlayerX, jny = office.jailPlayerY;
+    if (game.keys && game.keys['KeyW']) jny -= jSpeed;
+    if (game.keys && game.keys['KeyS']) jny += jSpeed;
+    if (game.keys && game.keys['KeyA']) jnx -= jSpeed;
+    if (game.keys && game.keys['KeyD']) jnx += jSpeed;
+    // Clamp to room bounds
+    var jps = OFFICE_PLAYER_SIZE;
+    jnx = clamp(jnx, jps + 20, jW - jps - 20);
+    jny = clamp(jny, jps + 60, jH - jps - 20);
+    office.jailPlayerX = jnx;
+    office.jailPlayerY = jny;
+
+    // Find nearest cell
+    office.jailNearCell = -1;
+    var cellCount = office.prisoners.length;
+    var jcellW = Math.min(120, (jW - 80) / Math.max(cellCount, 1));
+    var jcellH = 100;
+    var jcellStartX = 40;
+    var jcellY = 60;
+    var bestJDist = 70; // interaction distance
+    for (var jci = 0; jci < cellCount; jci++) {
+      var jcx = jcellStartX + jci * (jcellW + 10) + jcellW / 2;
+      var jcy = jcellY + jcellH / 2;
+      var jdx = office.jailPlayerX - jcx;
+      var jdy = office.jailPlayerY - jcy;
+      var jdist = Math.sqrt(jdx * jdx + jdy * jdy);
+      if (jdist < bestJDist) {
+        bestJDist = jdist;
+        office.jailNearCell = jci;
+      }
+    }
+
+    // E to talk to prisoner (requires key)
+    if (office.jailNearCell >= 0 && consumeKey('KeyE')) {
+      if (game._hasJailKey) {
+        var pr = office.prisoners[office.jailNearCell];
+        var bribeAmt = rand(50, 200);
+        office.jailBribeOffer = {
+          index: office.jailNearCell,
+          name: pr.name,
+          crime: pr.crime,
+          amount: bribeAmt
+        };
+      } else {
+        showNotification('You need the jail key to interact with prisoners.');
+      }
+    }
+    return;
+  }
+
+  // ── JAIL VIEW (menu fallback — no prisoners) ──
   if (office.viewingJail) {
     if (consumeKey('Escape') || consumeKey('KeyQ')) {
       office.viewingJail = false;
@@ -2003,7 +2115,27 @@ function updateOffice(dt) {
       case 'desk': office.sittingAtDesk = true; office.waitingForCase = false; office.deskMode = 'main'; break;
       case 'caseBoard': office.viewingBoard = true; office.boardScroll = 0; break;
       case 'gunRack': office.viewingGunRack = true; break;
-      case 'jailCells': office.viewingJail = true; office.selectedPrisoner = 0; break;
+      case 'jailCells':
+        if (office.prisoners.length > 0) {
+          office.inJail = true;
+          office.jailPlayerX = W * 0.5;
+          office.jailPlayerY = H * 0.75;
+          office.jailNearCell = -1;
+          office.jailBribeOffer = null;
+        } else {
+          office.viewingJail = true; office.selectedPrisoner = 0;
+        }
+        break;
+      case 'jailKey':
+        if (!game._hasJailKey) {
+          game._hasJailKey = true;
+          game._jailKeyDay = game.dayCount;
+          showNotification('Picked up the jail key.');
+          if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+        } else {
+          showNotification('You already have the jail key.');
+        }
+        break;
       case 'bed': office.viewingBed = true; break;
       case 'records': office.viewingStats = true; office.statsTab = 0; break;
       case 'wanted': office.viewingWanted = true; generateWantedPosters(); break;
@@ -2263,6 +2395,8 @@ function renderOfficeOverlay() {
     drawUpgradeMenu(W, H);
   } else if (office.viewingBoard) {
     drawCaseBoard(W, H);
+  } else if (office.inJail) {
+    drawWalkableJail(W, H);
   } else if (office.viewingJail) {
     drawJailView(W, H);
   } else if (office.viewingGunRack) {
@@ -2632,6 +2766,31 @@ function drawOfficeRoom(W, H) {
   ctx.lineTo(dkX + dkW / 2 + 38, dkY - 30);
   ctx.closePath();
   ctx.fill();
+
+  // ── JAIL KEY on desk (if not picked up) ──
+  if (!game._hasJailKey) {
+    var keyX = dkX + dkW * 0.63, keyY = dkY - 6;
+    // Key shaft
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(keyX, keyY + 2, 12, 3);
+    // Key teeth
+    ctx.fillRect(keyX + 10, keyY + 2, 2, 5);
+    ctx.fillRect(keyX + 7, keyY + 2, 2, 4);
+    // Key head (circle)
+    ctx.beginPath();
+    ctx.arc(keyX - 1, keyY + 3.5, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Key hole in head
+    ctx.fillStyle = deskTop;
+    ctx.beginPath();
+    ctx.arc(keyX - 1, keyY + 3.5, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,200,0.5)';
+    ctx.beginPath();
+    ctx.arc(keyX - 2.5, keyY + 2, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // ── CHAIR (below desk) ──
   var chX = dkX + dkW / 2 - 14, chY = dkY + dkH + 6;
@@ -3519,6 +3678,217 @@ function drawCaseBoard(W, H) {
   ctx.font = (fs - 2) + 'px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('[TAB] Switch tab  |  [W/S] Scroll  |  [Q/ESC] Close', px + pw / 2, py + ph - 8);
+}
+
+// ── Walkable jail interior ──
+function drawWalkableJail(W, H) {
+  // Stone floor
+  ctx.fillStyle = '#3a3832';
+  ctx.fillRect(0, 0, W, H);
+  // Floor tile pattern
+  ctx.strokeStyle = '#2e2c28';
+  ctx.lineWidth = 1;
+  for (var ty = 0; ty < H; ty += 32) {
+    ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(W, ty); ctx.stroke();
+    for (var tx = ((ty / 32) % 2 === 0 ? 0 : 16); tx < W; tx += 32) {
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx, ty + 32); ctx.stroke();
+    }
+  }
+
+  // Stone walls (top)
+  var wallH2 = 50;
+  ctx.fillStyle = '#4a4640';
+  ctx.fillRect(0, 0, W, wallH2);
+  ctx.fillStyle = '#3a3630';
+  ctx.fillRect(0, wallH2, W, 4);
+
+  // Title
+  ctx.fillStyle = '#e8d8b8';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('JAIL INTERIOR', W / 2, 28);
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(office.prisoners.length + ' prisoner' + (office.prisoners.length !== 1 ? 's' : ''), W / 2, 44);
+
+  // Draw cells along top wall
+  var cellCount = office.prisoners.length;
+  var jcellW = Math.min(120, (W - 80) / Math.max(cellCount, 1));
+  var jcellH = 100;
+  var jcellStartX = 40;
+  var jcellY = 60;
+
+  for (var ci = 0; ci < cellCount; ci++) {
+    var ccx = jcellStartX + ci * (jcellW + 10);
+    var ccy = jcellY;
+    var pr = office.prisoners[ci];
+
+    // Cell floor
+    ctx.fillStyle = '#2a2820';
+    ctx.fillRect(ccx, ccy, jcellW, jcellH);
+
+    // Cell back wall
+    ctx.fillStyle = '#4a4640';
+    ctx.fillRect(ccx, ccy, jcellW, 8);
+
+    // Cell side walls
+    ctx.fillStyle = '#4a4640';
+    ctx.fillRect(ccx, ccy, 4, jcellH);
+    ctx.fillRect(ccx + jcellW - 4, ccy, 4, jcellH);
+
+    // Iron bars (front)
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 3;
+    var barCount = Math.max(4, Math.floor(jcellW / 14));
+    for (var bi = 0; bi < barCount; bi++) {
+      var bx = ccx + 6 + bi * ((jcellW - 12) / (barCount - 1));
+      ctx.beginPath();
+      ctx.moveTo(bx, ccy + jcellH - 2);
+      ctx.lineTo(bx, ccy + jcellH + 6);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx, ccy);
+      ctx.lineTo(bx, ccy + jcellH);
+      ctx.stroke();
+    }
+    // Horizontal crossbar
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ccx, ccy + jcellH * 0.4);
+    ctx.lineTo(ccx + jcellW, ccy + jcellH * 0.4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ccx, ccy + jcellH * 0.75);
+    ctx.lineTo(ccx + jcellW, ccy + jcellH * 0.75);
+    ctx.stroke();
+
+    // Prisoner sprite inside cell
+    var prX = ccx + jcellW / 2, prY = ccy + jcellH * 0.55;
+    // Body
+    ctx.fillStyle = '#7a6a4a';
+    ctx.fillRect(prX - 5, prY - 4, 10, 12);
+    // Head
+    ctx.fillStyle = '#c4a47a';
+    ctx.beginPath();
+    ctx.arc(prX, prY - 8, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Stripes (prison uniform)
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 1;
+    for (var si = 0; si < 3; si++) {
+      ctx.beginPath();
+      ctx.moveTo(prX - 4, prY - 2 + si * 4);
+      ctx.lineTo(prX + 4, prY - 2 + si * 4);
+      ctx.stroke();
+    }
+
+    // Name label
+    ctx.fillStyle = '#e8d8b8';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(pr.name, ccx + jcellW / 2, ccy + jcellH + 18);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '9px monospace';
+    ctx.fillText(pr.crime, ccx + jcellW / 2, ccy + jcellH + 30);
+
+    // Highlight nearest cell
+    if (ci === office.jailNearCell) {
+      ctx.strokeStyle = game._hasJailKey ? '#ffd700' : '#886600';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ccx - 2, ccy - 2, jcellW + 4, jcellH + 4);
+    }
+  }
+
+  // Draw player
+  var jpx = office.jailPlayerX, jpy = office.jailPlayerY;
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(jpx, jpy + 12, 9, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Boots
+  ctx.fillStyle = '#3a2a14';
+  ctx.fillRect(jpx - 4, jpy + 8, 3, 5);
+  ctx.fillRect(jpx + 1, jpy + 8, 3, 5);
+  // Pants
+  ctx.fillStyle = PALETTE.denim || '#4a5a8a';
+  ctx.fillRect(jpx - 4, jpy + 2, 3, 7);
+  ctx.fillRect(jpx + 1, jpy + 2, 3, 7);
+  // Belt
+  ctx.fillStyle = PALETTE.leather || '#6a4a2a';
+  ctx.fillRect(jpx - 5, jpy + 1, 10, 2);
+  // Torso
+  ctx.fillStyle = PALETTE.cloth || '#8b1a1a';
+  ctx.fillRect(jpx - 5, jpy - 6, 10, 8);
+  // Head
+  ctx.fillStyle = '#c4a47a';
+  ctx.beginPath();
+  ctx.arc(jpx, jpy - 10, 5, 0, Math.PI * 2);
+  ctx.fill();
+  // Hat
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(jpx - 7, jpy - 16, 14, 4);
+  ctx.fillRect(jpx - 5, jpy - 20, 10, 5);
+
+  // Key icon if player has key
+  if (game._hasJailKey) {
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(jpx + 10, jpy - 14, 8, 2);
+    ctx.beginPath();
+    ctx.arc(jpx + 9, jpy - 13, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Interaction prompt
+  if (office.jailNearCell >= 0 && !office.jailBribeOffer) {
+    var promptY = H - 60;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(W / 2 - 140, promptY - 14, 280, 28);
+    ctx.fillStyle = game._hasJailKey ? '#ffd700' : '#aa8844';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    if (game._hasJailKey) {
+      ctx.fillText('[E] Talk to prisoner', W / 2, promptY + 4);
+    } else {
+      ctx.fillText('Need jail key to interact', W / 2, promptY + 4);
+    }
+  }
+
+  // Bribe dialog
+  if (office.jailBribeOffer) {
+    var bo = office.jailBribeOffer;
+    var dpw = Math.min(W * 0.55, 420), dph = 160;
+    var dpx = (W - dpw) / 2, dpy = (H - dph) / 2;
+    drawUIPanel(dpx, dpy, dpw, dph, 'PRISONER BRIBE');
+
+    var bfs = 12;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8d8b8';
+    ctx.font = bfs + 'px monospace';
+    ctx.fillText(bo.name + ' leans close and whispers:', dpx + dpw / 2, dpy + 50);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold ' + (bfs + 1) + 'px monospace';
+    ctx.fillText('"Let me go and I\'ll pay you $' + bo.amount + '."', dpx + dpw / 2, dpy + 72);
+
+    ctx.fillStyle = '#aaa';
+    ctx.font = (bfs - 1) + 'px monospace';
+    ctx.fillText('Crime: ' + bo.crime, dpx + dpw / 2, dpy + 92);
+
+    ctx.fillStyle = '#88cc88';
+    ctx.font = 'bold ' + bfs + 'px monospace';
+    ctx.fillText('[1/Y] Accept (+$' + bo.amount + ', +corruption)', dpx + dpw / 2, dpy + 118);
+    ctx.fillStyle = '#cc8888';
+    ctx.fillText('[2/N] Refuse (+4 Rep)', dpx + dpw / 2, dpy + 136);
+  }
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, H - 24, W, 24);
+  ctx.fillStyle = '#e8d8b8';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[WASD] Move  |  [E] Interact  |  [ESC] Exit Jail', W / 2, H - 8);
 }
 
 // ── Jail view ──
