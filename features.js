@@ -404,19 +404,19 @@ function updateFeatures(dt) {
     f.knives.push({ x: p.x, y: p.y, dx: kd[0], dy: kd[1], life: 40 });
   }
 
-  // 12. Explosive Barrels (throttled — check every 0.25s)
-  f._barrelTimer = (f._barrelTimer || 0) + dt;
-  if (f._barrelTimer > 0.25 && typeof bullets !== 'undefined' && bullets.list && bullets.list.length > 0) {
-    f._barrelTimer = 0;
+  // 12. Explosive Barrels (check every frame, but only when bullets exist)
+  var bList = (typeof bullets !== 'undefined') ? bullets.bullets : null;
+  if (bList && bList.length > 0) {
     for (var bi = 0; bi < f.explosiveBarrels.length; bi++) {
       var barrel = f.explosiveBarrels[bi];
       if (!barrel.active) continue;
-      for (var bli = 0; bli < bullets.list.length; bli++) {
-        var blt = bullets.list[bli];
-        if (dist(blt, barrel) < 15) {
+      for (var bli = 0; bli < bList.length; bli++) {
+        var blt = bList[bli];
+        if (dist(blt, barrel) < 20) {
           barrel.active = false;
           particles.emit(barrel.x, barrel.y, 25, '#ff4400', 5, 25);
           particles.emit(barrel.x, barrel.y, 15, '#ffaa00', 3, 15);
+          if (typeof audio !== 'undefined' && audio.playExplosion) audio.playExplosion();
           for (var bni = 0; bni < game.npcs.length; bni++) {
             if (game.npcs[bni].state !== 'dead' && dist(game.npcs[bni], barrel) < 70) {
               game.npcs[bni].hp -= 4;
@@ -424,6 +424,7 @@ function updateFeatures(dt) {
             }
           }
           if (dist(p, barrel) < 70 && !game._cheatMode) { p.hp -= 2; showNotification('Caught in the explosion! -2 HP'); }
+          showNotification('BOOM! Barrel exploded!');
           break;
         }
       }
