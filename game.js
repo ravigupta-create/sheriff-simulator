@@ -244,6 +244,7 @@ const SHOP_ITEMS = {
     { id: 'ammo_pack',    name: 'Ammo Pack',         price: 10,  desc: '+12 rounds of ammunition',   icon: '🔹', effect: 'addAmmo',      value: 12, oneTime: false },
     { id: 'horse_feed',   name: 'Horse Feed',        price: 15,  desc: 'Heals your horse',           icon: '🌾', effect: 'healHorse',    value: HORSE_HEAL_AMOUNT, oneTime: false },
     { id: 'gun_repair',   name: 'Gun Repair Kit',    price: 30,  desc: 'Restore full accuracy',      icon: '🔧', effect: 'repairGun',    value: 1,  oneTime: false },
+    { id: 'supplies',     name: 'Campfire Supplies', price: 15,  desc: 'Cook food at campfire +3 HP', icon: '🍖', effect: 'addSupplies',  value: 3,  oneTime: false },
   ],
   blacksmith: [
     { id: 'vest',         name: 'Bulletproof Vest',  price: 100, desc: '+2 max HP',                  icon: '🦺', effect: 'addMaxHP',     value: 2,  oneTime: true },
@@ -4009,7 +4010,7 @@ function openDialog(npc) {
     choices = [
       { text: "1. Buy a drink ($5)", action: 'buy_drink' },
       { text: '2. Play Poker ($10)', action: 'poker' },
-      { text: "3. Seen any trouble?", action: 'ask_trouble' }
+      { text: "3. Arm wrestle ($25)", action: 'arm_wrestle' }
     ];
   } else if (npc.type === NPC_TYPES.SHOPKEEPER) {
     text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
@@ -4148,6 +4149,31 @@ function handleDialogChoice(action, npc) {
       audio.playBad();
       addJournalEntry('Accepted bribe from ' + npc.name + '.');
       closeDialog();
+      break;
+
+    case 'arm_wrestle':
+      if (game.gold >= 25) {
+        if (typeof game._features !== 'undefined') {
+          game._features.armWrestlingActive = true;
+          game._features.armWrestlePower = 50;
+          game._features.armWrestleOpponentPower = 50;
+          var awOpponents = [
+            { name: 'Big Buck', str: 1.2 },
+            { name: 'Iron Arm Pete', str: 1.5 },
+            { name: 'Mighty Mike', str: 1.8 },
+            { name: 'Gentle Jim', str: 0.8 }
+          ];
+          var awOpp = awOpponents[rand(0, awOpponents.length - 1)];
+          game._features.armWrestleOpponentStr = awOpp.str;
+          game._features.armWrestleOpponentName = awOpp.name;
+          game._features.armWrestleBet = 25;
+          game._features.armWrestleTimer = 0;
+          showNotification('Arm wrestling vs ' + awOpp.name + '! MASH SPACE!');
+        }
+      } else {
+        showNotification("You can't afford the $25 bet.");
+        closeDialog();
+      }
       break;
 
     case 'accept_quest':
@@ -4398,6 +4424,14 @@ function buyItem(item, price) {
     case 'unlockRifle':
       game.hasRifle = true;
       showNotification('Rifle unlocked! Long range precision.');
+      break;
+    case 'addSupplies':
+      if (typeof game._features !== 'undefined') {
+        game._features.campfireSupplies = (game._features.campfireSupplies || 0) + item.value;
+        showNotification('+' + item.value + ' campfire supplies! (' + game._features.campfireSupplies + ' total)');
+      } else {
+        showNotification('+' + item.value + ' campfire supplies!');
+      }
       break;
   }
 
@@ -5092,8 +5126,16 @@ function updateNPCs(dt) {
         }
         // Shoot at player occasionally (difficulty-scaled accuracy)
         var shootChance = 0.015 * diff.outlawDamageMult * (game.time > 0.8 || game.time < 0.2 ? diff.nightCrimeMult : 1);
+        // Weather reduces accuracy (Feature 2)
+        var weatherPenalty = 0;
+        if (game._features) {
+          var cw = game._features.weather;
+          if (cw === 'fog') { shootChance *= 0.5; weatherPenalty = 0.3; }
+          else if (cw === 'dust_storm' || cw === 'sandstorm') { shootChance *= 0.4; weatherPenalty = 0.4; }
+          else if (cw === 'rain') { shootChance *= 0.7; weatherPenalty = 0.15; }
+        }
         if (playerDist < 150 && Math.random() < shootChance) {
-          var shootAngle = Math.atan2(cdy, cdx);
+          var shootAngle = Math.atan2(cdy, cdx) + (weatherPenalty > 0 ? randF(-weatherPenalty, weatherPenalty) : 0);
           bullets.fire(npc.x, npc.y, shootAngle, false);
         }
       }

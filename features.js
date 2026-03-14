@@ -109,6 +109,107 @@ function initFeatures() {
     jailBreakTimer: 0,
     finalShowdown: false,
 
+    // ── NEW FEATURE STATE (15 features) ──
+
+    // 1. Wanted Poster Bounty Hunting
+    wantedNPCs: [],
+    wantedSpawnedToday: false,
+    wantedLastDay: -1,
+    bountiesCollected: 0,
+
+    // 2. Weather System (enhanced — fog & dust storm)
+    // (weather, weatherTimer, weatherDuration, raindrops already exist)
+    fogParticles: [],
+    dustStormParticles: [],
+
+    // 3. Horse Racing
+    horseRaceActive: false,
+    horseRacePhase: 0, // 0=countdown, 1=racing, 2=finished
+    horseRaceTimer: 0,
+    horseRacePlayerPos: 0,
+    horseRaceAI: [0, 0, 0],
+    horseRaceBoost: 0,
+    horseRaceNotifyTimer: 0,
+    horseRaceLastDay: -1,
+
+    // 4. Bank Robbery Event
+    bankRobberyActive: false,
+    bankRobberyTimer: 0,
+    bankRobberyOutlaws: [],
+    bankRobberyLastDay: -1,
+    bankClosedUntilDay: -1,
+
+    // 5. Campfire Rest System (enhanced)
+    campfireResting: false,
+    campfireRestTimer: 0,
+    campfireCookTimer: 0,
+    campfireSupplies: 0,
+
+    // 6. Deputy System (World) — deputies in world
+    worldDeputies: [],
+    worldDeputyMax: 3,
+
+    // 7. Fishing Mini-Game (enhanced with timing bar)
+    fishingMiniGame: false,
+    fishingBarPos: 0,
+    fishingBarDir: 1,
+    fishingGreenZone: 0.4,
+    fishingGreenStart: 0.3,
+    fishCount: 0,
+
+    // 8. Arm Wrestling
+    armWrestlingActive: false,
+    armWrestlePower: 50,
+    armWrestleOpponentPower: 50,
+    armWrestleOpponentStr: 0,
+    armWrestleOpponentName: '',
+    armWrestleBet: 0,
+    armWrestleTimer: 0,
+
+    // 9. Dynamic NPC Relationships (enhanced)
+    // relationships{} already exists, this adds tracking
+    npcRelColors: true,
+
+    // 10. Mine Exploration
+    mineActive: false,
+    mineRoom: 0,
+    mineRooms: [],
+    minePlayerX: 0,
+    minePlayerY: 0,
+    mineGoldCollected: 0,
+    mineEnemies: [],
+    mineCaveIns: [],
+    mineExitTimer: 0,
+
+    // 11. Newspaper System (enhanced with popup)
+    newspaperShowDay: -1,
+    newspaperReady: false,
+    newspaperHeadlines: [],
+
+    // 12. Execution/Gallows (handled in office.js)
+
+    // 13. Gold Panning
+    goldPanningActive: false,
+    goldPanningRocks: [],
+    goldPanningScore: 0,
+    goldPanningRound: 0,
+    goldPanningMaxPerDay: 3,
+    goldPanningDoneToday: 0,
+    goldPanningLastDay: -1,
+
+    // 14. Town Events / Festivals
+    festivalActive: false,
+    festivalType: '',
+    festivalTimer: 0,
+    festivalLastDay: -1,
+    festivalDecorations: [],
+    festivalFireworks: [],
+
+    // 15. Revenge System
+    revengeSeekers: [],
+    revengeQueue: [], // { spawnDay, name }
+    revengeKills: 0,
+
     // System
     initialized: true
   };
@@ -772,6 +873,932 @@ function updateFeatures(dt) {
     }
   }
 
+  // ════════════════════════════════════════════════════
+  // ══ NEW 15 FEATURES — UPDATE LOGIC ══
+  // ════════════════════════════════════════════════════
+
+  // ── FEATURE 1: WANTED POSTER BOUNTY HUNTING ──
+  if (f.wantedLastDay !== game.dayCount) {
+    f.wantedLastDay = game.dayCount;
+    f.wantedSpawnedToday = false;
+  }
+  if (!f.wantedSpawnedToday && game.dayCount > 0) {
+    f.wantedSpawnedToday = true;
+    var wantedCount = rand(1, 2);
+    var wantedNames = ['Dead-Eye Dan', 'Mad Dog McGee', 'Bloody Bill', 'Iron Kate', 'The Scorpion',
+      'Switchblade Sam', 'Red Handed Rex', 'Powder Pete', 'Tombstone Tom', 'Venom Vera',
+      'Six-Gun Sally', 'Coffin Cal', 'Black Widow', 'Dynamite Dave', 'Noose Nick'];
+    for (var wi = 0; wi < wantedCount; wi++) {
+      var wName = wantedNames[rand(0, wantedNames.length - 1)];
+      var bountyAmt = rand(100, 500);
+      var wNPC = createNPC(game.npcs.length + wi + 900, NPC_TYPES.BOUNTY, wName,
+        rand(3, MAP_W - 3), rand(3, MAP_H - 3), null);
+      wNPC.hostile = true;
+      wNPC.hp = rand(8, 12);
+      wNPC.maxHp = wNPC.hp;
+      wNPC.speed = 2.2;
+      wNPC._wantedBounty = bountyAmt;
+      wNPC._isWanted = true;
+      game.npcs.push(wNPC);
+      f.wantedNPCs.push(wNPC);
+    }
+  }
+  // Check if wanted NPCs killed/arrested — award bounty
+  for (var wni = f.wantedNPCs.length - 1; wni >= 0; wni--) {
+    var wn = f.wantedNPCs[wni];
+    if (wn.state === 'dead' || wn.state === 'arrested') {
+      if (!wn._bountyClaimed) {
+        wn._bountyClaimed = true;
+        var bountyReward = wn._wantedBounty || 200;
+        game.gold += bountyReward;
+        game.totalGoldEarned += bountyReward;
+        game.reputation = clamp(game.reputation + 10, 0, REPUTATION_MAX);
+        f.bountiesCollected++;
+        showNotification('BOUNTY COLLECTED: $' + bountyReward + '!');
+        addJournalEntry('Collected bounty on ' + wn.name + ' ($' + bountyReward + ')');
+        if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+        // Floating text handled in render
+        f._bountyFloatText = { text: 'BOUNTY: $' + bountyReward, x: wn.x, y: wn.y, life: 90 };
+      }
+      f.wantedNPCs.splice(wni, 1);
+    }
+  }
+  // Bounty float text decay
+  if (f._bountyFloatText) {
+    f._bountyFloatText.life--;
+    f._bountyFloatText.y -= 0.5;
+    if (f._bountyFloatText.life <= 0) f._bountyFloatText = null;
+  }
+
+  // ── FEATURE 2: ENHANCED WEATHER (fog & dust storm) ──
+  // Modify weather pool to include fog and dust_storm
+  if (f.weatherTimer <= 0) {
+    // Already handled above, but let's enhance the pool
+  }
+  // Override the weather generation pool with new types
+  f._weatherOverrideTimer = (f._weatherOverrideTimer || 0) + dt;
+  if (f._weatherOverrideTimer > 200 && f.weather === 'clear' && Math.random() < 0.02) {
+    f._weatherOverrideTimer = 0;
+    var newWeathers = ['fog', 'dust_storm'];
+    var picked = newWeathers[rand(0, newWeathers.length - 1)];
+    f.weather = picked;
+    f.weatherDuration = rand(40, 100);
+    showNotification('Weather: ' + (picked === 'fog' ? 'Fog rolling in...' : 'Dust storm approaching!'));
+  }
+  // Fog particles
+  if (f.weather === 'fog') {
+    if (f.fogParticles.length < 15) {
+      f.fogParticles.push({
+        x: rand(0, gameCanvas.width),
+        y: rand(0, gameCanvas.height),
+        size: rand(60, 150),
+        alpha: randF(0.05, 0.15),
+        dx: randF(-0.3, 0.3),
+        dy: randF(-0.1, 0.1)
+      });
+    }
+    for (var fpi = f.fogParticles.length - 1; fpi >= 0; fpi--) {
+      var fp = f.fogParticles[fpi];
+      fp.x += fp.dx;
+      fp.y += fp.dy;
+      if (fp.x < -200 || fp.x > gameCanvas.width + 200) fp.dx = -fp.dx;
+      if (fp.y < -200 || fp.y > gameCanvas.height + 200) fp.dy = -fp.dy;
+    }
+  } else {
+    f.fogParticles = [];
+  }
+  // Dust storm particles
+  if (f.weather === 'dust_storm') {
+    if (f.dustStormParticles.length < 30) {
+      f.dustStormParticles.push({
+        x: -20,
+        y: rand(0, gameCanvas.height),
+        speed: randF(4, 10),
+        size: rand(2, 6),
+        alpha: randF(0.2, 0.6)
+      });
+    }
+    for (var dsi = f.dustStormParticles.length - 1; dsi >= 0; dsi--) {
+      var dsp = f.dustStormParticles[dsi];
+      dsp.x += dsp.speed;
+      dsp.y += randF(-0.5, 0.5);
+      if (dsp.x > gameCanvas.width + 30) { f.dustStormParticles.splice(dsi, 1); }
+    }
+  } else {
+    f.dustStormParticles = [];
+  }
+  // Weather affects NPC behavior: fewer NPCs outside in storms
+  if (f.weather === 'fog' || f.weather === 'dust_storm' || f.weather === 'rain' || f.weather === 'sandstorm') {
+    for (var wni2 = 0; wni2 < game.npcs.length; wni2++) {
+      var wnpc = game.npcs[wni2];
+      if (wnpc.type === NPC_TYPES.TOWNSPERSON && wnpc.state === 'walking' && !wnpc._weatherFled && Math.random() < 0.01) {
+        wnpc._weatherFled = true;
+        var homeB2 = game.buildings.filter(function(b) { return b.type === BUILDING_TYPES.HOUSE; });
+        if (homeB2.length > 0) {
+          var tgt = homeB2[wnpc.id % homeB2.length];
+          wnpc.targetX = tgt.doorX * TILE;
+          wnpc.targetY = tgt.doorY * TILE;
+        }
+      }
+    }
+  } else {
+    // Clear weather flee flags
+    for (var wni3 = 0; wni3 < game.npcs.length; wni3++) {
+      game.npcs[wni3]._weatherFled = false;
+    }
+  }
+
+  // ── FEATURE 3: HORSE RACING ──
+  if (f.horseRaceLastDay !== game.dayCount) {
+    f.horseRaceLastDay = game.dayCount;
+    f.horseRaceNotifyTimer = 0;
+  }
+  if (!f.horseRaceActive && game.dayCount > 1 && game.dayCount % 3 === 0 && f.horseRaceNotifyTimer === 0) {
+    f.horseRaceNotifyTimer = 1;
+    showNotification('Horse race at the edge of town! Press N to join ($25 entry).');
+  }
+  if (!f.horseRaceActive && f.horseRaceNotifyTimer > 0 && game.state === 'playing' && consumeKey('KeyN')) {
+    if (game.gold >= 25) {
+      game.gold -= 25;
+      f.horseRaceActive = true;
+      f.horseRacePhase = 0;
+      f.horseRaceTimer = 3; // 3 second countdown
+      f.horseRacePlayerPos = 0;
+      f.horseRaceAI = [0, 0, 0];
+      f.horseRaceBoost = 0;
+      showNotification('Race starting! Get ready...');
+    } else {
+      showNotification('Need $25 entry fee for the race.');
+    }
+  }
+  if (f.horseRaceActive) {
+    if (f.horseRacePhase === 0) {
+      // Countdown
+      f.horseRaceTimer -= dt;
+      if (f.horseRaceTimer <= 0) {
+        f.horseRacePhase = 1;
+        f.horseRaceTimer = 0;
+        showNotification('GO! Press SPACE to boost!');
+      }
+    } else if (f.horseRacePhase === 1) {
+      // Racing
+      f.horseRaceTimer += dt;
+      // Player moves at base speed + boosts
+      f.horseRacePlayerPos += (2.5 + f.horseRaceBoost) * dt * 60;
+      f.horseRaceBoost *= 0.95; // decay
+      // Space for boost
+      if (consumeKey('Space')) {
+        f.horseRaceBoost = 3 + Math.random() * 2;
+        if (typeof audio !== 'undefined' && audio.playHorseGallop) audio.playHorseGallop();
+      }
+      // AI horses
+      for (var ai = 0; ai < 3; ai++) {
+        f.horseRaceAI[ai] += (2.0 + Math.random() * 1.5 + ai * 0.3) * dt * 60;
+      }
+      // Check finish (race length = 600)
+      var raceLen = 600;
+      if (f.horseRacePlayerPos >= raceLen) {
+        f.horseRacePhase = 2;
+        // Check placement
+        var beaten = 0;
+        for (var ai2 = 0; ai2 < 3; ai2++) {
+          if (f.horseRacePlayerPos > f.horseRaceAI[ai2]) beaten++;
+        }
+        if (beaten === 3) {
+          game.gold += 200;
+          game.totalGoldEarned += 200;
+          game.reputation = clamp(game.reputation + 5, 0, REPUTATION_MAX);
+          showNotification('You WON the race! +$200, +5 Rep!');
+          if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+        } else {
+          showNotification('You lost the race. Better luck next time!');
+          if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+        }
+        setTimeout(function() { f.horseRaceActive = false; }, 2000);
+      }
+      // AI finish check
+      for (var ai3 = 0; ai3 < 3; ai3++) {
+        if (f.horseRaceAI[ai3] >= raceLen && f.horseRacePhase === 1) {
+          // AI finished first, continue until player finishes
+        }
+      }
+    }
+  }
+
+  // ── FEATURE 4: BANK ROBBERY EVENT ──
+  if (f.bankRobberyLastDay !== game.dayCount) {
+    f.bankRobberyLastDay = game.dayCount;
+  }
+  if (!f.bankRobberyActive && !game.activeCrime && game.dayCount > 2 && Math.random() < 0.0003) {
+    // Start bank robbery
+    var bank = null;
+    for (var bbi = 0; bbi < game.buildings.length; bbi++) {
+      if (game.buildings[bbi].type === BUILDING_TYPES.BANK) { bank = game.buildings[bbi]; break; }
+    }
+    if (bank && f.bankClosedUntilDay < game.dayCount) {
+      f.bankRobberyActive = true;
+      f.bankRobberyTimer = 90;
+      f.bankRobberyOutlaws = [];
+      var robberCount = rand(3, 5);
+      for (var rbi = 0; rbi < robberCount; rbi++) {
+        var robberNPC = createNPC(game.npcs.length + rbi + 800, NPC_TYPES.OUTLAW,
+          'Bank Robber ' + (rbi + 1), bank.doorX + rand(-2, 2), bank.doorY + rand(-1, 2), null);
+        robberNPC.hostile = true;
+        robberNPC.hp = rand(5, 8);
+        robberNPC.maxHp = robberNPC.hp;
+        robberNPC._bankRobber = true;
+        game.npcs.push(robberNPC);
+        f.bankRobberyOutlaws.push(robberNPC);
+      }
+      showNotification('BANK ROBBERY! Outlaws are robbing the bank! Stop them!');
+      addJournalEntry('Bank robbery in progress! ' + robberCount + ' armed outlaws at the bank.');
+      if (typeof audio !== 'undefined' && audio.playBellAlarm) audio.playBellAlarm();
+    }
+  }
+  if (f.bankRobberyActive) {
+    f.bankRobberyTimer -= dt;
+    // Check if all robbers dead/arrested
+    var robbersAlive = 0;
+    for (var rci = 0; rci < f.bankRobberyOutlaws.length; rci++) {
+      if (f.bankRobberyOutlaws[rci].state !== 'dead' && f.bankRobberyOutlaws[rci].state !== 'arrested') robbersAlive++;
+    }
+    if (robbersAlive === 0) {
+      f.bankRobberyActive = false;
+      game.gold += 200;
+      game.totalGoldEarned += 200;
+      game.reputation = clamp(game.reputation + 15, 0, REPUTATION_MAX);
+      showNotification('Bank saved! +$200, +15 Rep!');
+      addJournalEntry('Stopped the bank robbery! Saved the gold.');
+      if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+    } else if (f.bankRobberyTimer <= 0) {
+      f.bankRobberyActive = false;
+      f.bankClosedUntilDay = game.dayCount + 2;
+      game.reputation = clamp(game.reputation - 10, 0, REPUTATION_MAX);
+      showNotification('Bank robbery succeeded! Bank closed for 2 days. -10 Rep');
+      addJournalEntry('Failed to stop the bank robbery. Bank closed.');
+      if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+      // Remove remaining robbers
+      for (var rri = 0; rri < f.bankRobberyOutlaws.length; rri++) {
+        if (f.bankRobberyOutlaws[rri].state !== 'dead') f.bankRobberyOutlaws[rri].state = 'dead';
+      }
+    }
+  }
+
+  // ── FEATURE 5: CAMPFIRE REST SYSTEM (Enhanced) ──
+  // F key near open ground to set up campfire and rest
+  if (!f.campfireResting && game.state === 'playing' && consumeKey('KeyF') && !game.dialogState) {
+    // Check if near open ground (sand tile) and not near buildings
+    var ptx = Math.floor(p.x / TILE);
+    var pty = Math.floor(p.y / TILE);
+    var nearBld = false;
+    for (var cbi = 0; cbi < game.buildings.length; cbi++) {
+      var cb = game.buildings[cbi];
+      if (ptx >= cb.x - 2 && ptx <= cb.x + cb.w + 2 && pty >= cb.y - 2 && pty <= cb.y + cb.h + 2) {
+        nearBld = true; break;
+      }
+    }
+    var tileHere = (game.map && game.map[pty]) ? game.map[pty][ptx] : 0;
+    if (!nearBld && (tileHere === 0 || tileHere === 1 || tileHere === 9)) {
+      // Check if we're near water for fishing instead
+      var nearWater = false;
+      for (var wdx = -2; wdx <= 2; wdx++) {
+        for (var wdy = -2; wdy <= 2; wdy++) {
+          var wtx = ptx + wdx, wty = pty + wdy;
+          if (wtx >= 0 && wtx < MAP_W && wty >= 0 && wty < MAP_H && game.map[wty][wtx] === 5) nearWater = true;
+        }
+      }
+      if (!nearWater) {
+        f.campfireResting = true;
+        f.campfireRestTimer = 0;
+        // Add campfire at current position
+        f.campfires.push({ x: p.x, y: p.y + 10, life: 120, healTimer: 0 });
+        showNotification('Resting by campfire. HP restores over time. ESC to stand.');
+      }
+    }
+  }
+  if (f.campfireResting) {
+    f.campfireRestTimer += dt;
+    // Time passes 3x faster
+    if (typeof game.time !== 'undefined') {
+      game.time += (dt / DAY_LENGTH) * 2; // extra 2x on top of normal 1x
+    }
+    // ESC to stand up
+    if (consumeKey('Escape')) {
+      f.campfireResting = false;
+      showNotification('You stand up from the campfire.');
+    }
+    // Cook food if have supplies
+    if (f.campfireSupplies > 0) {
+      f.campfireCookTimer += dt;
+      if (f.campfireCookTimer >= 5) {
+        f.campfireCookTimer = 0;
+        f.campfireSupplies--;
+        p.hp = Math.min(p.hp + 3, p.maxHp);
+        showNotification('Cooked a meal! +3 HP (' + f.campfireSupplies + ' supplies left)');
+      }
+    }
+  }
+
+  // ── FEATURE 6: DEPUTY SYSTEM (WORLD) ──
+  // Sync deputies from office into world
+  if (typeof office !== 'undefined' && office.deputies && office.deputies.length > 0) {
+    while (f.worldDeputies.length < Math.min(office.deputies.length, f.worldDeputyMax)) {
+      var depIdx = f.worldDeputies.length;
+      var depInfo = office.deputies[depIdx];
+      f.worldDeputies.push({
+        x: p.x + rand(-60, 60),
+        y: p.y + rand(-60, 60),
+        hp: 6,
+        maxHp: 6,
+        name: depInfo.name || ('Deputy ' + (depIdx + 1)),
+        state: 'patrol',
+        dir: rand(0, 3),
+        moveTimer: rand(30, 90),
+        animTimer: 0
+      });
+    }
+  }
+  // Update world deputies — patrol, fight outlaws
+  for (var wdi = f.worldDeputies.length - 1; wdi >= 0; wdi--) {
+    var wd = f.worldDeputies[wdi];
+    if (wd.hp <= 0) {
+      showNotification('Deputy ' + wd.name + ' has been killed!');
+      f.worldDeputies.splice(wdi, 1);
+      // Remove from office deputies too
+      if (typeof office !== 'undefined' && office.deputies && office.deputies.length > wdi) {
+        office.deputies.splice(wdi, 1);
+      }
+      continue;
+    }
+    // Find nearest hostile NPC
+    var depClosest = null, depClosestDist = 250;
+    for (var dchi = 0; dchi < game.npcs.length; dchi++) {
+      var dcn = game.npcs[dchi];
+      if (dcn.hostile && dcn.state !== 'dead') {
+        var dcd = dist(wd, dcn);
+        if (dcd < depClosestDist) { depClosestDist = dcd; depClosest = dcn; }
+      }
+    }
+    if (depClosest) {
+      // Chase and fight
+      var wddx = depClosest.x - wd.x;
+      var wddy = depClosest.y - wd.y;
+      var wdlen = Math.hypot(wddx, wddy) || 1;
+      wd.x += (wddx / wdlen) * 2;
+      wd.y += (wddy / wdlen) * 2;
+      wd.state = 'fighting';
+      wd.animTimer++;
+      if (depClosestDist < 35) {
+        depClosest.hp -= 1;
+        if (depClosest.hp <= 0) {
+          depClosest.state = 'dead';
+          game.outlawsKilled++;
+          showNotification(wd.name + ' took down ' + depClosest.name + '!');
+        }
+        // Deputy takes damage back
+        if (Math.random() < 0.1) wd.hp--;
+      }
+    } else {
+      // Patrol — wander near player
+      var wdpDist = dist(wd, p);
+      if (wdpDist > 120) {
+        var wdpx = p.x - wd.x;
+        var wdpy = p.y - wd.y;
+        var wdplen = Math.hypot(wdpx, wdpy) || 1;
+        wd.x += (wdpx / wdplen) * 1.5;
+        wd.y += (wdpy / wdplen) * 1.5;
+      } else {
+        wd.moveTimer--;
+        if (wd.moveTimer <= 0) {
+          wd.dir = rand(0, 3);
+          wd.moveTimer = rand(30, 90);
+        }
+        var wdDirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
+        var wdd = wdDirs[wd.dir];
+        var wdnx = wd.x + wdd[0] * 1.2;
+        var wdny = wd.y + wdd[1] * 1.2;
+        if (canMove(wdnx, wdny, 5)) { wd.x = wdnx; wd.y = wdny; }
+      }
+      wd.state = 'patrol';
+      wd.animTimer++;
+    }
+  }
+
+  // ── FEATURE 7: FISHING MINI-GAME ──
+  if (f.fishingMiniGame) {
+    // Bar oscillates
+    f.fishingBarPos += f.fishingBarDir * dt * 2.5;
+    if (f.fishingBarPos >= 1) { f.fishingBarPos = 1; f.fishingBarDir = -1; }
+    if (f.fishingBarPos <= 0) { f.fishingBarPos = 0; f.fishingBarDir = 1; }
+    // Space to catch
+    if (consumeKey('Space')) {
+      var inGreen = f.fishingBarPos >= f.fishingGreenStart && f.fishingBarPos <= f.fishingGreenStart + f.fishingGreenZone;
+      if (inGreen) {
+        f.fishingMiniGame = false;
+        f.fishCount++;
+        // Determine catch
+        var fishRoll = Math.random();
+        if (fishRoll < 0.05) {
+          // Golden fish!
+          game.gold += 100;
+          game.totalGoldEarned += 100;
+          showNotification('GOLDEN FISH! +$100!');
+          if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+        } else {
+          var fishVal = rand(5, 20);
+          game.gold += fishVal;
+          game.totalGoldEarned += fishVal;
+          var fishNames = ['Catfish', 'Trout', 'Bass', 'Sunfish', 'Perch', 'Carp'];
+          showNotification('Caught a ' + fishNames[rand(0, fishNames.length - 1)] + '! +$' + fishVal);
+          if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+        }
+      } else {
+        f.fishingMiniGame = false;
+        showNotification('Fish got away! Missed the green zone.');
+        if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+      }
+    }
+    if (consumeKey('Escape')) {
+      f.fishingMiniGame = false;
+      showNotification('Stopped fishing.');
+    }
+  }
+  // Start fishing near water with F key (if not already resting)
+  if (!f.fishingMiniGame && !f.campfireResting && !f.goldPanningActive && game.state === 'playing' && consumeKey('KeyF')) {
+    var ptx2 = Math.floor(p.x / TILE);
+    var pty2 = Math.floor(p.y / TILE);
+    var nearWater2 = false;
+    for (var wdx2 = -2; wdx2 <= 2; wdx2++) {
+      for (var wdy2 = -2; wdy2 <= 2; wdy2++) {
+        var wtx2 = ptx2 + wdx2, wty2 = pty2 + wdy2;
+        if (wtx2 >= 0 && wtx2 < MAP_W && wty2 >= 0 && wty2 < MAP_H && game.map[wty2][wtx2] === 5) nearWater2 = true;
+      }
+    }
+    if (nearWater2) {
+      f.fishingMiniGame = true;
+      f.fishingBarPos = 0;
+      f.fishingBarDir = 1;
+      f.fishingGreenStart = randF(0.2, 0.5);
+      f.fishingGreenZone = 0.25;
+      showNotification('Fishing! Press SPACE when bar is in the green zone.');
+    }
+  }
+
+  // ── FEATURE 8: ARM WRESTLING IN SALOON ──
+  if (f.armWrestlingActive) {
+    f.armWrestleTimer += dt;
+    // Opponent pushes back
+    f.armWrestlePower -= f.armWrestleOpponentStr * dt * 30;
+    // Decay player power
+    f.armWrestlePower -= dt * 5;
+    // Space to push
+    if (consumeKey('Space')) {
+      f.armWrestlePower += 8 + Math.random() * 4;
+    }
+    f.armWrestlePower = clamp(f.armWrestlePower, 0, 100);
+    // Win/lose check
+    if (f.armWrestlePower >= 95) {
+      f.armWrestlingActive = false;
+      game.gold += f.armWrestleBet;
+      game.totalGoldEarned += f.armWrestleBet;
+      showNotification('You WON arm wrestling! +$' + f.armWrestleBet);
+      if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+      closeDialog();
+    } else if (f.armWrestlePower <= 5) {
+      f.armWrestlingActive = false;
+      game.gold -= f.armWrestleBet;
+      if (game.gold < 0) game.gold = 0;
+      showNotification('You LOST arm wrestling! -$' + f.armWrestleBet);
+      if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+      closeDialog();
+    }
+    if (f.armWrestleTimer > 15) {
+      // Timeout — draw
+      f.armWrestlingActive = false;
+      showNotification('Arm wrestling draw! No money exchanged.');
+      closeDialog();
+    }
+  }
+
+  // ── FEATURE 9: DYNAMIC NPC RELATIONSHIPS ──
+  // Relationship modifiers when near crimes — helping boosts, ignoring penalizes nearby NPCs
+  if (game.activeCrime) {
+    for (var rni = 0; rni < game.npcs.length; rni++) {
+      var rnpc = game.npcs[rni];
+      if (rnpc.type === NPC_TYPES.TOWNSPERSON && rnpc.state !== 'dead') {
+        var crDist = dist(rnpc, { x: game.activeCrime.x, y: game.activeCrime.y });
+        if (crDist < 150) {
+          var pDist = dist(p, { x: game.activeCrime.x, y: game.activeCrime.y });
+          if (pDist < 150) {
+            // Player is helping near this NPC — boost relationship
+            rnpc.relationship = clamp((rnpc.relationship || 50) + dt * 0.5, -100, 100);
+          } else {
+            // Player ignoring crime near this NPC — penalize
+            rnpc.relationship = clamp((rnpc.relationship || 50) - dt * 0.2, -100, 100);
+          }
+        }
+      }
+    }
+  }
+
+  // ── FEATURE 10: MINE EXPLORATION ──
+  if (f.mineActive) {
+    // Player movement in mine
+    var mSpeed = 2;
+    if (keys['KeyW'] || keys['ArrowUp']) f.minePlayerY -= mSpeed;
+    if (keys['KeyS'] || keys['ArrowDown']) f.minePlayerY += mSpeed;
+    if (keys['KeyA'] || keys['ArrowLeft']) f.minePlayerX -= mSpeed;
+    if (keys['KeyD'] || keys['ArrowRight']) f.minePlayerX += mSpeed;
+    f.minePlayerX = clamp(f.minePlayerX, 20, 280);
+    f.minePlayerY = clamp(f.minePlayerY, 20, 180);
+
+    // Collect gold nuggets
+    var room = f.mineRooms[f.mineRoom];
+    if (room) {
+      for (var mgi = room.gold.length - 1; mgi >= 0; mgi--) {
+        var mg = room.gold[mgi];
+        if (!mg.collected && Math.hypot(f.minePlayerX - mg.x, f.minePlayerY - mg.y) < 15) {
+          mg.collected = true;
+          var mVal = rand(10, 50);
+          f.mineGoldCollected += mVal;
+          game.gold += mVal;
+          game.totalGoldEarned += mVal;
+          showNotification('Found gold nugget! +$' + mVal);
+          if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+        }
+      }
+      // Fight mine enemies
+      for (var mei = room.enemies.length - 1; mei >= 0; mei--) {
+        var me = room.enemies[mei];
+        if (me.hp <= 0) continue;
+        // Enemy moves toward player
+        var medx = f.minePlayerX - me.x;
+        var medy = f.minePlayerY - me.y;
+        var melen = Math.hypot(medx, medy) || 1;
+        me.x += (medx / melen) * 0.8;
+        me.y += (medy / melen) * 0.8;
+        // Damage player
+        if (Math.hypot(medx, medy) < 15 && Math.random() < 0.02) {
+          if (!game._cheatMode) p.hp--;
+          showNotification('Mine bandit hits you! -1 HP');
+        }
+        // Player attacks with Space
+        if (consumeKey('Space') && Math.hypot(medx, medy) < 30) {
+          me.hp -= 2;
+          if (me.hp <= 0) {
+            showNotification('Defeated mine bandit!');
+            game.outlawsKilled++;
+          }
+        }
+      }
+      // Cave-in avoidance
+      for (var mci = 0; mci < room.caveIns.length; mci++) {
+        var mc = room.caveIns[mci];
+        if (!mc.triggered && Math.hypot(f.minePlayerX - mc.x, f.minePlayerY - mc.y) < 20) {
+          mc.triggered = true;
+          if (Math.random() < 0.5 && !game._cheatMode) {
+            p.hp -= 2;
+            showNotification('Cave-in! -2 HP!');
+          } else {
+            showNotification('Narrowly avoided a cave-in!');
+          }
+        }
+      }
+    }
+    // Move to next room (right edge)
+    if (f.minePlayerX >= 275 && f.mineRoom < f.mineRooms.length - 1) {
+      f.mineRoom++;
+      f.minePlayerX = 25;
+      showNotification('Entering mine room ' + (f.mineRoom + 1) + '...');
+    }
+    // Exit mine (left edge of room 0, or Escape)
+    if ((f.mineRoom === 0 && f.minePlayerX <= 25) || consumeKey('Escape')) {
+      f.mineActive = false;
+      showNotification('Left the mine. Collected $' + f.mineGoldCollected + ' in gold.');
+    }
+  }
+  // Start mine exploration — check for mine building or area
+  if (!f.mineActive && game.state === 'playing' && consumeKey('KeyE')) {
+    // Check if near blacksmith (mine entrance)
+    var ptx3 = Math.floor(p.x / TILE);
+    var pty3 = Math.floor(p.y / TILE);
+    var nearMine = false;
+    for (var mbi = 0; mbi < game.buildings.length; mbi++) {
+      var mb = game.buildings[mbi];
+      if (mb.type === BUILDING_TYPES.BLACKSMITH) {
+        var mdist = Math.hypot(ptx3 - (mb.x + mb.w / 2), pty3 - (mb.y + mb.h));
+        if (mdist < 4) nearMine = true;
+      }
+    }
+    if (nearMine) {
+      f.mineActive = true;
+      f.mineRoom = 0;
+      f.minePlayerX = 30;
+      f.minePlayerY = 100;
+      f.mineGoldCollected = 0;
+      // Generate 3 rooms
+      f.mineRooms = [];
+      for (var mri = 0; mri < 3; mri++) {
+        var roomGold = [];
+        for (var rgi = 0; rgi < rand(2, 4); rgi++) {
+          roomGold.push({ x: rand(40, 260), y: rand(30, 160), collected: false });
+        }
+        var roomEnemies = [];
+        if (mri > 0 && Math.random() < 0.6) {
+          roomEnemies.push({ x: rand(100, 200), y: rand(50, 140), hp: 4 });
+        }
+        var roomCaveIns = [];
+        for (var rcci = 0; rcci < rand(1, 3); rcci++) {
+          roomCaveIns.push({ x: rand(50, 250), y: rand(40, 150), triggered: false });
+        }
+        f.mineRooms.push({ gold: roomGold, enemies: roomEnemies, caveIns: roomCaveIns });
+      }
+      showNotification('Entered the mine! Collect gold, avoid cave-ins. ESC to exit.');
+    }
+  }
+
+  // ── FEATURE 11: NEWSPAPER SYSTEM (Enhanced) ──
+  if (game.dayCount > 0 && game.dayCount % 3 === 0 && f.newspaperShowDay !== game.dayCount) {
+    f.newspaperShowDay = game.dayCount;
+    f.newspaperReady = true;
+    // Generate headlines
+    f.newspaperHeadlines = [];
+    var headlinePool = [
+      game.crimesResolved + ' crimes resolved — Sheriff\'s reputation ' + (game.reputation > 60 ? 'soaring' : 'under scrutiny'),
+      f.bountiesCollected > 0 ? f.bountiesCollected + ' bounties collected by the Sheriff' : 'Wanted criminals still at large',
+      game.outlawsKilled + ' outlaws killed, ' + (game.outlawsArrested || 0) + ' arrested this season',
+      'Weather forecast: ' + (f.weather !== 'clear' ? f.weather : 'clear skies ahead'),
+      game.gold > 300 ? 'Town economy thriving under Sheriff\'s watch' : 'Economic downturn grips frontier town',
+      game.reputation > 70 ? 'Citizens praise Sheriff as hero' : (game.reputation < 30 ? 'Citizens demand new sheriff' : 'Mixed feelings about local law enforcement'),
+      f.festivalActive ? 'Town festival brings joy to citizens!' : 'Citizens await next town celebration',
+      (typeof game.corruption !== 'undefined' && game.corruption > 30) ? 'CORRUPTION SCANDAL: Sheriff under investigation!' : 'Sheriff\'s office maintains clean record'
+    ];
+    for (var nhi = 0; nhi < Math.min(4, headlinePool.length); nhi++) {
+      f.newspaperHeadlines.push(headlinePool[rand(0, headlinePool.length - 1)]);
+    }
+    showNotification('The Frontier Gazette has been published! Check your journal.');
+  }
+  // Show newspaper popup (P key or auto)
+  if (f.newspaperReady && game.state === 'playing' && consumeKey('KeyP')) {
+    f.newspaperReady = false;
+    game.reputation = clamp(game.reputation + 1, 0, REPUTATION_MAX);
+    var newsEl = document.getElementById('newspaper-popup');
+    var newsContent = document.getElementById('newspaper-content');
+    if (newsEl && newsContent) {
+      var newsHTML = '<p style="text-align:center;font-style:italic;margin-bottom:8px;">Day ' + game.dayCount + ' Edition</p>';
+      for (var nci = 0; nci < f.newspaperHeadlines.length; nci++) {
+        newsHTML += '<p style="margin:6px 0;border-bottom:1px solid #8a7a5a;padding-bottom:4px;">' + f.newspaperHeadlines[nci] + '</p>';
+      }
+      newsHTML += '<p style="font-size:10px;color:#5a4a3a;text-align:center;margin-top:8px;">Reading the paper: +1 Rep</p>';
+      newsContent.innerHTML = newsHTML;
+      newsEl.classList.remove('hidden');
+    }
+  }
+
+  // ── FEATURE 13: GOLD PANNING ──
+  if (f.goldPanningLastDay !== game.dayCount) {
+    f.goldPanningLastDay = game.dayCount;
+    f.goldPanningDoneToday = 0;
+  }
+  if (f.goldPanningActive) {
+    // Rocks scroll by, press E when gold flashes
+    f._goldPanTimer = (f._goldPanTimer || 0) + dt;
+    // Generate rocks
+    if (f.goldPanningRocks.length < 8) {
+      var isGold = Math.random() < 0.15;
+      var isGem = Math.random() < 0.03;
+      f.goldPanningRocks.push({
+        x: 310,
+        y: 90 + rand(-20, 20),
+        speed: randF(1.5, 3),
+        isGold: isGold,
+        isGem: isGem,
+        flash: isGold || isGem ? rand(5, 15) : 0
+      });
+    }
+    for (var gpi = f.goldPanningRocks.length - 1; gpi >= 0; gpi--) {
+      var gr = f.goldPanningRocks[gpi];
+      gr.x -= gr.speed;
+      if (gr.flash > 0) gr.flash--;
+      if (gr.x < -20) f.goldPanningRocks.splice(gpi, 1);
+    }
+    // Press E to grab
+    if (consumeKey('KeyE')) {
+      // Check if any gold/gem rock is near center (x=140-170)
+      var grabbed = false;
+      for (var ggi = f.goldPanningRocks.length - 1; ggi >= 0; ggi--) {
+        var ggr = f.goldPanningRocks[ggi];
+        if (ggr.x >= 120 && ggr.x <= 180) {
+          if (ggr.isGem) {
+            game.gold += 100;
+            game.totalGoldEarned += 100;
+            f.goldPanningScore += 100;
+            showNotification('RARE GEMSTONE! +$100!');
+            if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
+            grabbed = true;
+          } else if (ggr.isGold) {
+            var gpVal = rand(5, 25);
+            game.gold += gpVal;
+            game.totalGoldEarned += gpVal;
+            f.goldPanningScore += gpVal;
+            showNotification('Gold nugget! +$' + gpVal);
+            if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+            grabbed = true;
+          } else {
+            showNotification('Just a rock...');
+          }
+          f.goldPanningRocks.splice(ggi, 1);
+          break;
+        }
+      }
+      if (!grabbed) {
+        showNotification('Nothing to grab! Wait for rocks to pass the center.');
+      }
+    }
+    // Escape to stop
+    if (consumeKey('Escape') || f._goldPanTimer > 20) {
+      f.goldPanningActive = false;
+      f.goldPanningDoneToday++;
+      showNotification('Gold panning done. Earned $' + f.goldPanningScore + ' this session.');
+    }
+  }
+  // Start gold panning near water with E key (same area as fishing but different key logic)
+  // Actually triggered by pressing E near water when not in mine — handled alongside fishing
+  // We'll use a separate trigger: if near water and no dialog, pressing G starts gold panning
+  if (!f.goldPanningActive && !f.fishingMiniGame && !f.mineActive && game.state === 'playing' && consumeKey('KeyG')) {
+    var ptx4 = Math.floor(p.x / TILE);
+    var pty4 = Math.floor(p.y / TILE);
+    var nearWater3 = false;
+    for (var wdx3 = -2; wdx3 <= 2; wdx3++) {
+      for (var wdy3 = -2; wdy3 <= 2; wdy3++) {
+        var wtx3 = ptx4 + wdx3, wty3 = pty4 + wdy3;
+        if (wtx3 >= 0 && wtx3 < MAP_W && wty3 >= 0 && wty3 < MAP_H && game.map[wty3][wtx3] === 5) nearWater3 = true;
+      }
+    }
+    if (nearWater3 && f.goldPanningDoneToday < f.goldPanningMaxPerDay) {
+      f.goldPanningActive = true;
+      f.goldPanningRocks = [];
+      f.goldPanningScore = 0;
+      f._goldPanTimer = 0;
+      showNotification('Gold panning! Press E when gold nuggets pass the center. (' + (f.goldPanningMaxPerDay - f.goldPanningDoneToday) + ' pans left today)');
+    } else if (nearWater3 && f.goldPanningDoneToday >= f.goldPanningMaxPerDay) {
+      showNotification('Already panned ' + f.goldPanningMaxPerDay + ' times today. Come back tomorrow.');
+    }
+  }
+
+  // ── FEATURE 14: TOWN EVENTS / FESTIVALS ──
+  if (game.dayCount > 0 && game.dayCount % 7 === 0 && f.festivalLastDay !== game.dayCount && !f.festivalActive) {
+    f.festivalLastDay = game.dayCount;
+    f.festivalActive = true;
+    var festTypes = ['Rodeo', 'Harvest Festival', 'Independence Day', 'County Fair'];
+    f.festivalType = festTypes[rand(0, festTypes.length - 1)];
+    f.festivalTimer = DAY_LENGTH; // lasts 1 full day
+    // Generate decorations on buildings
+    f.festivalDecorations = [];
+    for (var fdi = 0; fdi < game.buildings.length; fdi++) {
+      var fb = game.buildings[fdi];
+      f.festivalDecorations.push({
+        x: fb.x * TILE + (fb.w * TILE) / 2,
+        y: fb.y * TILE - 5,
+        type: rand(0, 2) // 0=bunting, 1=flag, 2=banner
+      });
+    }
+    showNotification('TOWN FESTIVAL: ' + f.festivalType + '! Bonus gold from all sources today!');
+    addJournalEntry('Town festival: ' + f.festivalType + ' celebration!');
+    if (typeof audio !== 'undefined' && audio.playCheer) audio.playCheer();
+  }
+  if (f.festivalActive) {
+    f.festivalTimer -= dt;
+    // Fireworks at night during festival
+    if ((game.time > 0.8 || game.time < 0.15) && Math.random() < 0.03) {
+      f.festivalFireworks.push({
+        x: rand(100, gameCanvas.width - 100),
+        y: rand(30, 150),
+        color: ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff'][rand(0, 5)],
+        life: 40,
+        sparks: []
+      });
+      // Generate sparks for the firework
+      var fw = f.festivalFireworks[f.festivalFireworks.length - 1];
+      for (var fsi2 = 0; fsi2 < 12; fsi2++) {
+        var fAngle = (fsi2 / 12) * Math.PI * 2;
+        fw.sparks.push({
+          x: fw.x, y: fw.y,
+          dx: Math.cos(fAngle) * randF(1, 3),
+          dy: Math.sin(fAngle) * randF(1, 3),
+          life: rand(15, 30)
+        });
+      }
+    }
+    // Update fireworks
+    for (var fwi = f.festivalFireworks.length - 1; fwi >= 0; fwi--) {
+      var fwork = f.festivalFireworks[fwi];
+      fwork.life--;
+      for (var fsi3 = fwork.sparks.length - 1; fsi3 >= 0; fsi3--) {
+        var sp = fwork.sparks[fsi3];
+        sp.x += sp.dx;
+        sp.y += sp.dy;
+        sp.dy += 0.05; // gravity
+        sp.life--;
+        if (sp.life <= 0) fwork.sparks.splice(fsi3, 1);
+      }
+      if (fwork.life <= 0 && fwork.sparks.length === 0) f.festivalFireworks.splice(fwi, 1);
+    }
+    // Festival bonus gold — periodic bonus
+    f._festBonusTimer = (f._festBonusTimer || 0) + dt;
+    if (f._festBonusTimer > 30) {
+      f._festBonusTimer = 0;
+      var festBonus = rand(10, 25);
+      game.gold += festBonus;
+      game.totalGoldEarned += festBonus;
+      showNotification('Festival commerce bonus: +$' + festBonus);
+    }
+    // NPC special festival dialogs are handled via relationship boost
+    for (var fnpc = 0; fnpc < game.npcs.length; fnpc++) {
+      if (game.npcs[fnpc].type === NPC_TYPES.TOWNSPERSON) {
+        game.npcs[fnpc].relationship = clamp((game.npcs[fnpc].relationship || 50) + dt * 0.1, -100, 100);
+      }
+    }
+    // End festival
+    if (f.festivalTimer <= 0) {
+      f.festivalActive = false;
+      f.festivalFireworks = [];
+      f.festivalDecorations = [];
+      showNotification('The ' + f.festivalType + ' festival has ended.');
+    }
+  }
+
+  // ── FEATURE 15: REVENGE SYSTEM ──
+  // When outlaw killed/arrested, chance to queue revenge seeker
+  f._lastOutlawsKilledRevenge = f._lastOutlawsKilledRevenge || 0;
+  f._lastOutlawsArrestedRevenge = f._lastOutlawsArrestedRevenge || 0;
+  var totalNeutralized = (game.outlawsKilled || 0) + (game.outlawsArrested || 0);
+  var prevNeutralized = f._lastOutlawsKilledRevenge + f._lastOutlawsArrestedRevenge;
+  if (totalNeutralized > prevNeutralized) {
+    f._lastOutlawsKilledRevenge = game.outlawsKilled || 0;
+    f._lastOutlawsArrestedRevenge = game.outlawsArrested || 0;
+    // 30% chance of revenge (10% if intimidated bosses = high rep)
+    var revengeChance = game.reputation > 80 ? 0.10 : 0.30;
+    if (Math.random() < revengeChance) {
+      var revDay = game.dayCount + rand(2, 3);
+      var revNames = ['Vengeance Vic', 'Grudge Grady', 'Payback Pete', 'Fury Frank', 'Wrath Warren',
+        'Retribution Ray', 'Malice Mike', 'Rancor Russ', 'Spite Steve', 'Vendetta Val'];
+      f.revengeQueue.push({
+        spawnDay: revDay,
+        name: revNames[rand(0, revNames.length - 1)]
+      });
+    }
+  }
+  // Spawn queued revenge seekers
+  for (var rqi = f.revengeQueue.length - 1; rqi >= 0; rqi--) {
+    if (game.dayCount >= f.revengeQueue[rqi].spawnDay) {
+      var revInfo = f.revengeQueue.splice(rqi, 1)[0];
+      var revNPC = createNPC(game.npcs.length + 950 + rqi, NPC_TYPES.OUTLAW, revInfo.name,
+        rand(2, MAP_W - 2), rand(2, MAP_H - 2), null);
+      revNPC.hostile = true;
+      revNPC.hp = 10;
+      revNPC.maxHp = 10;
+      revNPC.speed = 2.5;
+      revNPC._revengeSeeker = true;
+      game.npcs.push(revNPC);
+      f.revengeSeekers.push(revNPC);
+      showNotification('REVENGE! ' + revInfo.name + ' is hunting you!');
+      addJournalEntry('A revenge seeker named ' + revInfo.name + ' is after you!');
+      if (typeof audio !== 'undefined' && audio.playPanic) audio.playPanic();
+    }
+  }
+  // Revenge seekers actively hunt player
+  for (var rsi = f.revengeSeekers.length - 1; rsi >= 0; rsi--) {
+    var rs = f.revengeSeekers[rsi];
+    if (rs.state === 'dead') {
+      if (!rs._revengeRewardGiven) {
+        rs._revengeRewardGiven = true;
+        var revReward = rand(50, 150);
+        game.gold += revReward;
+        game.totalGoldEarned += revReward;
+        game.reputation = clamp(game.reputation + 5, 0, REPUTATION_MAX);
+        f.revengeKills++;
+        showNotification('Revenge seeker defeated! +$' + revReward + ', +5 Rep (FEARED)');
+      }
+      f.revengeSeekers.splice(rsi, 1);
+      continue;
+    }
+    if (rs.state === 'arrested') {
+      f.revengeSeekers.splice(rsi, 1);
+      continue;
+    }
+    // Active hunting — move toward player
+    var rsdx = p.x - rs.x;
+    var rsdy = p.y - rs.y;
+    var rslen = Math.hypot(rsdx, rsdy) || 1;
+    if (rslen > 30) {
+      var rnx = rs.x + (rsdx / rslen) * rs.speed;
+      var rny = rs.y + (rsdy / rslen) * rs.speed;
+      if (canMove(rnx, rs.y, 5)) rs.x = rnx;
+      if (canMove(rs.x, rny, 5)) rs.y = rny;
+    }
+  }
+
   // ── Track gold nugget drops from killed NPCs ──
   f._lastOutlawsKilled = f._lastOutlawsKilled || 0;
   if (game.outlawsKilled > f._lastOutlawsKilled) {
@@ -1269,6 +2296,535 @@ function renderFeaturesOverlay() {
     ctx.fillStyle = f.rivalRep > game.reputation ? '#cc4444' : '#44cc44';
     ctx.font = '8px monospace';
     ctx.fillText('Rival: ' + f.rivalName + ' (' + f.rivalRep + ')', w - 150, 82);
+  }
+
+  // ════════════════════════════════════════════════════
+  // ══ NEW 15 FEATURES — RENDER ══
+  // ════════════════════════════════════════════════════
+
+  // ── FEATURE 1: WANTED NPC indicators + bounty float text ──
+  for (var wri = 0; wri < f.wantedNPCs.length; wri++) {
+    var wrn = f.wantedNPCs[wri];
+    if (wrn.state === 'dead' || wrn.state === 'arrested') continue;
+    var wsx = wrn.x - camX;
+    var wsy = wrn.y - camY;
+    if (wsx < -30 || wsx > w + 30 || wsy < -30 || wsy > h + 30) continue;
+    // Pulsing red "WANTED" label
+    ctx.fillStyle = 'rgba(200, 0, 0, ' + (0.6 + Math.sin(Date.now() * 0.005) * 0.3) + ')';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('WANTED $' + (wrn._wantedBounty || 200), wsx, wsy - 22);
+    // Skull icon
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.arc(wsx, wsy - 28, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'left';
+  }
+  // Bounty collected float text
+  if (f._bountyFloatText) {
+    var bft = f._bountyFloatText;
+    var bfx = bft.x - camX;
+    var bfy = bft.y - camY;
+    var bfAlpha = bft.life / 90;
+    ctx.globalAlpha = bfAlpha;
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(bft.text, bfx, bfy);
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+  }
+  // HUD: wanted NPC counter
+  if (f.wantedNPCs.length > 0) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('WANTED: ' + f.wantedNPCs.length + ' targets', 10, h - 60);
+  }
+
+  // ── FEATURE 2: FOG & DUST STORM rendering ──
+  if (f.weather === 'fog') {
+    // White semi-transparent overlay
+    ctx.fillStyle = 'rgba(200, 210, 220, 0.25)';
+    ctx.fillRect(0, 0, w, h);
+    // Fog blobs
+    for (var fgi = 0; fgi < f.fogParticles.length; fgi++) {
+      var fg = f.fogParticles[fgi];
+      ctx.fillStyle = 'rgba(220, 230, 240, ' + fg.alpha + ')';
+      ctx.beginPath();
+      ctx.arc(fg.x, fg.y, fg.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (f.weather === 'dust_storm') {
+    // Orange-brown overlay
+    ctx.fillStyle = 'rgba(160, 120, 60, 0.35)';
+    ctx.fillRect(0, 0, w, h);
+    // Blowing particles
+    for (var dsri = 0; dsri < f.dustStormParticles.length; dsri++) {
+      var dsp = f.dustStormParticles[dsri];
+      ctx.fillStyle = 'rgba(180, 140, 80, ' + dsp.alpha + ')';
+      ctx.fillRect(dsp.x, dsp.y, dsp.size * 2, dsp.size);
+    }
+  }
+
+  // ── FEATURE 3: HORSE RACING overlay ──
+  if (f.horseRaceActive) {
+    // Draw race track overlay
+    ctx.fillStyle = 'rgba(10, 6, 2, 0.85)';
+    ctx.fillRect(w * 0.05, h * 0.3, w * 0.9, h * 0.4);
+    ctx.strokeStyle = '#8b6914';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w * 0.05, h * 0.3, w * 0.9, h * 0.4);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('HORSE RACE', w / 2, h * 0.3 + 20);
+
+    var trackLeft = w * 0.1;
+    var trackRight = w * 0.85;
+    var trackW = trackRight - trackLeft;
+    var raceLen2 = 600;
+
+    // Draw lanes
+    var laneNames = ['YOU', 'Horse A', 'Horse B', 'Horse C'];
+    var lanePositions = [f.horseRacePlayerPos, f.horseRaceAI[0], f.horseRaceAI[1], f.horseRaceAI[2]];
+    var laneColors = ['#ffd700', '#cc4444', '#44cc44', '#4488cc'];
+    for (var li = 0; li < 4; li++) {
+      var ly = h * 0.38 + li * 28;
+      // Track lane
+      ctx.fillStyle = '#3a2a14';
+      ctx.fillRect(trackLeft, ly - 5, trackW, 16);
+      ctx.strokeStyle = '#5a3a18';
+      ctx.strokeRect(trackLeft, ly - 5, trackW, 16);
+      // Horse position
+      var hx = trackLeft + (lanePositions[li] / raceLen2) * trackW;
+      hx = Math.min(hx, trackRight);
+      ctx.fillStyle = laneColors[li];
+      ctx.fillRect(hx - 6, ly - 3, 12, 12);
+      // Label
+      ctx.fillStyle = laneColors[li];
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(laneNames[li], trackLeft - 5, ly + 6);
+    }
+    // Finish line
+    ctx.strokeStyle = '#ffffff';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(trackRight, h * 0.35);
+    ctx.lineTo(trackRight, h * 0.65);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Phase text
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    if (f.horseRacePhase === 0) {
+      ctx.fillText('Starting in ' + Math.ceil(f.horseRaceTimer) + '...', w / 2, h * 0.68);
+    } else if (f.horseRacePhase === 1) {
+      ctx.fillText('PRESS SPACE TO BOOST!', w / 2, h * 0.68);
+    } else {
+      ctx.fillText('RACE OVER!', w / 2, h * 0.68);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 4: BANK ROBBERY timer ──
+  if (f.bankRobberyActive) {
+    ctx.fillStyle = 'rgba(150, 0, 0, 0.8)';
+    ctx.fillRect(w / 2 - 110, 105, 220, 30);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('BANK ROBBERY: ' + Math.ceil(f.bankRobberyTimer) + 's remaining', w / 2, 125);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 5: CAMPFIRE RESTING indicator ──
+  if (f.campfireResting) {
+    ctx.fillStyle = 'rgba(20, 12, 4, 0.6)';
+    ctx.fillRect(w / 2 - 100, h - 80, 200, 24);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('RESTING... (ESC to stand)', w / 2, h - 64);
+    if (f.campfireSupplies > 0) {
+      ctx.fillText('Cooking... (' + f.campfireSupplies + ' supplies)', w / 2, h - 52);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 6: WORLD DEPUTIES rendering ──
+  for (var wdri = 0; wdri < f.worldDeputies.length; wdri++) {
+    var wdr = f.worldDeputies[wdri];
+    var wdx4 = wdr.x - camX;
+    var wdy4 = wdr.y - camY;
+    if (wdx4 < -20 || wdx4 > w + 20 || wdy4 < -20 || wdy4 > h + 20) continue;
+    // Body
+    ctx.fillStyle = '#4a5a8a';
+    ctx.fillRect(wdx4 - 5, wdy4 - 3, 10, 12);
+    // Head
+    ctx.fillStyle = PALETTE.skin;
+    ctx.beginPath();
+    ctx.arc(wdx4, wdy4 - 6, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Hat
+    ctx.fillStyle = '#3a2a14';
+    ctx.fillRect(wdx4 - 6, wdy4 - 12, 12, 3);
+    ctx.fillRect(wdx4 - 4, wdy4 - 15, 8, 4);
+    // Badge
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(wdx4 - 1, wdy4 - 1, 3, 3);
+    // Name & HP
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(wdr.name, wdx4, wdy4 - 18);
+    // HP bar
+    ctx.fillStyle = '#440000';
+    ctx.fillRect(wdx4 - 10, wdy4 + 12, 20, 3);
+    ctx.fillStyle = '#44cc44';
+    ctx.fillRect(wdx4 - 10, wdy4 + 12, (wdr.hp / wdr.maxHp) * 20, 3);
+    ctx.textAlign = 'left';
+    // Fighting indicator
+    if (wdr.state === 'fighting') {
+      ctx.fillStyle = '#ff4444';
+      ctx.font = '6px monospace';
+      ctx.fillText('!', wdx4 + 8, wdy4 - 10);
+    }
+  }
+
+  // ── FEATURE 7: FISHING MINI-GAME overlay ──
+  if (f.fishingMiniGame) {
+    ctx.fillStyle = 'rgba(10, 30, 50, 0.85)';
+    ctx.fillRect(w / 2 - 120, h / 2 - 60, 240, 120);
+    ctx.strokeStyle = '#4a8aaa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w / 2 - 120, h / 2 - 60, 240, 120);
+
+    ctx.fillStyle = '#88ccff';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('FISHING', w / 2, h / 2 - 40);
+
+    // Bar background
+    var barX = w / 2 - 90;
+    var barY = h / 2 - 15;
+    var barW = 180;
+    var barH = 20;
+    ctx.fillStyle = '#1a1a3a';
+    ctx.fillRect(barX, barY, barW, barH);
+    // Green zone
+    ctx.fillStyle = 'rgba(50, 200, 50, 0.5)';
+    ctx.fillRect(barX + f.fishingGreenStart * barW, barY, f.fishingGreenZone * barW, barH);
+    // Cursor
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(barX + f.fishingBarPos * barW - 2, barY - 3, 4, barH + 6);
+
+    ctx.fillStyle = '#88ccff';
+    ctx.font = '10px monospace';
+    ctx.fillText('Press SPACE in the green zone!', w / 2, h / 2 + 35);
+    ctx.fillText('ESC to cancel', w / 2, h / 2 + 50);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 8: ARM WRESTLING overlay ──
+  if (f.armWrestlingActive) {
+    ctx.fillStyle = 'rgba(30, 18, 6, 0.9)';
+    ctx.fillRect(w / 2 - 150, h / 2 - 80, 300, 160);
+    ctx.strokeStyle = '#8b6914';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w / 2 - 150, h / 2 - 80, 300, 160);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ARM WRESTLING vs ' + f.armWrestleOpponentName, w / 2, h / 2 - 55);
+
+    // Power bar
+    var awBarX = w / 2 - 120;
+    var awBarY = h / 2 - 20;
+    var awBarW = 240;
+    var awBarH = 25;
+    ctx.fillStyle = '#1a0a04';
+    ctx.fillRect(awBarX, awBarY, awBarW, awBarH);
+    // Player side (left=lose, right=win)
+    var awPct = f.armWrestlePower / 100;
+    ctx.fillStyle = awPct > 0.5 ? '#44cc44' : (awPct > 0.25 ? '#cccc44' : '#cc4444');
+    ctx.fillRect(awBarX, awBarY, awPct * awBarW, awBarH);
+    // Center line
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(w / 2, awBarY);
+    ctx.lineTo(w / 2, awBarY + awBarH);
+    ctx.stroke();
+    // Win/lose labels
+    ctx.fillStyle = '#cc4444';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('LOSE', awBarX + 5, awBarY + 16);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#44cc44';
+    ctx.fillText('WIN', awBarX + awBarW - 5, awBarY + 16);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8d5a3';
+    ctx.font = '11px monospace';
+    ctx.fillText('MASH SPACE! Bet: $' + f.armWrestleBet, w / 2, h / 2 + 40);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 9: NPC RELATIONSHIP colors ──
+  // Name colors are rendered in the existing NPC name label area — we draw over
+  for (var reli = 0; reli < game.npcs.length; reli++) {
+    var relNPC = game.npcs[reli];
+    if (relNPC.state === 'dead' || relNPC.state === 'arrested') continue;
+    if (relNPC.type === NPC_TYPES.OUTLAW || relNPC.type === NPC_TYPES.BOUNTY) continue;
+    var relX = relNPC.x - camX;
+    var relY = relNPC.y - camY;
+    if (relX < -30 || relX > w + 30 || relY < -30 || relY > h + 30) continue;
+    var rel = relNPC.relationship || 50;
+    var relColor = rel > 70 ? '#44cc44' : (rel > 30 ? '#cccc44' : '#cc4444');
+    ctx.fillStyle = relColor;
+    ctx.font = '7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(relNPC.name, relX, relY - 16);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 10: MINE EXPLORATION overlay ──
+  if (f.mineActive) {
+    // Full screen mine view
+    ctx.fillStyle = '#0a0804';
+    ctx.fillRect(0, 0, w, h);
+    // Mine room
+    var mOffX = (w - 300) / 2;
+    var mOffY = (h - 200) / 2;
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(mOffX, mOffY, 300, 200);
+    ctx.strokeStyle = '#5a3a18';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mOffX, mOffY, 300, 200);
+    // Room label
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('MINE - Room ' + (f.mineRoom + 1) + '/3', w / 2, mOffY - 10);
+    // Draw room contents
+    var room2 = f.mineRooms[f.mineRoom];
+    if (room2) {
+      // Gold nuggets
+      for (var mgr = 0; mgr < room2.gold.length; mgr++) {
+        var mg2 = room2.gold[mgr];
+        if (mg2.collected) continue;
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(mOffX + mg2.x, mOffY + mg2.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff8c0';
+        ctx.fillRect(mOffX + mg2.x - 1, mOffY + mg2.y - 1, 2, 2);
+      }
+      // Enemies
+      for (var mer = 0; mer < room2.enemies.length; mer++) {
+        var me2 = room2.enemies[mer];
+        if (me2.hp <= 0) continue;
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(mOffX + me2.x - 5, mOffY + me2.y - 6, 10, 12);
+        ctx.fillStyle = '#880000';
+        ctx.fillRect(mOffX + me2.x - 6, mOffY + me2.y - 10, 12, 4);
+        ctx.fillStyle = '#ff4444';
+        ctx.font = '7px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BANDIT', mOffX + me2.x, mOffY + me2.y - 12);
+      }
+      // Cave-ins
+      for (var mcr = 0; mcr < room2.caveIns.length; mcr++) {
+        var mc2 = room2.caveIns[mcr];
+        if (mc2.triggered) continue;
+        ctx.fillStyle = 'rgba(100, 80, 50, 0.4)';
+        ctx.beginPath();
+        ctx.arc(mOffX + mc2.x, mOffY + mc2.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#6a5a3a';
+        ctx.font = '6px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('crack', mOffX + mc2.x, mOffY + mc2.y + 3);
+      }
+    }
+    // Player
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(mOffX + f.minePlayerX - 4, mOffY + f.minePlayerY - 6, 8, 12);
+    ctx.fillStyle = PALETTE.skin;
+    ctx.beginPath();
+    ctx.arc(mOffX + f.minePlayerX, mOffY + f.minePlayerY - 8, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Instructions
+    ctx.fillStyle = '#a09070';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('WASD: Move | SPACE: Attack | ESC: Exit | Right edge: Next room', w / 2, mOffY + 218);
+    ctx.fillText('Gold collected: $' + f.mineGoldCollected, w / 2, mOffY + 230);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 13: GOLD PANNING overlay ──
+  if (f.goldPanningActive) {
+    ctx.fillStyle = 'rgba(10, 20, 40, 0.85)';
+    ctx.fillRect(w / 2 - 160, h / 2 - 70, 320, 140);
+    ctx.strokeStyle = '#8a7a5a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w / 2 - 160, h / 2 - 70, 320, 140);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('GOLD PANNING', w / 2, h / 2 - 50);
+
+    // Pan area
+    var panLeft = w / 2 - 140;
+    var panY = h / 2 - 15;
+    ctx.fillStyle = '#2a1a08';
+    ctx.fillRect(panLeft, panY, 280, 40);
+    // Center zone marker
+    ctx.strokeStyle = '#ffd700';
+    ctx.setLineDash([2, 2]);
+    ctx.strokeRect(panLeft + 110, panY - 3, 60, 46);
+    ctx.setLineDash([]);
+
+    // Rocks
+    for (var gpr = 0; gpr < f.goldPanningRocks.length; gpr++) {
+      var grock = f.goldPanningRocks[gpr];
+      var grx = panLeft + (grock.x / 310) * 280;
+      var gry = panY + 20 + (grock.y - 90);
+      if (grock.isGem) {
+        ctx.fillStyle = '#ff44ff';
+        ctx.beginPath();
+        ctx.arc(grx, gry, 5, 0, Math.PI * 2);
+        ctx.fill();
+        if (grock.flash > 0) {
+          ctx.fillStyle = 'rgba(255, 100, 255, 0.5)';
+          ctx.beginPath();
+          ctx.arc(grx, gry, 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (grock.isGold) {
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(grx, gry, 4, 0, Math.PI * 2);
+        ctx.fill();
+        if (grock.flash > 0) {
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+          ctx.beginPath();
+          ctx.arc(grx, gry, 7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = '#6a5a4a';
+        ctx.beginPath();
+        ctx.arc(grx, gry, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = '#e8d5a3';
+    ctx.font = '10px monospace';
+    ctx.fillText('Press E when GOLD passes the center! ESC to stop.', w / 2, h / 2 + 55);
+    ctx.fillText('Score: $' + f.goldPanningScore, w / 2, h / 2 + 68);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 14: FESTIVAL decorations & fireworks ──
+  if (f.festivalActive) {
+    // Festival banner
+    ctx.fillStyle = 'rgba(20, 12, 4, 0.8)';
+    ctx.fillRect(w / 2 - 100, 60, 200, 22);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('FESTIVAL: ' + f.festivalType.toUpperCase(), w / 2, 76);
+    ctx.textAlign = 'left';
+
+    // Building decorations (bunting/flags)
+    for (var fdi2 = 0; fdi2 < f.festivalDecorations.length; fdi2++) {
+      var fdec = f.festivalDecorations[fdi2];
+      var fdx2 = fdec.x - camX;
+      var fdy2 = fdec.y - camY;
+      if (fdx2 < -30 || fdx2 > w + 30 || fdy2 < -30 || fdy2 > h + 30) continue;
+      if (fdec.type === 0) {
+        // Bunting
+        ctx.strokeStyle = '#cc4444';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(fdx2 - 15, fdy2);
+        ctx.quadraticCurveTo(fdx2, fdy2 + 8, fdx2 + 15, fdy2);
+        ctx.stroke();
+        ctx.strokeStyle = '#4444cc';
+        ctx.beginPath();
+        ctx.moveTo(fdx2 - 10, fdy2);
+        ctx.quadraticCurveTo(fdx2, fdy2 + 6, fdx2 + 10, fdy2);
+        ctx.stroke();
+      } else if (fdec.type === 1) {
+        // Flag
+        ctx.fillStyle = '#cc4444';
+        ctx.fillRect(fdx2, fdy2 - 10, 2, 12);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(fdx2 + 2, fdy2 - 10, 8, 6);
+      } else {
+        // Banner
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '6px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('FEST', fdx2, fdy2 - 2);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // Fireworks
+    for (var fwri = 0; fwri < f.festivalFireworks.length; fwri++) {
+      var fwk = f.festivalFireworks[fwri];
+      for (var fsi4 = 0; fsi4 < fwk.sparks.length; fsi4++) {
+        var sp2 = fwk.sparks[fsi4];
+        var spAlpha = sp2.life / 30;
+        ctx.globalAlpha = spAlpha;
+        ctx.fillStyle = fwk.color;
+        ctx.beginPath();
+        ctx.arc(sp2.x, sp2.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── FEATURE 15: REVENGE SEEKER indicators ──
+  for (var rsri = 0; rsri < f.revengeSeekers.length; rsri++) {
+    var rsr = f.revengeSeekers[rsri];
+    if (rsr.state === 'dead') continue;
+    var rsx = rsr.x - camX;
+    var rsy = rsr.y - camY;
+    if (rsx < -30 || rsx > w + 30 || rsy < -30 || rsy > h + 30) continue;
+    // Pulsing danger label
+    ctx.fillStyle = 'rgba(255, 0, 0, ' + (0.6 + Math.sin(Date.now() * 0.008) * 0.3) + ')';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('REVENGE', rsx, rsy - 22);
+    ctx.textAlign = 'left';
+  }
+
+  // ── FEATURE 11: Newspaper HUD hint ──
+  if (f.newspaperReady) {
+    ctx.fillStyle = '#ccaa55';
+    ctx.font = '9px monospace';
+    ctx.fillText('Press P to read the Frontier Gazette', 10, h - 75);
+  }
+
+  // ── Bank closed indicator ──
+  if (f.bankClosedUntilDay >= game.dayCount) {
+    ctx.fillStyle = '#cc4444';
+    ctx.font = '9px monospace';
+    ctx.fillText('BANK CLOSED (reopens day ' + (f.bankClosedUntilDay + 1) + ')', 10, h - 90);
   }
 
   // ── Hidden Crates from telegram events ──

@@ -2279,10 +2279,30 @@ function doJailAction(action) {
       if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
       break;
 
-    case 2: // Execute
-      showNotification(p.name + ' hanged. -8 Rep. Fear keeps order.');
-      game.reputation = clamp((game.reputation || 50) - 8, 0, REPUTATION_MAX);
-      addJournalEntry('Executed prisoner ' + p.name + ' by hanging.');
+    case 2: // Execute / Schedule Execution
+      // Feature 12: Enhanced Gallows system
+      var daysJailed = (game.dayCount || 1) - (p.jailDay || 0);
+      var severeCrime = (p.crime && (p.crime.indexOf('murder') !== -1 || p.crime.indexOf('Murder') !== -1 ||
+        p.crime.indexOf('robbery') !== -1 || p.crime.indexOf('Robbery') !== -1 ||
+        p.crime.indexOf('Bank') !== -1 || p.crime.indexOf('Assault') !== -1 || p.crime.indexOf('kill') !== -1));
+      if (daysJailed >= 5 && severeCrime) {
+        // Public execution event
+        showNotification('PUBLIC EXECUTION! ' + p.name + ' hanged at the gallows! +10 Rep, -5 morality.');
+        game.reputation = clamp((game.reputation || 50) + 10, 0, REPUTATION_MAX);
+        if (typeof game.corruption !== 'undefined') game.corruption = (game.corruption || 0) + 5;
+        addJournalEntry('Public execution of ' + p.name + ' at the town gallows. The crowd watches in silence.');
+        // Other prisoners become more obedient
+        for (var epi = 0; epi < office.prisoners.length; epi++) {
+          if (office.prisoners[epi] !== p) {
+            office.prisoners[epi].mood = Math.min(100, (office.prisoners[epi].mood || 50) + 20);
+          }
+        }
+      } else {
+        // Standard execution (legacy behavior for non-qualifying prisoners)
+        showNotification(p.name + ' hanged. -5 Rep. Fear keeps order.');
+        game.reputation = clamp((game.reputation || 50) - 5, 0, REPUTATION_MAX);
+        addJournalEntry('Executed prisoner ' + p.name + ' by hanging.');
+      }
       office.prisonerLog.push({ name: p.name, crime: p.crime, fate: 'executed', day: game.dayCount || 1 });
       office.prisoners.splice(office.selectedPrisoner, 1);
       if (office.selectedPrisoner >= office.prisoners.length) {
@@ -3946,7 +3966,13 @@ function drawJailView(W, H) {
       if (isSel) {
         ctx.fillStyle = PALETTE.uiText;
         ctx.font = (fs - 1) + 'px monospace';
-        ctx.fillText('    [1]Release [2]Interrogate [3]Execute [F]Feed [T]Transfer [X]Work', px + margin, iy + fs * 3 + 5);
+        // Feature 12: Show "Schedule Execution" if prisoner qualifies (5+ days, severe crime)
+        var daysIn = (game.dayCount || 1) - (p.jailDay || p.day || 0);
+        var isSevere = (p.crime && (p.crime.indexOf('murder') !== -1 || p.crime.indexOf('Murder') !== -1 ||
+          p.crime.indexOf('robbery') !== -1 || p.crime.indexOf('Robbery') !== -1 ||
+          p.crime.indexOf('Bank') !== -1 || p.crime.indexOf('Assault') !== -1 || p.crime.indexOf('kill') !== -1));
+        var execLabel = (daysIn >= 5 && isSevere) ? '[3]PUBLIC EXECUTION' : '[3]Execute';
+        ctx.fillText('    [1]Release [2]Interrogate ' + execLabel + ' [F]Feed [T]Transfer [X]Work', px + margin, iy + fs * 3 + 5);
       }
     }
   }
@@ -4096,6 +4122,7 @@ function drawUpgradeMenu(W, H) {
 var _origPush = office.prisoners.push;
 office.prisoners.push = function(p) {
   if (p.mood === undefined) p.mood = 60 + rand(-10, 10);
+  if (p.jailDay === undefined) p.jailDay = (typeof game !== 'undefined' && game.dayCount) ? game.dayCount : 1;
   return _origPush.call(office.prisoners, p);
 };
 
