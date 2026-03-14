@@ -3998,13 +3998,30 @@ function openDialog(npc) {
       { text: '3. Walk away', action: 'leave' }
     ];
   } else if (npc.type === NPC_TYPES.OUTLAW && !npc.hostile) {
-    var surrenderDialogs = dialogs.surrender;
-    text = surrenderDialogs[rand(0, surrenderDialogs.length - 1)];
-    choices = [
-      { text: '1. "You\'re under arrest."', action: 'arrest' },
-      { text: '2. "Get out of my town."', action: 'banish' },
-      { text: '3. Accept bribe ($50)', action: 'bribe' }
-    ];
+    var isAlly = typeof isOutlawAlly === 'function' && isOutlawAlly();
+    if (isAlly) {
+      var allyDialogs = [
+        "Hey boss, need anything? I got some goods...",
+        "Sheriff! Good to see a friend. What's the play?",
+        "We're on the same side now, right?",
+        "Got a deal for you, partner. Unless you got other plans...",
+        "The boys and I are laying low. What do you need?"
+      ];
+      text = allyDialogs[rand(0, allyDialogs.length - 1)];
+      choices = [
+        { text: '1. "You\'re under arrest." [Betray]', action: 'arrest' },
+        { text: '2. Black market deal', action: 'ally_deal' },
+        { text: '3. "Keep your head down."', action: 'leave' }
+      ];
+    } else {
+      var surrenderDialogs = dialogs.surrender;
+      text = surrenderDialogs[rand(0, surrenderDialogs.length - 1)];
+      choices = [
+        { text: '1. "You\'re under arrest."', action: 'arrest' },
+        { text: '2. "Get out of my town."', action: 'banish' },
+        { text: '3. Accept bribe ($50)', action: 'bribe' }
+      ];
+    }
   } else if (npc.questGiver && !game.activeQuest && Math.random() > 0.4) {
     text = dialogs.quest ? dialogs.quest[rand(0, dialogs.quest.length - 1)] : dialogs.idle[rand(0, dialogs.idle.length - 1)];
     choices = [
@@ -4128,6 +4145,7 @@ function handleDialogChoice(action, npc) {
       break;
 
     case 'arrest':
+      var wasAlly = typeof isOutlawAlly === 'function' && isOutlawAlly();
       npc.state = 'arrested';
       npc.hostile = false;
       game.reputation = clamp(game.reputation + Math.round(8 * diff.repGainMult), 0, REPUTATION_MAX);
@@ -4140,11 +4158,24 @@ function handleDialogChoice(action, npc) {
         game.gold += 70;
         game.totalGoldEarned += 70;
         showNotification(npc.name + ' captured! +8 Rep, +$100 bounty');
+      } else if (wasAlly) {
+        game.corruption = clamp((game.corruption || 0) - 10, 0, 100);
+        showNotification('Betrayed ' + npc.name + '! +8 Rep, +$30, -10 Corruption');
       } else {
         showNotification(npc.name + ' arrested! +8 Rep, +$30');
       }
       audio.playDing();
-      addJournalEntry('Arrested ' + npc.name + '.');
+      addJournalEntry(wasAlly ? 'Betrayed and arrested ally ' + npc.name + '.' : 'Arrested ' + npc.name + '.');
+      closeDialog();
+      break;
+
+    case 'ally_deal':
+      if (typeof _blackMarketDeal === 'function') {
+        _blackMarketDeal(npc);
+      } else {
+        game.gold += rand(20, 60);
+        showNotification('Shady deal with ' + npc.name + '. Got some gold.');
+      }
       closeDialog();
       break;
 
