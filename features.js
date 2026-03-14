@@ -287,7 +287,9 @@ function updateFeatures(dt) {
     var ny = p.y + dd[1] * dodgeSpeed;
     if (canMove(nx, ny, 5)) { p.x = nx; p.y = ny; }
     if (f.dodgeTimer <= 0) { f.dodgeActive = false; }
-    f.footstepDust.push({ x: p.x, y: p.y + 8, life: 15, size: 4 });
+    if (Math.random() < 0.3 && f.footstepDust.length < 20) {
+      f.footstepDust.push({ x: p.x, y: p.y + 8, life: 15, size: 4 });
+    }
   }
   if (!f.dodgeActive && f.dodgeCooldown <= 0 && game.state === 'playing' && consumeKey('KeyQ')) {
     f.dodgeActive = true;
@@ -360,10 +362,12 @@ function updateFeatures(dt) {
 
   // 6. Headshot Bonus (checked during bullet hit in render)
   // 7. Smoke Bomb (Digit4)
-  for (var si = f.smokeActive.length - 1; si >= 0; si--) {
+  var smWrite = 0;
+  for (var si = 0; si < f.smokeActive.length; si++) {
     f.smokeActive[si].life -= dt;
-    if (f.smokeActive[si].life <= 0) f.smokeActive.splice(si, 1);
+    if (f.smokeActive[si].life > 0) f.smokeActive[smWrite++] = f.smokeActive[si];
   }
+  f.smokeActive.length = smWrite;
   if (f.smokeBombs > 0 && game.state === 'playing' && consumeKey('Digit4')) {
     f.smokeBombs--;
     f.smokeActive.push({ x: p.x, y: p.y, life: 5, radius: 60 });
@@ -488,9 +492,10 @@ function updateFeatures(dt) {
     f._sandstormApplied = false;
   }
 
-  // Generate rain particles
+  // Generate rain particles (capped at 60, recycle instead of splice)
   if (f.weather === 'rain') {
-    for (var ri = 0; ri < 3; ri++) {
+    var maxRain = 60;
+    if (f.raindrops.length < maxRain) {
       f.raindrops.push({
         x: rand(0, gameCanvas.width),
         y: 0,
@@ -499,13 +504,16 @@ function updateFeatures(dt) {
       });
     }
   }
-  for (var rdi = f.raindrops.length - 1; rdi >= 0; rdi--) {
-    f.raindrops[rdi].y += f.raindrops[rdi].speed;
-    f.raindrops[rdi].life--;
-    if (f.raindrops[rdi].life <= 0 || f.raindrops[rdi].y > gameCanvas.height) {
-      f.raindrops.splice(rdi, 1);
+  var rdWrite = 0;
+  for (var rdi = 0; rdi < f.raindrops.length; rdi++) {
+    var rdrop = f.raindrops[rdi];
+    rdrop.y += rdrop.speed;
+    rdrop.life--;
+    if (rdrop.life > 0 && rdrop.y <= gameCanvas.height) {
+      f.raindrops[rdWrite++] = rdrop;
     }
   }
+  f.raindrops.length = rdWrite;
 
   // 21. Tumbleweeds
   for (var ti = 0; ti < f.tumbleweeds.length; ti++) {
@@ -516,11 +524,13 @@ function updateFeatures(dt) {
     if (tw.y < 0 || tw.y > MAP_H * TILE) tw.dy = -tw.dy;
   }
 
-  // 22. Campfire healing
+  // 22. Campfire healing (throttled particle emission)
+  var cfWrite = 0;
   for (var ci = 0; ci < f.campfires.length; ci++) {
     var cf = f.campfires[ci];
     cf.life -= dt;
-    if (cf.life <= 0) { f.campfires.splice(ci, 1); ci--; continue; }
+    if (cf.life <= 0) continue;
+    f.campfires[cfWrite++] = cf;
     if (dist(p, cf) < 40 && p.hp < p.maxHp) {
       cf.healTimer = (cf.healTimer || 0) + dt;
       if (cf.healTimer > 3) {
@@ -529,24 +539,31 @@ function updateFeatures(dt) {
         showNotification('Campfire heals you. +1 HP');
       }
     }
-    particles.emit(cf.x + randF(-5, 5), cf.y - 5, 1, '#ff6600', 1, 10);
+    cf._emitTimer = (cf._emitTimer || 0) + dt;
+    if (cf._emitTimer > 0.3) {
+      cf._emitTimer = 0;
+      particles.emit(cf.x + randF(-5, 5), cf.y - 5, 1, '#ff6600', 1, 10);
+    }
   }
+  f.campfires.length = cfWrite;
 
-  // 25. Day/Night wildlife
+  // 25. Day/Night wildlife (compact instead of splice)
   f._wildlifeTimer = (f._wildlifeTimer || 0) + dt;
   if (f._wildlifeTimer > 60) {
     f._wildlifeTimer = 0;
     spawnWildlife();
   }
-  for (var wi = f.wildlife.length - 1; wi >= 0; wi--) {
-    var w = f.wildlife[wi];
-    w.x += w.dx;
-    w.y += w.dy;
-    w.life--;
-    if (w.life <= 0 || w.x < 0 || w.x > MAP_W * TILE || w.y < 0 || w.y > MAP_H * TILE) {
-      f.wildlife.splice(wi, 1);
+  var wlWrite = 0;
+  for (var wi = 0; wi < f.wildlife.length; wi++) {
+    var wl2 = f.wildlife[wi];
+    wl2.x += wl2.dx;
+    wl2.y += wl2.dy;
+    wl2.life--;
+    if (wl2.life > 0 && wl2.x >= 0 && wl2.x <= MAP_W * TILE && wl2.y >= 0 && wl2.y <= MAP_H * TILE) {
+      f.wildlife[wlWrite++] = wl2;
     }
   }
+  f.wildlife.length = wlWrite;
 
   // ──────────── NPC FEATURES ────────────
 
@@ -625,23 +642,24 @@ function updateFeatures(dt) {
     f.drunkNPCs = [];
   }
 
-  // 40. NPC Fights
+  // 40. NPC Fights (only compute when timer fires)
   f._npcFightTimer = (f._npcFightTimer || 0) + dt;
-  if (f._npcFightTimer > 45 && Math.random() < 0.1) {
+  if (f._npcFightTimer > 45) {
     f._npcFightTimer = 0;
-    // Two random townspeople fight
-    var fighters = game.npcs.filter(function(n) { return n.type === NPC_TYPES.TOWNSPERSON && n.state !== 'dead'; });
-    if (fighters.length >= 2) {
-      var f1 = fighters[rand(0, fighters.length - 1)];
-      var f2 = fighters[rand(0, fighters.length - 1)];
-      if (f1 !== f2 && dist(f1, f2) < 100) {
-        showNotification(f1.name + ' and ' + f2.name + ' are fighting!');
-        f1.hostile = true;
-        f1._fightTarget = f2;
-        setTimeout(function() {
-          f1.hostile = false;
-          f1._fightTarget = null;
-        }, 8000);
+    if (Math.random() < 0.1) {
+      var fighters = game.npcs.filter(function(n) { return n.type === NPC_TYPES.TOWNSPERSON && n.state !== 'dead'; });
+      if (fighters.length >= 2) {
+        var f1 = fighters[rand(0, fighters.length - 1)];
+        var f2 = fighters[rand(0, fighters.length - 1)];
+        if (f1 !== f2 && dist(f1, f2) < 100) {
+          showNotification(f1.name + ' and ' + f2.name + ' are fighting!');
+          f1.hostile = true;
+          f1._fightTarget = f2;
+          setTimeout(function() {
+            f1.hostile = false;
+            f1._fightTarget = null;
+          }, 8000);
+        }
       }
     }
   }
@@ -776,29 +794,35 @@ function updateFeatures(dt) {
 
   // ──────────── VISUAL FEATURES ────────────
 
-  // 77. Footstep Dust
+  // 77. Footstep Dust (capped at 20, swap-remove)
   if (p.speed > 0 && (Math.abs(p.vx || 0) > 0 || Math.abs(p.vy || 0) > 0 || game._isMoving)) {
-    if (Math.random() < 0.3) {
+    if (Math.random() < 0.15 && f.footstepDust.length < 20) {
       f.footstepDust.push({ x: p.x + randF(-3, 3), y: p.y + 8, life: 12, size: rand(2, 4) });
     }
   }
-  for (var fdi = f.footstepDust.length - 1; fdi >= 0; fdi--) {
+  var fdWrite = 0;
+  for (var fdi = 0; fdi < f.footstepDust.length; fdi++) {
     f.footstepDust[fdi].life--;
-    if (f.footstepDust[fdi].life <= 0) f.footstepDust.splice(fdi, 1);
+    if (f.footstepDust[fdi].life > 0) f.footstepDust[fdWrite++] = f.footstepDust[fdi];
   }
+  f.footstepDust.length = fdWrite;
 
-  // 78. Bullet Trails
-  for (var bti = f.bulletTrails.length - 1; bti >= 0; bti--) {
+  // 78. Bullet Trails (compact instead of splice)
+  var btWrite = 0;
+  for (var bti = 0; bti < f.bulletTrails.length; bti++) {
     f.bulletTrails[bti].life--;
-    if (f.bulletTrails[bti].life <= 0) f.bulletTrails.splice(bti, 1);
+    if (f.bulletTrails[bti].life > 0) f.bulletTrails[btWrite++] = f.bulletTrails[bti];
   }
+  f.bulletTrails.length = btWrite;
 
-  // Dust clouds
-  for (var dci = f.dustClouds.length - 1; dci >= 0; dci--) {
+  // Dust clouds (compact instead of splice)
+  var dcWrite = 0;
+  for (var dci = 0; dci < f.dustClouds.length; dci++) {
     f.dustClouds[dci].life--;
     f.dustClouds[dci].y -= 0.3;
-    if (f.dustClouds[dci].life <= 0) f.dustClouds.splice(dci, 1);
+    if (f.dustClouds[dci].life > 0) f.dustClouds[dcWrite++] = f.dustClouds[dci];
   }
+  f.dustClouds.length = dcWrite;
 
   // ──────────── SOCIAL/MINIGAMES ────────────
 
@@ -967,9 +991,9 @@ function updateFeatures(dt) {
   } else {
     f.fogParticles = [];
   }
-  // Dust storm particles
+  // Dust storm particles (capped at 20, compact)
   if (f.weather === 'dust_storm') {
-    if (f.dustStormParticles.length < 30) {
+    if (f.dustStormParticles.length < 20) {
       f.dustStormParticles.push({
         x: -20,
         y: rand(0, gameCanvas.height),
@@ -978,33 +1002,39 @@ function updateFeatures(dt) {
         alpha: randF(0.2, 0.6)
       });
     }
-    for (var dsi = f.dustStormParticles.length - 1; dsi >= 0; dsi--) {
+    var dsWrite = 0;
+    for (var dsi = 0; dsi < f.dustStormParticles.length; dsi++) {
       var dsp = f.dustStormParticles[dsi];
       dsp.x += dsp.speed;
       dsp.y += randF(-0.5, 0.5);
-      if (dsp.x > gameCanvas.width + 30) { f.dustStormParticles.splice(dsi, 1); }
+      if (dsp.x <= gameCanvas.width + 30) { f.dustStormParticles[dsWrite++] = dsp; }
     }
-  } else {
-    f.dustStormParticles = [];
+    f.dustStormParticles.length = dsWrite;
+  } else if (f.dustStormParticles.length > 0) {
+    f.dustStormParticles.length = 0;
   }
-  // Weather affects NPC behavior: fewer NPCs outside in storms
-  if (f.weather === 'fog' || f.weather === 'dust_storm' || f.weather === 'rain' || f.weather === 'sandstorm') {
-    for (var wni2 = 0; wni2 < game.npcs.length; wni2++) {
-      var wnpc = game.npcs[wni2];
-      if (wnpc.type === NPC_TYPES.TOWNSPERSON && wnpc.state === 'walking' && !wnpc._weatherFled && Math.random() < 0.01) {
-        wnpc._weatherFled = true;
-        var homeB2 = game.buildings.filter(function(b) { return b.type === BUILDING_TYPES.HOUSE; });
-        if (homeB2.length > 0) {
-          var tgt = homeB2[wnpc.id % homeB2.length];
-          wnpc.targetX = tgt.doorX * TILE;
-          wnpc.targetY = tgt.doorY * TILE;
+  // Weather affects NPC behavior (throttled to every 5 seconds)
+  f._weatherNpcTimer = (f._weatherNpcTimer || 0) + dt;
+  if (f._weatherNpcTimer > 5) {
+    f._weatherNpcTimer = 0;
+    if (f.weather === 'fog' || f.weather === 'dust_storm' || f.weather === 'rain' || f.weather === 'sandstorm') {
+      var homeB2 = null;
+      for (var wni2 = 0; wni2 < game.npcs.length; wni2++) {
+        var wnpc = game.npcs[wni2];
+        if (wnpc.type === NPC_TYPES.TOWNSPERSON && wnpc.state === 'walking' && !wnpc._weatherFled && Math.random() < 0.3) {
+          wnpc._weatherFled = true;
+          if (!homeB2) homeB2 = game.buildings.filter(function(b) { return b.type === BUILDING_TYPES.HOUSE; });
+          if (homeB2.length > 0) {
+            var tgt = homeB2[wnpc.id % homeB2.length];
+            wnpc.targetX = tgt.doorX * TILE;
+            wnpc.targetY = tgt.doorY * TILE;
+          }
         }
       }
-    }
-  } else {
-    // Clear weather flee flags
-    for (var wni3 = 0; wni3 < game.npcs.length; wni3++) {
-      game.npcs[wni3]._weatherFled = false;
+    } else {
+      for (var wni3 = 0; wni3 < game.npcs.length; wni3++) {
+        game.npcs[wni3]._weatherFled = false;
+      }
     }
   }
 
@@ -1380,23 +1410,16 @@ function updateFeatures(dt) {
     }
   }
 
-  // ── FEATURE 9: DYNAMIC NPC RELATIONSHIPS ──
-  // Relationship modifiers when near crimes — helping boosts, ignoring penalizes nearby NPCs
-  if (game.activeCrime) {
+  // ── FEATURE 9: DYNAMIC NPC RELATIONSHIPS (throttled to every 3s) ──
+  f._relTimer = (f._relTimer || 0) + dt;
+  if (game.activeCrime && f._relTimer > 3) {
+    f._relTimer = 0;
+    var crimePos = { x: game.activeCrime.x, y: game.activeCrime.y };
+    var pNearCrime = dist(p, crimePos) < 150;
     for (var rni = 0; rni < game.npcs.length; rni++) {
       var rnpc = game.npcs[rni];
-      if (rnpc.type === NPC_TYPES.TOWNSPERSON && rnpc.state !== 'dead') {
-        var crDist = dist(rnpc, { x: game.activeCrime.x, y: game.activeCrime.y });
-        if (crDist < 150) {
-          var pDist = dist(p, { x: game.activeCrime.x, y: game.activeCrime.y });
-          if (pDist < 150) {
-            // Player is helping near this NPC — boost relationship
-            rnpc.relationship = clamp((rnpc.relationship || 50) + dt * 0.5, -100, 100);
-          } else {
-            // Player ignoring crime near this NPC — penalize
-            rnpc.relationship = clamp((rnpc.relationship || 50) - dt * 0.2, -100, 100);
-          }
-        }
+      if (rnpc.type === NPC_TYPES.TOWNSPERSON && rnpc.state !== 'dead' && dist(rnpc, crimePos) < 150) {
+        rnpc.relationship = clamp((rnpc.relationship || 50) + (pNearCrime ? 1.5 : -0.6), -100, 100);
       }
     }
   }
@@ -1576,12 +1599,14 @@ function updateFeatures(dt) {
         flash: isGold || isGem ? rand(5, 15) : 0
       });
     }
-    for (var gpi = f.goldPanningRocks.length - 1; gpi >= 0; gpi--) {
+    var gpWrite = 0;
+    for (var gpi = 0; gpi < f.goldPanningRocks.length; gpi++) {
       var gr = f.goldPanningRocks[gpi];
       gr.x -= gr.speed;
       if (gr.flash > 0) gr.flash--;
-      if (gr.x < -20) f.goldPanningRocks.splice(gpi, 1);
+      if (gr.x >= -20) f.goldPanningRocks[gpWrite++] = gr;
     }
+    f.goldPanningRocks.length = gpWrite;
     // Press E to grab
     if (consumeKey('KeyE')) {
       // Check if any gold/gem rock is near center (x=140-170)
@@ -1690,20 +1715,24 @@ function updateFeatures(dt) {
         });
       }
     }
-    // Update fireworks
-    for (var fwi = f.festivalFireworks.length - 1; fwi >= 0; fwi--) {
+    // Update fireworks (compact instead of splice)
+    var fwWrite = 0;
+    for (var fwi = 0; fwi < f.festivalFireworks.length; fwi++) {
       var fwork = f.festivalFireworks[fwi];
       fwork.life--;
-      for (var fsi3 = fwork.sparks.length - 1; fsi3 >= 0; fsi3--) {
+      var spWrite = 0;
+      for (var fsi3 = 0; fsi3 < fwork.sparks.length; fsi3++) {
         var sp = fwork.sparks[fsi3];
         sp.x += sp.dx;
         sp.y += sp.dy;
-        sp.dy += 0.05; // gravity
+        sp.dy += 0.05;
         sp.life--;
-        if (sp.life <= 0) fwork.sparks.splice(fsi3, 1);
+        if (sp.life > 0) fwork.sparks[spWrite++] = sp;
       }
-      if (fwork.life <= 0 && fwork.sparks.length === 0) f.festivalFireworks.splice(fwi, 1);
+      fwork.sparks.length = spWrite;
+      if (fwork.life > 0 || fwork.sparks.length > 0) f.festivalFireworks[fwWrite++] = fwork;
     }
+    f.festivalFireworks.length = fwWrite;
     // Festival bonus gold — periodic bonus
     f._festBonusTimer = (f._festBonusTimer || 0) + dt;
     if (f._festBonusTimer > 30) {
@@ -1713,10 +1742,14 @@ function updateFeatures(dt) {
       game.totalGoldEarned += festBonus;
       showNotification('Festival commerce bonus: +$' + festBonus);
     }
-    // NPC special festival dialogs are handled via relationship boost
-    for (var fnpc = 0; fnpc < game.npcs.length; fnpc++) {
-      if (game.npcs[fnpc].type === NPC_TYPES.TOWNSPERSON) {
-        game.npcs[fnpc].relationship = clamp((game.npcs[fnpc].relationship || 50) + dt * 0.1, -100, 100);
+    // NPC special festival dialogs are handled via relationship boost (throttled)
+    f._festRelTimer = (f._festRelTimer || 0) + dt;
+    if (f._festRelTimer > 10) {
+      f._festRelTimer = 0;
+      for (var fnpc = 0; fnpc < game.npcs.length; fnpc++) {
+        if (game.npcs[fnpc].type === NPC_TYPES.TOWNSPERSON) {
+          game.npcs[fnpc].relationship = clamp((game.npcs[fnpc].relationship || 50) + 1, -100, 100);
+        }
       }
     }
     // End festival
@@ -1921,28 +1954,28 @@ function renderFeaturesOverlay() {
 
   // ── Weather Effects ──
 
-  // Rain
+  // Rain (batched single path)
   if (f.weather === 'rain') {
     ctx.strokeStyle = 'rgba(100, 150, 200, 0.4)';
     ctx.lineWidth = 1;
+    ctx.beginPath();
     for (var i = 0; i < f.raindrops.length; i++) {
       var rd = f.raindrops[i];
-      ctx.beginPath();
       ctx.moveTo(rd.x, rd.y);
       ctx.lineTo(rd.x - 1, rd.y + 8);
-      ctx.stroke();
     }
+    ctx.stroke();
     // Rain overlay
     ctx.fillStyle = 'rgba(40, 60, 80, 0.15)';
     ctx.fillRect(0, 0, w, h);
   }
 
-  // Sandstorm
+  // Sandstorm (reduced particle count)
   if (f.weather === 'sandstorm') {
     ctx.fillStyle = 'rgba(180, 150, 100, 0.3)';
     ctx.fillRect(0, 0, w, h);
-    for (var si = 0; si < 20; si++) {
-      ctx.fillStyle = 'rgba(200, 170, 120, ' + randF(0.1, 0.4) + ')';
+    ctx.fillStyle = 'rgba(200, 170, 120, 0.25)';
+    for (var si = 0; si < 8; si++) {
       ctx.fillRect(rand(0, w), rand(0, h), rand(2, 8), rand(1, 3));
     }
   }
@@ -1968,7 +2001,7 @@ function renderFeaturesOverlay() {
     ctx.fill();
   }
 
-  // ── Tumbleweeds ──
+  // ── Tumbleweeds (simplified — no per-frame trig) ──
   ctx.fillStyle = PALETTE.tumbleweed || '#a89060';
   for (var ti = 0; ti < f.tumbleweeds.length; ti++) {
     var tw = f.tumbleweeds[ti];
@@ -1978,27 +2011,27 @@ function renderFeaturesOverlay() {
     ctx.beginPath();
     ctx.arc(sx, sy, tw.size, 0, Math.PI * 2);
     ctx.fill();
-    // Spiky lines
-    for (var spi = 0; spi < 6; spi++) {
-      var angle = spi * Math.PI / 3 + Date.now() * 0.001;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(sx + Math.cos(angle) * tw.size * 1.3, sy + Math.sin(angle) * tw.size * 1.3);
-      ctx.strokeStyle = '#8a7050';
-      ctx.stroke();
-    }
+    // Simple cross lines instead of 6 trig spikes
+    ctx.strokeStyle = '#8a7050';
+    ctx.lineWidth = 1;
+    var ts = tw.size * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(sx - ts, sy); ctx.lineTo(sx + ts, sy);
+    ctx.moveTo(sx, sy - ts); ctx.lineTo(sx, sy + ts);
+    ctx.stroke();
   }
 
-  // ── Wildlife ──
+  // ── Wildlife (simple colored shapes instead of expensive emoji) ──
+  var animalColors = { rabbit: '#c8b090', hawk: '#8b5e3c', lizard: '#6b8e23', deer: '#a0522d', coyote: '#808080', owl: '#d2b48c', bat: '#444' };
+  var animalSizes = { rabbit: 3, hawk: 4, lizard: 3, deer: 5, coyote: 4, owl: 3, bat: 3 };
   for (var wii = 0; wii < f.wildlife.length; wii++) {
     var wl = f.wildlife[wii];
     var wx = wl.x - camX;
     var wy = wl.y - camY;
     if (wx < -20 || wx > w + 20 || wy < -20 || wy > h + 20) continue;
-
-    ctx.font = '10px monospace';
-    var icons = { rabbit: '🐇', hawk: '🦅', lizard: '🦎', deer: '🦌', coyote: '🐺', owl: '🦉', bat: '🦇' };
-    ctx.fillText(icons[wl.type] || '·', wx - 5, wy);
+    ctx.fillStyle = animalColors[wl.type] || '#999';
+    var aSize = animalSizes[wl.type] || 3;
+    ctx.fillRect(wx - aSize, wy - aSize, aSize * 2, aSize * 2);
   }
 
   // ── Explosive Barrels ──
@@ -2229,10 +2262,10 @@ function renderFeaturesOverlay() {
     }
   }
 
-  // ── Film Grain ──
+  // ── Film Grain (reduced) ──
   if (f.filmGrain) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
-    for (var gri = 0; gri < 30; gri++) {
+    for (var gri = 0; gri < 10; gri++) {
       ctx.fillRect(rand(0, w), rand(0, h), rand(1, 3), rand(1, 3));
     }
   }
@@ -2281,14 +2314,12 @@ function renderFeaturesOverlay() {
     ctx.textAlign = 'left';
   }
 
-  // ── Season & Weather HUD ──
+  // ── Season & Weather HUD (no emoji — text only for performance) ──
   ctx.fillStyle = '#a09070';
   ctx.font = '9px monospace';
-  var seasonIcons = { spring: '🌱', summer: '☀️', fall: '🍂', winter: '❄️' };
-  ctx.fillText((seasonIcons[f.season] || '') + ' ' + f.season.toUpperCase(), w - 100, 55);
+  ctx.fillText(f.season.toUpperCase(), w - 80, 55);
   if (f.weather !== 'clear') {
-    var weatherIcons = { rain: '🌧️', sandstorm: '🌪️', heatwave: '🔥' };
-    ctx.fillText((weatherIcons[f.weather] || '') + ' ' + f.weather, w - 100, 68);
+    ctx.fillText(f.weather.toUpperCase(), w - 80, 68);
   }
 
   // ── Rival Sheriff Status ──
@@ -2577,8 +2608,9 @@ function renderFeaturesOverlay() {
     ctx.textAlign = 'left';
   }
 
-  // ── FEATURE 9: NPC RELATIONSHIP colors ──
-  // Name colors are rendered in the existing NPC name label area — we draw over
+  // ── FEATURE 9: NPC RELATIONSHIP colors (only near player) ──
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'center';
   for (var reli = 0; reli < game.npcs.length; reli++) {
     var relNPC = game.npcs[reli];
     if (relNPC.state === 'dead' || relNPC.state === 'arrested') continue;
@@ -2587,13 +2619,10 @@ function renderFeaturesOverlay() {
     var relY = relNPC.y - camY;
     if (relX < -30 || relX > w + 30 || relY < -30 || relY > h + 30) continue;
     var rel = relNPC.relationship || 50;
-    var relColor = rel > 70 ? '#44cc44' : (rel > 30 ? '#cccc44' : '#cc4444');
-    ctx.fillStyle = relColor;
-    ctx.font = '7px monospace';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = rel > 70 ? '#44cc44' : (rel > 30 ? '#cccc44' : '#cc4444');
     ctx.fillText(relNPC.name, relX, relY - 16);
-    ctx.textAlign = 'left';
   }
+  ctx.textAlign = 'left';
 
   // ── FEATURE 10: MINE EXPLORATION overlay ──
   if (f.mineActive) {
