@@ -929,6 +929,18 @@ function generateTown() {
     }
   }
 
+  // --- Clear rocks/cacti in front of building doors ---
+  for (const b of buildings) {
+    for (let dy = -1; dy <= 2; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cy = b.doorY + dy, cx = b.doorX + dx;
+        if (cy >= 0 && cy < MAP_H && cx >= 0 && cx < MAP_W) {
+          if (map[cy][cx] === 6 || map[cy][cx] === 7) map[cy][cx] = 0;
+        }
+      }
+    }
+  }
+
   // --- Pond at (70,50) radius 3, with grass border ---
   const pondCX = 70, pondCY = 50, pondR = 3;
   for (let dy = -pondR - 1; dy <= pondR + 1; dy++) {
