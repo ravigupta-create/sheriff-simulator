@@ -3165,8 +3165,8 @@ function drawNPC(npc, camX, camY, playerDist) {
   ctx.ellipse(0, 14, 10, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Body size variety based on NPC hash
-  const npcHash = ((npc.x * 37 + npc.y * 17) & 0xff);
+  // Body size variety based on NPC hash (use id + homeX/homeY for stable appearance)
+  const npcHash = ((npc.id * 37 + (npc.homeX || 0) * 17 + (npc.homeY || 0) * 13) & 0xff);
   const bodyW = 8 + (npcHash % 3); // 8-10 wide
   const halfW = bodyW / 2;
 
