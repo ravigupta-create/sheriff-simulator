@@ -7834,17 +7834,65 @@ function updateJailInterior(dt) {
     }
   }
 
-  // E to interact with prisoner (bribe if have key)
-  if (game._jailNearCell >= 0 && consumeKey('KeyE')) {
+  // E to interact with prisoner — opens action menu
+  if (game._jailNearCell >= 0 && consumeKey('KeyE') && !game._jailActionMenu && !game._jailBribeOffer) {
     var pr = prisoners[game._jailNearCell];
-    if (game._hasJailKey) {
-      if (!game._jailBribeOffer) {
-        var bribeAmt = rand(30, 150);
-        game._jailBribeOffer = { index: game._jailNearCell, name: pr.name, crime: pr.crime, amount: bribeAmt };
-      }
-    } else {
-      showNotification(pr.name + ' — Jailed for: ' + pr.crime + ' (Day ' + pr.day + ')');
+    game._jailActionMenu = { index: game._jailNearCell, name: pr.name, crime: pr.crime };
+    showNotification(pr.name + ' — ' + pr.crime + ' | 1:Info 2:Release 3:Execute' + (game._hasJailKey ? ' 4:Bribe' : ''));
+  }
+
+  // Prisoner action menu
+  if (game._jailActionMenu) {
+    var pam = game._jailActionMenu;
+    if (consumeKey('Digit1')) {
+      // Info
+      showNotification(pam.name + ' — Jailed for: ' + pam.crime + '. Cell ' + (pam.index + 1) + '/' + prisoners.length);
+      game._jailActionMenu = null;
+    } else if (consumeKey('Digit2')) {
+      // Release
+      showNotification('Released ' + pam.name + '. -5 Rep');
+      game.reputation = clamp((game.reputation || 50) - 5, 0, REPUTATION_MAX);
+      prisoners.splice(pam.index, 1);
+      game._jailActionMenu = null;
+      game._jailNearCell = -1;
+    } else if (consumeKey('Digit3')) {
+      // Execute — confirm
+      game._jailActionMenu = null;
+      game._jailExecuteConfirm = { index: pam.index, name: pam.name };
+      showNotification('Execute ' + pam.name + '? This is IRREVERSIBLE. Y to confirm, N to cancel.');
+    } else if (consumeKey('Digit4') && game._hasJailKey) {
+      // Bribe
+      var bribeAmt = rand(30, 150);
+      game._jailBribeOffer = { index: pam.index, name: pam.name, crime: pam.crime, amount: bribeAmt };
+      game._jailActionMenu = null;
+    } else if (consumeKey('Escape') || consumeKey('KeyQ')) {
+      game._jailActionMenu = null;
     }
+    return;
+  }
+
+  // Execute confirmation
+  if (game._jailExecuteConfirm) {
+    if (consumeKey('KeyY') || consumeKey('Digit1')) {
+      var exec = game._jailExecuteConfirm;
+      showNotification(exec.name + ' has been executed. -15 Rep, +12 Corruption');
+      game.reputation = clamp((game.reputation || 50) - 15, 0, REPUTATION_MAX);
+      game.corruption = clamp((game.corruption || 0) + 12, 0, 100);
+      addJournalEntry('Executed prisoner: ' + exec.name);
+      if (typeof audio !== 'undefined' && typeof audio.playGunshot === 'function') audio.playGunshot();
+      if (typeof particles !== 'undefined' && typeof particles.emitBlood === 'function') {
+        var cellW2 = Math.min(100, (W - 80) / prisoners.length);
+        var execX = 40 + exec.index * (cellW2 + 10) + cellW2 / 2;
+        particles.emitBlood(execX, 130);
+      }
+      prisoners.splice(exec.index, 1);
+      game._jailExecuteConfirm = null;
+      game._jailNearCell = -1;
+    } else if (consumeKey('KeyN') || consumeKey('Digit2') || consumeKey('Escape')) {
+      showNotification('Execution cancelled.');
+      game._jailExecuteConfirm = null;
+    }
+    return;
   }
 
   // Bribe dialog
@@ -8023,6 +8071,59 @@ function renderJailInterior() {
     ctx.fillText('[Y/1] Accept bribe (+Corruption)', W / 2, H / 2 + 20);
     ctx.fillStyle = '#cc4444';
     ctx.fillText('[N/2] Refuse (+4 Rep)', W / 2, H / 2 + 38);
+    ctx.textAlign = 'left';
+  }
+
+  // Prisoner action menu overlay
+  if (game._jailActionMenu) {
+    var jam = game._jailActionMenu;
+    ctx.fillStyle = 'rgba(10, 6, 2, 0.9)';
+    ctx.fillRect(W / 2 - 140, H / 2 - 60, 280, 120);
+    ctx.strokeStyle = '#aa8844';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W / 2 - 140, H / 2 - 60, 280, 120);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(jam.name, W / 2, H / 2 - 38);
+    ctx.fillStyle = '#c8b888';
+    ctx.font = '9px monospace';
+    ctx.fillText('Jailed for: ' + jam.crime, W / 2, H / 2 - 22);
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#ddd';
+    ctx.fillText('[1] View Info', W / 2, H / 2 - 2);
+    ctx.fillStyle = '#cccc44';
+    ctx.fillText('[2] Release Prisoner (-5 Rep)', W / 2, H / 2 + 14);
+    ctx.fillStyle = '#cc4444';
+    ctx.fillText('[3] Execute Prisoner (-15 Rep)', W / 2, H / 2 + 30);
+    if (game._hasJailKey) {
+      ctx.fillStyle = '#44cc44';
+      ctx.fillText('[4] Accept Bribe (+Corruption)', W / 2, H / 2 + 46);
+    }
+    ctx.fillStyle = '#888';
+    ctx.fillText('[ESC] Cancel', W / 2, H / 2 + 58);
+    ctx.textAlign = 'left';
+  }
+
+  // Execute confirmation overlay
+  if (game._jailExecuteConfirm) {
+    var jec = game._jailExecuteConfirm;
+    ctx.fillStyle = 'rgba(40, 5, 5, 0.95)';
+    ctx.fillRect(W / 2 - 140, H / 2 - 45, 280, 90);
+    ctx.strokeStyle = '#cc3333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W / 2 - 140, H / 2 - 45, 280, 90);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('EXECUTE ' + jec.name + '?', W / 2, H / 2 - 22);
+    ctx.fillStyle = '#e8d5a3';
+    ctx.font = '10px monospace';
+    ctx.fillText('This cannot be undone.', W / 2, H / 2 - 5);
+    ctx.fillStyle = '#cc4444';
+    ctx.fillText('[Y/1] Confirm Execution', W / 2, H / 2 + 15);
+    ctx.fillStyle = '#44cc44';
+    ctx.fillText('[N/2] Cancel', W / 2, H / 2 + 33);
     ctx.textAlign = 'left';
   }
 
