@@ -292,7 +292,8 @@ function updateFeatures(dt) {
       f.footstepDust.push({ x: p.x, y: p.y + 8, life: 15, size: 4 });
     }
   }
-  if (!f.dodgeActive && f.dodgeCooldown <= 0 && game.state === 'playing' && consumeKey('KeyQ')) {
+  var _mgBlocked = (typeof _inputBlockedByMinigameOrFeature === 'function') && _inputBlockedByMinigameOrFeature();
+  if (!_mgBlocked && !f.dodgeActive && f.dodgeCooldown <= 0 && game.state === 'playing' && consumeKey('KeyQ')) {
     f.dodgeActive = true;
     f.dodgeTimer = 0.2;
     f.dodgeCooldown = 2;

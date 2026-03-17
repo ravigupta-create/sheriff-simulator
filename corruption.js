@@ -133,8 +133,10 @@ function updateCorruption(dt) {
 // §4  G KEY ACTIONS (shakedown / arrest / steal)
 // ─────────────────────────────────────────────
 function _handleGKeyActions() {
-  if (!consumeKey('KeyG')) return;
   if (game.state !== 'playing') return;
+  // Don't consume G if a minigame or feature is active
+  if (typeof _inputBlockedByMinigameOrFeature === 'function' && _inputBlockedByMinigameOrFeature()) return;
+  if (!consumeKey('KeyG')) return;
 
   var p = game.player;
   var corruption = game.corruption || 0;
@@ -1357,8 +1359,10 @@ function onCorruptionLoad() {
 // §24  BUY BODYGUARDS (B key)
 // ─────────────────────────────────────────────
 function _handleBuyBodyguard() {
-  if (!consumeKey('KeyB')) return;
   if (game.state !== 'playing') return;
+  // Don't consume B if a minigame or feature is active
+  if (typeof _inputBlockedByMinigameOrFeature === 'function' && _inputBlockedByMinigameOrFeature()) return;
+  if (!consumeKey('KeyB')) return;
 
   var corruption = game.corruption || 0;
   if (corruption < 21) {

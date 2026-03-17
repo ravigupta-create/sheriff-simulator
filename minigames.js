@@ -1665,7 +1665,7 @@ function updateMinigames(dt) {
         if (Math.hypot(p.x - game.buildings[wbi].x * TILE, p.y - game.buildings[wbi].y * TILE) < 80) nearWantedBoard = true;
       }
     }
-    if (nearWantedBoard && consumeKey('KeyW')) {
+    if (nearWantedBoard && consumeKey('Digit8')) {
       if (startMinigame('posterMatch')) {
         m.posterMatch = true;
         m.posterMatchTimer = 60;
@@ -1907,10 +1907,10 @@ function updateMinigames(dt) {
     m._auctionTimer = (m._auctionTimer || 0) + dt;
     if (m._auctionTimer > 200 && game.dayCount > 4 && game.dayCount % 5 === 0 && Math.random() < 0.01) {
       m._auctionTimer = -9999;
-      showNotification('GOLD RUSH AUCTION at the saloon! Press A to join!');
+      showNotification('GOLD RUSH AUCTION at the saloon! Press 0 to join!');
       m._auctionReady = true;
     }
-    if (m._auctionReady && consumeKey('KeyA')) {
+    if (m._auctionReady && consumeKey('Digit0')) {
       m._auctionReady = false;
       if (startMinigame('goldAuction')) {
         m.goldAuction = true;
@@ -1990,10 +1990,10 @@ function updateMinigames(dt) {
     m._moonshineTimer = (m._moonshineTimer || 0) + dt;
     if (m._moonshineTimer > 280 && Math.random() < 0.003) {
       m._moonshineTimer = 0;
-      showNotification('Tip: Illegal moonshine operation in town! Press M to investigate.');
+      showNotification('Tip: Illegal moonshine operation in town! Press 6 to investigate.');
       m._moonshineReady = true;
     }
-    if (m._moonshineReady && consumeKey('KeyM')) {
+    if (m._moonshineReady && consumeKey('Digit6')) {
       m._moonshineReady = false;
       if (startMinigame('moonshineBust')) {
         m.moonshineBust = true;
@@ -2600,14 +2600,14 @@ function updateMinigames(dt) {
         m.cardSlingerDealer = [bjDeck.pop(), bjDeck.pop()];
         m.cardSlingerPhase = 0;
         m._bjDeck = bjDeck;
-        showNotification('BLACKJACK! Your hand: ' + handValue(m.cardSlingerHand) + '. H=Hit, S=Stand, D=Double Down.');
+        showNotification('BLACKJACK! Your hand: ' + handValue(m.cardSlingerHand) + '. 1=Hit, 2=Stand, 3=Double Down.');
       }
     }
   }
   if (m.cardSlinger) {
     if (m.cardSlingerPhase === 0) {
       var pv = handValue(m.cardSlingerHand);
-      if (consumeKey('KeyH')) {
+      if (consumeKey('Digit1')) {
         m.cardSlingerHand.push(m._bjDeck.pop());
         pv = handValue(m.cardSlingerHand);
         showNotification('Hit! Hand: ' + pv);
@@ -2617,7 +2617,7 @@ function updateMinigames(dt) {
           m._bjResultTimer = 1.5;
         }
       }
-      if (consumeKey('KeyS')) {
+      if (consumeKey('Digit2')) {
         // Dealer draws to 17
         while (handValue(m.cardSlingerDealer) < 17) m.cardSlingerDealer.push(m._bjDeck.pop());
         var dv = handValue(m.cardSlingerDealer);
@@ -2635,7 +2635,7 @@ function updateMinigames(dt) {
         m.cardSlingerPhase = 1;
         m._bjResultTimer = 2;
       }
-      if (consumeKey('KeyD') && m.cardSlingerHand.length === 2 && game.gold >= m.cardSlingerBet) {
+      if (consumeKey('Digit3') && m.cardSlingerHand.length === 2 && game.gold >= m.cardSlingerBet) {
         game.gold -= m.cardSlingerBet;
         m.cardSlingerBet *= 2;
         m.cardSlingerHand.push(m._bjDeck.pop());
@@ -2669,7 +2669,7 @@ function updateMinigames(dt) {
           m.cardSlingerHand = [m._bjDeck.pop(), m._bjDeck.pop()];
           m.cardSlingerDealer = [m._bjDeck.pop(), m._bjDeck.pop()];
           m.cardSlingerPhase = 0;
-          showNotification('Round ' + m.cardSlingerRound + '! Hand: ' + handValue(m.cardSlingerHand) + '. H=Hit, S=Stand, D=Double.');
+          showNotification('Round ' + m.cardSlingerRound + '! Hand: ' + handValue(m.cardSlingerHand) + '. 1=Hit, 2=Stand, 3=Double.');
         } else {
           showNotification('Out of gold! Blackjack over.');
           endMinigame('cardSlinger', false, 60);
@@ -3600,7 +3600,7 @@ function renderMinigamesOverlay() {
       }
       ctx.fillStyle = '#aaa';
       ctx.fillText('Dealer shows: ' + m.cardSlingerDealer[0].rank + ' of ' + m.cardSlingerDealer[0].suit, w / 2, 155);
-      ctx.fillText('H=Hit S=Stand D=Double', w / 2, 175);
+      ctx.fillText('1=Hit 2=Stand 3=Double', w / 2, 175);
     }
   }
 

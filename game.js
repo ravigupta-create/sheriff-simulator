@@ -4943,14 +4943,27 @@ function playerMelee() {
 // ─────────────────────────────────────────────
 
 // J.1 - Update Player
+// Helper: check if a minigame or feature is capturing input
+function _inputBlockedByMinigameOrFeature() {
+  if (game._minigames && game._minigames.activeMinigame) return true;
+  if (game._features) {
+    var _f = game._features;
+    if (_f.armWrestlingActive || _f._armWrestleCountdownActive || _f.fishingMiniGame ||
+        _f.horseRaceActive || _f.mineActive || _f.goldPanningActive) return true;
+  }
+  return false;
+}
 function updatePlayer(dt) {
   var p = game.player;
   var dx = 0, dy = 0;
+  var _blocked = _inputBlockedByMinigameOrFeature();
 
-  if (keys['KeyW'] || keys['ArrowUp'])    { dy = -1; p.dir = 1; }
-  if (keys['KeyS'] || keys['ArrowDown'])   { dy = 1;  p.dir = 0; }
-  if (keys['KeyA'] || keys['ArrowLeft'])   { dx = -1; p.dir = 2; }
-  if (keys['KeyD'] || keys['ArrowRight'])  { dx = 1;  p.dir = 3; }
+  if (!_blocked) {
+    if (keys['KeyW'] || keys['ArrowUp'])    { dy = -1; p.dir = 1; }
+    if (keys['KeyS'] || keys['ArrowDown'])   { dy = 1;  p.dir = 0; }
+    if (keys['KeyA'] || keys['ArrowLeft'])   { dx = -1; p.dir = 2; }
+    if (keys['KeyD'] || keys['ArrowRight'])  { dx = 1;  p.dir = 3; }
+  }
 
   p.moving = dx !== 0 || dy !== 0;
 
@@ -5005,7 +5018,15 @@ function updatePlayer(dt) {
   // Shooting
   if (p.shootCooldown > 0) p.shootCooldown--;
   if (p.justShot > 0) p.justShot--;
-  if (!game.mounted && consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
+  // Don't shoot when a feature or minigame needs SPACE input
+  var _featureBlocksShoot = false;
+  if (game._features) {
+    var _f = game._features;
+    if (_f.armWrestlingActive || _f._armWrestleCountdownActive || _f.fishingMiniGame ||
+        _f.horseRaceActive || _f.mineActive || _f.goldPanningActive) _featureBlocksShoot = true;
+  }
+  if (game._minigames && game._minigames.activeMinigame) _featureBlocksShoot = true;
+  if (!game.mounted && !_featureBlocksShoot && consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
     if (game.ammo > 0) {
       game.ammo--;
       game.totalShots++;
@@ -5046,15 +5067,38 @@ function updatePlayer(dt) {
     }
   }
 
-  // Melee
+  // Melee — don't consume F if near water (fishing) or open ground (campfire)
   if (p.meleeCooldown > 0) p.meleeCooldown--;
-  if (!game.mounted && consumeKey('KeyF') && game.state === 'playing') {
-    playerMelee();
+  if (!game.mounted && !_blocked && game.state === 'playing') {
+    var _fKeyWanted = false;
+    if (keysJustPressed['KeyF']) {
+      // Check if features want F key (near water=fishing, open ground=campfire)
+      var _ptx = Math.floor(p.x / TILE);
+      var _pty = Math.floor(p.y / TILE);
+      var _nearWater = false;
+      for (var _wx = -2; _wx <= 2; _wx++) {
+        for (var _wy = -2; _wy <= 2; _wy++) {
+          var _twx = _ptx + _wx, _twy = _pty + _wy;
+          if (_twx >= 0 && _twx < MAP_W && _twy >= 0 && _twy < MAP_H && game.map[_twy][_twx] === 5) _nearWater = true;
+        }
+      }
+      var _nearBld = false;
+      for (var _bi = 0; _bi < game.buildings.length; _bi++) {
+        var _cb = game.buildings[_bi];
+        if (_ptx >= _cb.x - 2 && _ptx <= _cb.x + _cb.w + 2 && _pty >= _cb.y - 2 && _pty <= _cb.y + _cb.h + 2) { _nearBld = true; break; }
+      }
+      var _tileHere = (game.map && game.map[_pty]) ? game.map[_pty][_ptx] : 0;
+      var _canCamp = !_nearBld && (_tileHere === 0 || _tileHere === 1 || _tileHere === 9) && !_nearWater;
+      _fKeyWanted = _nearWater || _canCamp; // features want this F press
+    }
+    if (!_fKeyWanted && consumeKey('KeyF')) {
+      playerMelee();
+    }
   }
 
   // Interact
   if (p.interactCooldown > 0) p.interactCooldown--;
-  if (consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
+  if (!_blocked && consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
     p.interactCooldown = 15;
 
     if (game.shopOpen) {
@@ -5111,7 +5155,7 @@ function updatePlayer(dt) {
   }
 
   // Mount/dismount horse
-  if (consumeKey('KeyH') && game.state === 'playing') {
+  if (!_blocked && consumeKey('KeyH') && game.state === 'playing') {
     if (game.mounted) {
       dismountHorse();
     } else {
@@ -7918,8 +7962,8 @@ function gameLoop(timestamp) {
       if (consumeKey('KeyJ')) {
         openJournal();
       }
-      // M -> minimap toggle
-      if (consumeKey('KeyM')) {
+      // M -> minimap toggle (skip if minigame active)
+      if (!_inputBlockedByMinigameOrFeature() && consumeKey('KeyM')) {
         game.showMinimap = !game.showMinimap;
       }
       // TAB -> shop if near a store building
