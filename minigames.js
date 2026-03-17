@@ -328,37 +328,293 @@ function endMinigame(name, won, cooldown) {
 // MINIGAME MENU SYSTEM
 // ============================================================
 var MINIGAME_CATALOG = [
-  { key: 'trainHeist', name: 'Train Heist', desc: 'Rob a train! Fight guards, crack the safe, escape.', req: 'Near stopped train', trigger: 'T' },
-  { key: 'lassoRodeo', name: 'Lasso Rodeo', desc: 'Lasso cattle in the arena. $10 entry.', req: 'Near stable', cost: 10, trigger: 'L' },
-  { key: 'quickDrawTourney', name: 'Quick Draw Tournament', desc: '5-round quick draw dueling tournament. $50 entry.', req: 'Near gallows', cost: 50, trigger: 'U' },
-  { key: 'saloonBrawl', name: 'Saloon Brawl', desc: 'Fistfight in the saloon! Punch, dodge, combo.', req: 'Near saloon', trigger: 'B' },
-  { key: 'stagecoachDefense', name: 'Stagecoach Defense', desc: 'Defend a stagecoach from bandits.', req: 'Day 2+, random event', trigger: 'Auto' },
-  { key: 'knifeContest', name: 'Knife Throwing', desc: 'Throw knives at targets. $15 entry.', req: 'Near blacksmith', cost: 15, trigger: 'Y' },
-  { key: 'horseshoeToss', name: 'Horseshoe Toss', desc: 'Toss horseshoes at the stake. $10 entry.', req: 'Near stable', cost: 10, trigger: 'O' },
-  { key: 'sharpshootContest', name: 'Sharpshooting Contest', desc: 'Timed target shooting. $30 entry.', req: 'Even days', cost: 30, trigger: 'X' },
-  { key: 'hideoutRaid', name: 'Bandit Hideout Raid', desc: 'Clear 5 rooms of bandits.', req: 'Day 5+, after tip', trigger: 'I' },
-  { key: 'rodeoBronco', name: 'Bronco Riding', desc: 'Stay on a bucking bronco for 8 seconds. $20.', req: 'Near stable', cost: 20, trigger: 'Z' },
-  { key: 'vaultCrack', name: 'Vault Cracking', desc: 'Crack a bank vault at night. Corrupt path.', req: 'Near bank, nighttime', trigger: 'C' },
-  { key: 'posterMatch', name: 'Wanted Poster Match', desc: 'Memory card matching game.', req: 'Near wanted board', trigger: '8' },
-  { key: 'supplyRun', name: 'Supply Run', desc: 'Deliver supplies, dodge obstacles.', req: 'Near general store', trigger: 'G' },
-  { key: 'pokerTourney', name: 'Poker Tournament', desc: '5-round poker tournament. $100 buy-in.', req: 'Near saloon', cost: 100, trigger: 'P' },
-  { key: 'cardSlinger', name: 'Blackjack', desc: '5-round blackjack at the saloon. $25/round.', req: 'Near saloon', cost: 25, trigger: '7' },
-  { key: 'cattleBranding', name: 'Cattle Branding', desc: 'Match the right brand to each cow. $10.', req: 'Near stable', cost: 10, trigger: '9' },
-  { key: 'cattleDefense', name: 'Cattle Rustling Defense', desc: 'Protect cattle from rustlers.', req: 'Day 3+, random event', trigger: 'Auto' },
-  { key: 'dynamiteDefusal', name: 'Dynamite Defusal', desc: 'Cut the right wire before it blows!', req: 'Day 4+, random event', trigger: 'Auto' },
-  { key: 'townDefense', name: 'Town Defense', desc: 'Defend town from 3 waves of bandits.', req: 'Day 7+, random event', trigger: 'Auto' },
-  { key: 'highNoonStandoff', name: 'High Noon Standoff', desc: '4 gunmen surround you at noon.', req: 'Day 5+, at noon', trigger: 'Auto' },
-  { key: 'sundownShootout', name: 'Sundown Shootout', desc: '3 waves of outlaws at dusk.', req: 'Day 3+, at dusk', trigger: 'Auto' },
-  { key: 'snakeRoundup', name: 'Rattlesnake Roundup', desc: 'Catch snakes, avoid bites!', req: 'Day 3+, random event', trigger: 'Auto' },
-  { key: 'wagonRepair', name: 'Wagon Wheel Repair', desc: 'Fix a broken wagon wheel.', req: 'Day 2+, random event', trigger: 'Auto' },
-  { key: 'medicineMan', name: 'Medicine Man', desc: 'Treat patients with correct remedies.', req: 'Day 4+, random event', trigger: 'Auto' },
-  { key: 'jailEscape', name: 'Jail Escape Prevention', desc: 'Stop prisoners from escaping!', req: '3+ prisoners', trigger: 'Auto' },
-  { key: 'telegraphDecode', name: 'Telegraph Decoder', desc: 'Type words to decode telegrams.', req: 'Day 2+, random event', trigger: 'Auto' },
-  { key: 'moonshineBust', name: 'Moonshine Bust', desc: 'Search locations to find illegal still.', req: 'Day 5+, after tip', trigger: '6' },
-  { key: 'goldAuction', name: 'Gold Rush Auction', desc: 'Bid on valuable items.', req: 'Every 5 days', trigger: '0' },
-  { key: 'prospectorClaim', name: "Prospector's Claim", desc: 'Mine rocks for gold at map edge.', req: 'At map edge', trigger: 'P' },
-  { key: 'treasurePuzzle', name: 'Treasure Map Puzzle', desc: 'Solve a 3x3 sliding puzzle.', req: 'Day 3+, random event', trigger: 'Auto' }
+  { key: 'trainHeist', name: 'Train Heist', desc: 'Rob a train! Fight guards, crack the safe, escape.', cost: 0 },
+  { key: 'lassoRodeo', name: 'Lasso Rodeo', desc: 'Lasso cattle in the arena.', cost: 10 },
+  { key: 'quickDrawTourney', name: 'Quick Draw Tournament', desc: '5-round quick draw dueling tournament.', cost: 50 },
+  { key: 'saloonBrawl', name: 'Saloon Brawl', desc: 'Fistfight in the saloon! Punch, dodge, combo.', cost: 0 },
+  { key: 'stagecoachDefense', name: 'Stagecoach Defense', desc: 'Defend a stagecoach from bandits.', cost: 0 },
+  { key: 'knifeContest', name: 'Knife Throwing', desc: 'Throw knives at targets for points.', cost: 15 },
+  { key: 'horseshoeToss', name: 'Horseshoe Toss', desc: 'Toss horseshoes at the stake.', cost: 10 },
+  { key: 'sharpshootContest', name: 'Sharpshooting Contest', desc: 'Timed target shooting challenge.', cost: 30 },
+  { key: 'hideoutRaid', name: 'Bandit Hideout Raid', desc: 'Clear 5 rooms of bandits for loot.', cost: 0 },
+  { key: 'rodeoBronco', name: 'Bronco Riding', desc: 'Stay on a bucking bronco for 8 seconds.', cost: 20 },
+  { key: 'vaultCrack', name: 'Vault Cracking', desc: 'Crack a bank vault. Corrupt path (+corruption).', cost: 0 },
+  { key: 'posterMatch', name: 'Wanted Poster Match', desc: 'Memory card matching game. Find pairs.', cost: 0 },
+  { key: 'supplyRun', name: 'Supply Run', desc: 'Deliver supplies, dodge obstacles on the trail.', cost: 0 },
+  { key: 'pokerTourney', name: 'Poker Tournament', desc: '5-round poker tournament.', cost: 100 },
+  { key: 'cardSlinger', name: 'Blackjack', desc: '5-round blackjack.', cost: 25 },
+  { key: 'cattleBranding', name: 'Cattle Branding', desc: 'Match the right brand to each cow.', cost: 10 },
+  { key: 'cattleDefense', name: 'Cattle Rustling Defense', desc: 'Protect cattle from rustlers.', cost: 0 },
+  { key: 'dynamiteDefusal', name: 'Dynamite Defusal', desc: 'Cut the right wire before it blows!', cost: 0 },
+  { key: 'townDefense', name: 'Town Defense', desc: 'Defend town from 3 waves of bandits.', cost: 0 },
+  { key: 'highNoonStandoff', name: 'High Noon Standoff', desc: '4 gunmen surround you. Aim and shoot!', cost: 0 },
+  { key: 'sundownShootout', name: 'Sundown Shootout', desc: '3 waves of outlaws at dusk.', cost: 0 },
+  { key: 'snakeRoundup', name: 'Rattlesnake Roundup', desc: 'Catch snakes, avoid bites!', cost: 0 },
+  { key: 'wagonRepair', name: 'Wagon Wheel Repair', desc: 'Fix a broken wagon wheel with timing.', cost: 0 },
+  { key: 'medicineMan', name: 'Medicine Man', desc: 'Treat patients with correct remedies.', cost: 0 },
+  { key: 'jailEscape', name: 'Jail Escape Prevention', desc: 'Stop prisoners from escaping!', cost: 0 },
+  { key: 'telegraphDecode', name: 'Telegraph Decoder', desc: 'Type words to decode urgent telegrams.', cost: 0 },
+  { key: 'moonshineBust', name: 'Moonshine Bust', desc: 'Search locations to find illegal still.', cost: 0 },
+  { key: 'goldAuction', name: 'Gold Rush Auction', desc: 'Bid on valuable items at auction.', cost: 0 },
+  { key: 'prospectorClaim', name: "Prospector's Claim", desc: 'Mine rocks for gold nuggets.', cost: 0 },
+  { key: 'treasurePuzzle', name: 'Treasure Map Puzzle', desc: 'Solve a 3x3 sliding puzzle for reward.', cost: 0 }
 ];
+
+// ============================================================
+// LAUNCH MINIGAME — starts any minigame directly from menu
+// ============================================================
+function launchMinigame(key) {
+  initMinigames();
+  var m = game._minigames;
+  var p = game.player;
+
+  // Find catalog entry for cost
+  var catEntry = null;
+  for (var ci = 0; ci < MINIGAME_CATALOG.length; ci++) {
+    if (MINIGAME_CATALOG[ci].key === key) { catEntry = MINIGAME_CATALOG[ci]; break; }
+  }
+  if (catEntry && catEntry.cost > 0) {
+    if (game.gold < catEntry.cost) {
+      showNotification('Need $' + catEntry.cost + ' to play ' + catEntry.name + '.');
+      return false;
+    }
+    game.gold -= catEntry.cost;
+  }
+
+  if (!startMinigame(key)) return false;
+
+  switch (key) {
+    case 'trainHeist':
+      m.trainHeist = true; m.trainHeistPhase = 0; m.trainHeistTimer = 0;
+      m.trainHeistGuards = rand(2, 4); m.trainHeistSafeProgress = 0;
+      m.trainHeistLoot = rand(200, 600); m.trainHeistAlarm = false;
+      showNotification('TRAIN HEIST! Fight guards, crack the safe, escape!');
+      break;
+    case 'lassoRodeo':
+      m.lassoRodeo = true; m.lassoRodeoPhase = 0; m.lassoRodeoTimer = 3;
+      m.lassoRodeoScore = 0; m.lassoRodeoRound = 0; m.lassoRodeoTargets = [];
+      m._lassoX = 150; m._lassoY = 90;
+      for (var li = 0; li < 5; li++) {
+        m.lassoRodeoTargets.push({ x: rand(50, 250), y: rand(40, 140), dx: randF(-2, 2), dy: randF(-1, 1), caught: false, size: rand(8, 16) });
+      }
+      showNotification('LASSO RODEO! Catch the cattle! WASD + SPACE to lasso.');
+      break;
+    case 'quickDrawTourney':
+      m.quickDrawTourney = true; m.quickDrawRound = 1; m.quickDrawPhase = 0;
+      m.quickDrawTimer = rand(2, 5); m.quickDrawWins = 0; m.quickDrawWindow = 600;
+      m.quickDrawOpponent = 'Dusty Dan';
+      showNotification('QUICK DRAW TOURNAMENT! Round 1 vs Dusty Dan. Wait for DRAW!');
+      break;
+    case 'cattleDefense':
+      m.cattleDefense = true; m.cattleDefenseTimer = 45; m.cattleCount = 10; m.cattleStolenCount = 0;
+      m.cattleRustlers = []; m.cattlePositions = []; m._cattleAimX = 150; m._cattleAimY = 90;
+      for (var ci2 = 0; ci2 < 10; ci2++) m.cattlePositions.push({ x: rand(60, 240), y: rand(50, 140), alive: true });
+      for (var ri = 0; ri < 4; ri++) m.cattleRustlers.push({ x: ri < 2 ? -10 : 310, y: rand(40, 150), hp: 2, target: rand(0, 9), speed: randF(0.8, 1.5), carrying: false });
+      showNotification('CATTLE RUSTLERS! Protect the herd! WASD aim, SPACE shoot!');
+      break;
+    case 'saloonBrawl':
+      m.saloonBrawl = true; m.saloonBrawlTimer = 45; m.saloonBrawlHP = 10;
+      m.saloonBrawlScore = 0; m.saloonBrawlCombo = 0; m.saloonBrawlEnemies = [];
+      m._brawlX = 150; m._brawlY = 90; m._brawlDodge = 0;
+      var brawlNames = ['Rowdy Jake', 'Big Mike', 'Dirty Pete', 'Slim Jim', 'Two-Fist Tony', 'Crazy Carl'];
+      for (var bei = 0; bei < 4; bei++) m.saloonBrawlEnemies.push({ name: brawlNames[rand(0, brawlNames.length - 1)], hp: 3, x: rand(40, 260), y: rand(40, 140), attackTimer: randF(1, 3), stunTimer: 0 });
+      showNotification('SALOON BRAWL! SPACE=punch, Q=dodge, WASD=move.');
+      break;
+    case 'stagecoachDefense':
+      m.stagecoachDefense = true; m.stagecoachTimer = 0; m.stagecoachHP = 100;
+      m.stagecoachDistance = 0; m.stagecoachAmmo = 30; m.stagecoachBandits = [];
+      m._stageAimX = 150; m._stageAimY = 90;
+      showNotification('STAGECOACH DEFENSE! Protect the coach! WASD aim, SPACE shoot!');
+      break;
+    case 'dynamiteDefusal':
+      m.dynamiteDefusal = true; m.dynamiteDefusalTimer = 20; m.dynamitePhase = 0; m.dynamiteScore = 0;
+      m.dynamiteWires = []; var colors = ['Red', 'Blue', 'Green', 'Yellow'];
+      for (var dwi = 0; dwi < 4; dwi++) m.dynamiteWires.push({ color: colors[dwi], cut: false });
+      m.dynamiteCorrectWire = rand(0, 3);
+      showNotification('DYNAMITE! Cut the right wire (1-4)! Check the hint!');
+      break;
+    case 'knifeContest':
+      m.knifeContest = true; m.knifeContestPhase = 0; m.knifeContestScore = 0;
+      m.knifeContestRound = 0; m.knifeContestAngle = 50; m.knifeContestDir = 1;
+      m.knifeContestPower = 0; m.knifeContestTarget = { x: 250, y: 90, radius: 30 };
+      showNotification('KNIFE THROWING! SPACE to set angle, SPACE again for power!');
+      break;
+    case 'horseshoeToss':
+      m.horseshoeToss = true; m.horseshoePhase = 0; m.horseshoeScore = 0;
+      m.horseshoeRound = 0; m.horseshoeAngle = 50; m.horseshoeAngleDir = 1;
+      m.horseshoeFlying = false; m.horseshoePower = 0;
+      showNotification('HORSESHOE TOSS! SPACE to set angle, then power!');
+      break;
+    case 'sharpshootContest':
+      m.sharpshootContest = true; m.sharpshootTimer = 30; m.sharpshootScore = 0;
+      m.sharpshootMisses = 0; m.sharpshootTargets = [];
+      m._sharpAimX = 150; m._sharpAimY = 90;
+      for (var sti = 0; sti < 3; sti++) m.sharpshootTargets.push({ x: rand(40, 260), y: rand(30, 140), size: rand(10, 20), dx: randF(-1.5, 1.5), dy: randF(-0.5, 0.5), hp: 1 });
+      showNotification('SHARPSHOOTING! Hit targets! WASD aim, SPACE shoot!');
+      break;
+    case 'hideoutRaid':
+      m.hideoutRaid = true; m.hideoutRoom = 0; m.hideoutPlayerX = 30; m.hideoutPlayerY = 90;
+      m.hideoutHP = 10; m.hideoutLoot = 0; m.hideoutEnemies = [];
+      for (var hei = 0; hei < 3; hei++) m.hideoutEnemies.push({ x: rand(150, 280), y: rand(30, 150), hp: 2, attackTimer: randF(1, 3) });
+      showNotification('HIDEOUT RAID! Clear 5 rooms! WASD move, SPACE shoot, E advance.');
+      break;
+    case 'rodeoBronco':
+      m.rodeoBronco = true; m.rodeoBroncoTimer = 0; m.rodeoBroncoBalance = 50;
+      m.rodeoBroncoBuckDir = 1; m.rodeoBroncoBuckTimer = 0; m.rodeoBroncoScore = 0;
+      showNotification('BRONCO RIDING! Stay on for 8 seconds! A/D to balance!');
+      break;
+    case 'telegraphDecode':
+      m.telegraphDecode = true; m.telegraphTimer = 30; m.telegraphRound = 0; m.telegraphScore = 0;
+      var words = ['OUTLAW', 'AMBUSH', 'GOLD', 'WANTED', 'BANDIT', 'HEIST', 'POSSE', 'REWARD', 'DEPUTY', 'DANGER'];
+      m.telegraphMessage = words[rand(0, words.length - 1)]; m.telegraphInput = '';
+      showNotification('TELEGRAPH! Type the word: ' + m.telegraphMessage);
+      break;
+    case 'vaultCrack':
+      m.vaultCrack = true; m.vaultPhase = 0; m.vaultDials = [0, 0, 0];
+      m.vaultTargets = [rand(10, 90), rand(10, 90), rand(10, 90)]; m.vaultCurrentDial = 0; m.vaultTimer = 30;
+      showNotification('VAULT CRACKING! A/D to turn dial, SPACE to lock tumblers.');
+      break;
+    case 'townDefense':
+      m.townDefense = true; m.townDefenseWave = 1; m.townDefenseTimer = 0;
+      m.townDefenseHP = 100; m.townDefenseKills = 0; m.townDefenseEnemies = [];
+      m._townAimX = 150; m._townAimY = 90;
+      for (var tdi = 0; tdi < 5; tdi++) m.townDefenseEnemies.push({ x: Math.random() < 0.5 ? -10 : 310, y: rand(20, 160), hp: 2, speed: randF(0.5, 1.5), attackTimer: randF(2, 4) });
+      showNotification('TOWN UNDER ATTACK! Defend! 3 waves! WASD aim, SPACE shoot!');
+      break;
+    case 'posterMatch':
+      m.posterMatch = true; m.posterMatchTimer = 60; m.posterMatchMatched = 0;
+      m.posterMatchMoves = 0; m.posterMatchFlipped = []; m._posterSelected = -1; m._posterCursor = 0;
+      var faces = ['Bandit', 'Outlaw', 'Rustler', 'Gunman', 'Thief', 'Rogue', 'Killer', 'Crook'];
+      var cards = [];
+      for (var fi = 0; fi < faces.length; fi++) { cards.push(faces[fi]); cards.push(faces[fi]); }
+      for (var shi = cards.length - 1; shi > 0; shi--) { var sj = rand(0, shi); var tmp = cards[shi]; cards[shi] = cards[sj]; cards[sj] = tmp; }
+      m.posterMatchCards = [];
+      for (var pci = 0; pci < 16; pci++) m.posterMatchCards.push({ name: cards[pci], revealed: false, matched: false });
+      showNotification('POSTER MATCH! Find pairs! WASD move, SPACE flip. 4x4 grid.');
+      break;
+    case 'supplyRun':
+      m.supplyRun = true; m.supplyRunTimer = 0; m.supplyRunDistance = 0;
+      m.supplyRunLane = 1; m.supplyRunHP = 3; m.supplyRunScore = 0; m.supplyRunObstacles = [];
+      showNotification('SUPPLY RUN! W/S change lanes, avoid obstacles!');
+      break;
+    case 'snakeRoundup':
+      m.snakeRoundup = true; m.snakeRoundupTimer = 30; m.snakeRoundupCaught = 0;
+      m.snakeRoundupBitten = 0; m.snakeRoundupPlayerX = 150; m.snakeRoundupPlayerY = 90;
+      m.snakeRoundupSnakes = [];
+      for (var sni = 0; sni < 8; sni++) m.snakeRoundupSnakes.push({ x: rand(30, 270), y: rand(30, 150), dx: randF(-2, 2), dy: randF(-2, 2), caught: false, strikeTimer: randF(2, 5) });
+      showNotification('RATTLESNAKE ROUNDUP! WASD move, SPACE catch!');
+      break;
+    case 'goldAuction':
+      m.goldAuction = true; m.goldAuctionCurrent = 0; m.goldAuctionWon = [];
+      m.goldAuctionItems = [
+        { name: 'Gold Mine Deed', value: rand(200, 500), bid: rand(50, 100) },
+        { name: 'Stallion Horse', value: rand(100, 300), bid: rand(30, 80) },
+        { name: 'Map to Outlaw Cache', value: rand(150, 400), bid: rand(40, 90) },
+        { name: 'Silver Pocket Watch', value: rand(50, 150), bid: rand(20, 50) },
+        { name: 'Crate of Dynamite', value: rand(80, 200), bid: rand(25, 60) }
+      ];
+      m.goldAuctionBid = m.goldAuctionItems[0].bid; m.goldAuctionTimer = 10;
+      showNotification('AUCTION! D=bid up, SPACE=buy, S=pass.');
+      break;
+    case 'moonshineBust':
+      m.moonshineBust = true; m.moonshineTimer = 60; m.moonshineFound = false;
+      m.moonshineSearched = []; m.moonshineLocations = [];
+      var locNames = ['Behind Saloon', 'Under Church', 'Old Barn', 'Mine Entrance', 'Hotel Cellar', 'Stable Loft'];
+      var stillLoc = rand(0, 5);
+      for (var mli = 0; mli < 6; mli++) m.moonshineLocations.push({ name: locNames[mli], hasStill: mli === stillLoc, searched: false });
+      showNotification('MOONSHINE BUST! Search locations (1-6). Find the still!');
+      break;
+    case 'prospectorClaim':
+      m.prospectorClaim = true; m.prospectorTimer = 40; m.prospectorGold = 0;
+      m.prospectorDepth = 0; m.prospectorRocks = []; m.prospectorTool = 0;
+      m._prospectX = 150; m._prospectY = 90;
+      for (var pri = 0; pri < 12; pri++) m.prospectorRocks.push({ x: rand(30, 270), y: rand(30, 150), hasGold: Math.random() < 0.3, goldAmount: rand(10, 50), mined: false });
+      showNotification("PROSPECTOR'S CLAIM! WASD move, SPACE mine, 1=Pickaxe 2=Dynamite.");
+      break;
+    case 'pokerTourney':
+      m.pokerTourney = true; m.pokerTourneyRound = 1; m.pokerTourneyChips = 500;
+      m.pokerTourneyPhase = 0; m.pokerTourneyPot = 100; m.pokerTourneyHeld = [];
+      m.pokerTourneyChips -= 50;
+      var deck = newDeck();
+      m.pokerTourneyHand = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+      m.pokerTourneyDealer = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
+      showNotification('POKER TOURNAMENT! 1-5 hold, SPACE draw, D raise.');
+      break;
+    case 'highNoonStandoff':
+      m.highNoonStandoff = true; m.highNoonPhase = 0; m.highNoonTimer = 3;
+      m.highNoonShots = 6; m.highNoonScore = 0; m.highNoonEnemies = []; m.highNoonPlayerAngle = 0;
+      var standoffNames = ['Snake Eyes', 'The Viper', 'Dead-Eye Doug', 'Rattlesnake Rita', 'Tombstone Terry'];
+      for (var hni = 0; hni < 4; hni++) {
+        var angle = (hni / 4) * Math.PI * 2;
+        m.highNoonEnemies.push({ name: standoffNames[rand(0, standoffNames.length - 1)], angle: angle, distance: 120, hp: 1, drawTimer: randF(1, 4), drawing: false });
+      }
+      showNotification('HIGH NOON STANDOFF! Wait... then A/D aim, SPACE shoot!');
+      break;
+    case 'wagonRepair':
+      m.wagonRepair = true; m.wagonRepairTimer = 25; m.wagonRepairPhase = 0;
+      m.wagonRepairProgress = 0; m.wagonRepairTarget = rand(40, 80);
+      m.wagonRepairHits = 0; m.wagonRepairScore = 0; m._hammerPos = 0;
+      showNotification('WAGON REPAIR! Tap SPACE when hammer hits the green zone!');
+      break;
+    case 'cattleBranding':
+      m.cattleBranding = true; m.cattleBrandingTimer = 30; m.cattleBrandingScore = 0;
+      m.cattleBrandingRound = 0; m.cattleBrandingSelected = 0;
+      m.cattleBrandingBrands = ['Circle S', 'Double T', 'Bar M', 'Diamond K', 'Lazy R'];
+      m.cattleBrandingTarget = rand(0, 4);
+      showNotification('CATTLE BRANDING! Target: ' + m.cattleBrandingBrands[m.cattleBrandingTarget] + '. 1-5 pick, SPACE brand.');
+      break;
+    case 'medicineMan':
+      m.medicineMan = true; m.medicineTimer = 45; m.medicineScore = 0; m.medicineCurrentPatient = 0;
+      var ailments = ['Fever', 'Snakebite', 'Broken Arm', 'Cough', 'Headache', 'Stomachache'];
+      m.medicinePatients = []; m.medicineItems = ['Willow Bark', 'Anti-venom', 'Splint', 'Honey Tea', 'Cool Cloth', 'Ginger Root'];
+      for (var mpi = 0; mpi < 5; mpi++) { var aidx = rand(0, ailments.length - 1); m.medicinePatients.push({ ailment: ailments[aidx], remedy: aidx, treated: false }); }
+      showNotification('MEDICINE MAN! Patient: ' + m.medicinePatients[0].ailment + '. Pick remedy 1-6!');
+      break;
+    case 'jailEscape':
+      m.jailEscape = true; m.jailEscapeTimer = 45; m.jailEscapeBlocked = 0;
+      m.jailEscapeEscaped = 0; m.jailEscapePlayerX = 150; m.jailEscapePlayerY = 90;
+      m.jailEscapePrisoners = [];
+      for (var jpi = 0; jpi < 5; jpi++) m.jailEscapePrisoners.push({ x: rand(20, 280), y: rand(20, 40), speed: randF(1, 2.5), escaped: false, blocked: false });
+      showNotification('JAIL BREAK! WASD move, SPACE to block prisoners!');
+      break;
+    case 'cardSlinger':
+      m.cardSlinger = true; m.cardSlingerRound = 1; m.cardSlingerWins = 0;
+      m.cardSlingerBet = 25; m.cardSlingerPhase = 0;
+      m._bjDeck = newDeck();
+      m.cardSlingerHand = [m._bjDeck.pop(), m._bjDeck.pop()];
+      m.cardSlingerDealer = [m._bjDeck.pop(), m._bjDeck.pop()];
+      showNotification('BLACKJACK! Hand: ' + handValue(m.cardSlingerHand) + '. 1=Hit, 2=Stand, 3=Double.');
+      break;
+    case 'sundownShootout':
+      m.sundownShootout = true; m.sundownPhase = 0; m.sundownTimer = 2;
+      m.sundownAmmo = 12; m.sundownScore = 0; m.sundownWave = 1; m.sundownEnemies = [];
+      m._sunAimX = 150; m._sunAimY = 90;
+      for (var sdi = 0; sdi < 4; sdi++) m.sundownEnemies.push({ x: Math.random() < 0.5 ? rand(-10, 20) : rand(280, 310), y: rand(30, 150), hp: 2, speed: randF(0.5, 1.5), attackTimer: randF(2, 4) });
+      showNotification('SUNDOWN SHOOTOUT! 3 waves! WASD aim, SPACE shoot!');
+      break;
+    case 'treasurePuzzle':
+      m.treasurePuzzle = true; m.treasurePuzzleMoves = 0; m.treasurePuzzleTimer = 60;
+      m.treasurePuzzleSolved = false; m.treasurePuzzleReward = rand(100, 400);
+      m.treasurePuzzleGrid = [1,2,3,4,5,6,7,8,0];
+      for (var pzi = 0; pzi < 30; pzi++) {
+        var emptyIdx = m.treasurePuzzleGrid.indexOf(0);
+        var row = Math.floor(emptyIdx / 3), col = emptyIdx % 3;
+        var moves = [];
+        if (row > 0) moves.push(emptyIdx - 3); if (row < 2) moves.push(emptyIdx + 3);
+        if (col > 0) moves.push(emptyIdx - 1); if (col < 2) moves.push(emptyIdx + 1);
+        var swapIdx = moves[rand(0, moves.length - 1)];
+        m.treasurePuzzleGrid[emptyIdx] = m.treasurePuzzleGrid[swapIdx]; m.treasurePuzzleGrid[swapIdx] = 0;
+      }
+      showNotification('TREASURE MAP PUZZLE! WASD slide tiles. Prize: $' + m.treasurePuzzleReward);
+      break;
+    default:
+      showNotification('Unknown minigame: ' + key);
+      endMinigame(key, false, 0);
+      return false;
+  }
+  addJournalEntry('Started minigame: ' + key);
+  return true;
+}
 
 function openMinigameMenu() {
   initMinigames();
@@ -391,19 +647,15 @@ function updateMinigameMenu() {
   if (game._minigameMenuCursor < game._minigameMenuScroll) game._minigameMenuScroll = game._minigameMenuCursor;
   if (game._minigameMenuCursor >= game._minigameMenuScroll + 12) game._minigameMenuScroll = game._minigameMenuCursor - 11;
 
-  // Select
+  // Select — launch the minigame directly
   if (consumeKey('Space') || consumeKey('Enter') || consumeKey('KeyE')) {
     var item = MINIGAME_CATALOG[game._minigameMenuCursor];
-    if (item.trigger === 'Auto') {
-      showNotification(item.name + ' triggers automatically during gameplay.');
+    var m2 = game._minigames;
+    if (m2.minigameCooldowns[item.key] && m2.minigameCooldowns[item.key] > 0) {
+      showNotification(item.name + ' is on cooldown. Try again later.');
     } else {
-      var m = game._minigames;
-      if (m.minigameCooldowns[item.key] && m.minigameCooldowns[item.key] > 0) {
-        showNotification(item.name + ' is on cooldown. Try again later.');
-      } else {
-        closeMinigameMenu();
-        showNotification('Go to: ' + item.req + ' and press ' + item.trigger + ' to start ' + item.name + '!');
-      }
+      closeMinigameMenu();
+      launchMinigame(item.key);
     }
   }
 
@@ -461,24 +713,21 @@ function renderMinigameMenu() {
     // Name
     ctx.textAlign = 'left';
     ctx.font = selected ? 'bold 10px monospace' : '10px monospace';
-    ctx.fillStyle = onCooldown ? '#666' : (item.trigger === 'Auto' ? '#aa8855' : '#ffd700');
+    ctx.fillStyle = onCooldown ? '#666' : '#ffd700';
     ctx.fillText((selected ? '> ' : '  ') + item.name, 30, y);
 
-    // Trigger key
+    // Cost and status
     ctx.textAlign = 'right';
-    ctx.fillStyle = item.trigger === 'Auto' ? '#665533' : '#44aa44';
     ctx.font = '9px monospace';
-    ctx.fillText(item.trigger === 'Auto' ? 'AUTO' : '[' + item.trigger + ']', w - 30, y);
-
-    // Cost
-    if (item.cost) {
-      ctx.fillStyle = '#cc8833';
-      ctx.fillText('$' + item.cost, w - 70, y);
-    }
-
     if (onCooldown) {
       ctx.fillStyle = '#884444';
-      ctx.fillText('COOLDOWN', w - 70, y);
+      ctx.fillText('COOLDOWN', w - 30, y);
+    } else if (item.cost > 0) {
+      ctx.fillStyle = '#cc8833';
+      ctx.fillText('$' + item.cost, w - 30, y);
+    } else {
+      ctx.fillStyle = '#44aa44';
+      ctx.fillText('FREE', w - 30, y);
     }
   }
 
@@ -505,7 +754,7 @@ function renderMinigameMenu() {
     ctx.font = '9px monospace';
     ctx.fillText(sel.desc, w / 2, descY + 16);
     ctx.fillStyle = '#aa8855';
-    ctx.fillText('Requires: ' + sel.req + (sel.cost ? ' ($' + sel.cost + ')' : ''), w / 2, descY + 28);
+    ctx.fillText(sel.cost > 0 ? 'Entry fee: $' + sel.cost : 'Free to play', w / 2, descY + 28);
   }
 
   ctx.textAlign = 'left';
@@ -557,7 +806,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 1. TRAIN ROBBERY HEIST
   // ════════════════════════════════════════
-  if (m.trainHeistCooldown > 0) m.trainHeistCooldown -= dt;
   // Trigger: press T near a stopped train
   if (!m.trainHeist && game.train && game.train.state === 'stopped' && !game.train.robbed && m.trainHeistCooldown <= 0) {
     var nearT = Math.abs(p.y - game.train.y) < 50 && p.x > game.train.x - 20 && p.x < game.train.x + (game.train.cars + 1) * 80 + 20;
@@ -657,38 +905,6 @@ function updateMinigames(dt) {
   // 2. LASSO RODEO
   // ════════════════════════════════════════
   // Trigger: near stable, press L
-  if (!m.lassoRodeo && !isMinigameActive() && game.state === 'playing') {
-    var nearStable = false;
-    for (var si = 0; si < game.buildings.length; si++) {
-      if (game.buildings[si].type === BUILDING_TYPES.STABLE) {
-        var sd = Math.hypot(p.x - game.buildings[si].doorX * TILE, p.y - game.buildings[si].doorY * TILE);
-        if (sd < 80) nearStable = true;
-      }
-    }
-    if (nearStable && consumeKey('KeyL')) {
-      if (game.gold >= 10) {
-        game.gold -= 10;
-        if (startMinigame('lassoRodeo')) {
-          m.lassoRodeo = true;
-          m.lassoRodeoPhase = 0;
-          m.lassoRodeoTimer = 3;
-          m.lassoRodeoScore = 0;
-          m.lassoRodeoRound = 0;
-          m.lassoRodeoTargets = [];
-          for (var li = 0; li < 5; li++) {
-            m.lassoRodeoTargets.push({
-              x: rand(50, 250), y: rand(40, 140),
-              dx: randF(-2, 2), dy: randF(-1, 1),
-              caught: false, size: rand(8, 16)
-            });
-          }
-          showNotification('LASSO RODEO! Catch the cattle! Use WASD + SPACE to lasso.');
-        }
-      } else {
-        showNotification('Need $10 for rodeo entry.');
-      }
-    }
-  }
   if (m.lassoRodeo) {
     if (m.lassoRodeoPhase === 0) {
       m.lassoRodeoTimer -= dt;
@@ -762,32 +978,6 @@ function updateMinigames(dt) {
   // 3. QUICK DRAW TOURNAMENT
   // ════════════════════════════════════════
   // Trigger: near gallows/wanted board, press U
-  if (!m.quickDrawTourney && !isMinigameActive() && game.state === 'playing') {
-    var nearGallows = false;
-    for (var gi2 = 0; gi2 < game.buildings.length; gi2++) {
-      if (game.buildings[gi2].type === BUILDING_TYPES.GALLOWS || game.buildings[gi2].type === BUILDING_TYPES.WANTED_BOARD) {
-        if (Math.hypot(p.x - game.buildings[gi2].x * TILE, p.y - game.buildings[gi2].y * TILE) < 100) nearGallows = true;
-      }
-    }
-    if (nearGallows && consumeKey('KeyU')) {
-      if (game.gold >= 50) {
-        game.gold -= 50;
-        if (startMinigame('quickDrawTourney')) {
-          m.quickDrawTourney = true;
-          m.quickDrawRound = 1;
-          m.quickDrawPhase = 0;
-          m.quickDrawTimer = rand(2, 5);
-          m.quickDrawWins = 0;
-          var opponents = ['Dusty Dan', 'Quick Pete', 'Lightning Lou', 'Viper Vic', 'The Shadow'];
-          m.quickDrawOpponent = opponents[0];
-          m.quickDrawWindow = 600;
-          showNotification('QUICK DRAW TOURNAMENT! Round 1 vs ' + m.quickDrawOpponent + '. Wait for DRAW!');
-        }
-      } else {
-        showNotification('Need $50 entry fee for tournament.');
-      }
-    }
-  }
   if (m.quickDrawTourney) {
     if (m.quickDrawPhase === 0) {
       // Staredown — wait
@@ -860,31 +1050,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 4. CATTLE RUSTLING DEFENSE
   // ════════════════════════════════════════
-  if (!m.cattleDefense && !isMinigameActive() && game.state === 'playing' && game.dayCount > 3) {
-    m._cattleEventTimer = (m._cattleEventTimer || 0) + dt;
-    if (m._cattleEventTimer > 180 && Math.random() < 0.005) {
-      m._cattleEventTimer = 0;
-      if (startMinigame('cattleDefense')) {
-        m.cattleDefense = true;
-        m.cattleDefenseTimer = 45;
-        m.cattleCount = 10;
-        m.cattleStolenCount = 0;
-        m.cattleRustlers = [];
-        m.cattlePositions = [];
-        for (var ci = 0; ci < 10; ci++) {
-          m.cattlePositions.push({ x: rand(60, 240), y: rand(50, 140), alive: true });
-        }
-        for (var ri = 0; ri < 4; ri++) {
-          m.cattleRustlers.push({
-            x: ri < 2 ? -10 : 310, y: rand(40, 150), hp: 2,
-            target: rand(0, 9), speed: randF(0.8, 1.5), carrying: false
-          });
-        }
-        showNotification('CATTLE RUSTLERS! Protect the herd! Shoot them with SPACE!');
-        addJournalEntry('Cattle rustlers spotted! Defending the herd.');
-      }
-    }
-  }
   if (m.cattleDefense) {
     m.cattleDefenseTimer -= dt;
     // Player aims with WASD
@@ -955,33 +1120,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 5. SALOON BRAWL
   // ════════════════════════════════════════
-  if (!m.saloonBrawl && !isMinigameActive() && game.state === 'playing') {
-    var nearSaloon = false;
-    for (var sbi = 0; sbi < game.buildings.length; sbi++) {
-      if (game.buildings[sbi].type === BUILDING_TYPES.SALOON) {
-        if (Math.hypot(p.x - game.buildings[sbi].doorX * TILE, p.y - game.buildings[sbi].doorY * TILE) < 60) nearSaloon = true;
-      }
-    }
-    if (nearSaloon && consumeKey('KeyB') && !m.saloonBrawl) {
-      if (startMinigame('saloonBrawl')) {
-        m.saloonBrawl = true;
-        m.saloonBrawlTimer = 45;
-        m.saloonBrawlHP = 10;
-        m.saloonBrawlScore = 0;
-        m.saloonBrawlCombo = 0;
-        m.saloonBrawlEnemies = [];
-        var brawlNames = ['Rowdy Jake', 'Big Mike', 'Dirty Pete', 'Slim Jim', 'Two-Fist Tony', 'Crazy Carl'];
-        for (var bei = 0; bei < 4; bei++) {
-          m.saloonBrawlEnemies.push({
-            name: brawlNames[rand(0, brawlNames.length - 1)],
-            hp: 3, x: rand(40, 260), y: rand(40, 140),
-            attackTimer: randF(1, 3), stunTimer: 0
-          });
-        }
-        showNotification('SALOON BRAWL! Punch with SPACE, dodge with Q! WASD to move.');
-      }
-    }
-  }
   if (m.saloonBrawl) {
     m.saloonBrawlTimer -= dt;
     // Player movement
@@ -1063,22 +1201,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 6. STAGECOACH DEFENSE
   // ════════════════════════════════════════
-  if (!m.stagecoachDefense && !isMinigameActive() && game.state === 'playing' && game.dayCount > 2) {
-    m._stagecoachTimer = (m._stagecoachTimer || 0) + dt;
-    if (m._stagecoachTimer > 240 && Math.random() < 0.003) {
-      m._stagecoachTimer = 0;
-      if (startMinigame('stagecoachDefense')) {
-        m.stagecoachDefense = true;
-        m.stagecoachTimer = 0;
-        m.stagecoachHP = 100;
-        m.stagecoachDistance = 0;
-        m.stagecoachAmmo = 30;
-        m.stagecoachBandits = [];
-        showNotification('STAGECOACH DEFENSE! Protect the coach! WASD aim, SPACE shoot!');
-        addJournalEntry('Defending a stagecoach from bandits.');
-      }
-    }
-  }
   if (m.stagecoachDefense) {
     m.stagecoachTimer += dt;
     m.stagecoachDistance += dt * 20;
@@ -1151,24 +1273,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 7. DYNAMITE DEFUSAL
   // ════════════════════════════════════════
-  if (!m.dynamiteDefusal && !isMinigameActive() && game.state === 'playing' && game.dayCount > 4) {
-    m._dynamiteEventTimer = (m._dynamiteEventTimer || 0) + dt;
-    if (m._dynamiteEventTimer > 300 && Math.random() < 0.004) {
-      m._dynamiteEventTimer = 0;
-      if (startMinigame('dynamiteDefusal')) {
-        m.dynamiteDefusal = true;
-        m.dynamiteDefusalTimer = 20;
-        m.dynamitePhase = 0;
-        m.dynamiteScore = 0;
-        m.dynamiteWires = [];
-        var colors = ['Red', 'Blue', 'Green', 'Yellow', 'White'];
-        for (var dwi = 0; dwi < 4; dwi++) m.dynamiteWires.push({ color: colors[dwi], cut: false });
-        m.dynamiteCorrectWire = rand(0, 3);
-        showNotification('DYNAMITE FOUND! Cut the right wire! (1-4 keys) Hint: check the color clue!');
-        addJournalEntry('Found dynamite! Must defuse before it blows!');
-      }
-    }
-  }
   if (m.dynamiteDefusal) {
     m.dynamiteDefusalTimer -= dt;
     if (m.dynamiteDefusalTimer <= 0) {
@@ -1207,32 +1311,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 8. KNIFE THROWING CONTEST
   // ════════════════════════════════════════
-  if (!m.knifeContest && !isMinigameActive() && game.state === 'playing') {
-    var nearBlacksmith = false;
-    for (var bsi = 0; bsi < game.buildings.length; bsi++) {
-      if (game.buildings[bsi].type === BUILDING_TYPES.BLACKSMITH) {
-        if (Math.hypot(p.x - game.buildings[bsi].doorX * TILE, p.y - game.buildings[bsi].doorY * TILE) < 80) nearBlacksmith = true;
-      }
-    }
-    if (nearBlacksmith && consumeKey('KeyY')) {
-      if (game.gold >= 15) {
-        game.gold -= 15;
-        if (startMinigame('knifeContest')) {
-          m.knifeContest = true;
-          m.knifeContestPhase = 0;
-          m.knifeContestScore = 0;
-          m.knifeContestRound = 0;
-          m.knifeContestAngle = 50;
-          m.knifeContestDir = 1;
-          m.knifeContestPower = 0;
-          m.knifeContestTarget = { x: 250, y: 90, radius: 30 };
-          showNotification('KNIFE THROWING! Press SPACE to set angle, SPACE again for power!');
-        }
-      } else {
-        showNotification('Need $15 for knife throwing entry.');
-      }
-    }
-  }
   if (m.knifeContest) {
     if (m.knifeContestPhase === 0) {
       // Angle selection — oscillates
@@ -1287,31 +1365,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 9. HORSESHOE TOSS
   // ════════════════════════════════════════
-  if (!m.horseshoeToss && !isMinigameActive() && game.state === 'playing') {
-    var nearStable2 = false;
-    for (var hsi = 0; hsi < game.buildings.length; hsi++) {
-      if (game.buildings[hsi].type === BUILDING_TYPES.STABLE) {
-        if (Math.hypot(p.x - game.buildings[hsi].doorX * TILE, p.y - game.buildings[hsi].doorY * TILE) < 80) nearStable2 = true;
-      }
-    }
-    if (nearStable2 && consumeKey('KeyO')) {
-      if (game.gold >= 10) {
-        game.gold -= 10;
-        if (startMinigame('horseshoeToss')) {
-          m.horseshoeToss = true;
-          m.horseshoePhase = 0;
-          m.horseshoeScore = 0;
-          m.horseshoeRound = 0;
-          m.horseshoeAngle = 50;
-          m.horseshoeAngleDir = 1;
-          m.horseshoeFlying = false;
-          showNotification('HORSESHOE TOSS! Press SPACE to set angle, then power! Aim for the stake!');
-        }
-      } else {
-        showNotification('Need $10 for horseshoe toss.');
-      }
-    }
-  }
   if (m.horseshoeToss) {
     if (m.horseshoePhase === 0 && !m.horseshoeFlying) {
       m.horseshoeAngle += m.horseshoeAngleDir * dt * 60;
@@ -1327,7 +1380,6 @@ function updateMinigames(dt) {
         m._horseshoeResult = Math.abs(m.horseshoePower - 65) + Math.abs(m.horseshoeAngle - 50) * 0.5;
       }
     } else if (m.horseshoePhase === 2) {
-      m._horseshoeAnimTimer = (m._horseshoeAnimTimer || 0) + dt;
       if (m._horseshoeAnimTimer > 1) {
         m._horseshoeAnimTimer = 0;
         m.horseshoeFlying = false;
@@ -1359,30 +1411,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 10. SHARPSHOOTING CONTEST
   // ════════════════════════════════════════
-  if (!m.sharpshootContest && !isMinigameActive() && game.state === 'playing') {
-    m._sharpshootOfferTimer = (m._sharpshootOfferTimer || 0) + dt;
-    if (m._sharpshootOfferTimer > 150 && game.dayCount > 1 && game.dayCount % 2 === 0) {
-      m._sharpshootOfferTimer = -9999; // once per session
-      showNotification('Sharpshooting contest at the edge of town! Press X to join ($30).');
-    }
-    if (consumeKey('KeyX') && game.gold >= 30) {
-      game.gold -= 30;
-      if (startMinigame('sharpshootContest')) {
-        m.sharpshootContest = true;
-        m.sharpshootTimer = 30;
-        m.sharpshootScore = 0;
-        m.sharpshootMisses = 0;
-        m.sharpshootTargets = [];
-        for (var sti = 0; sti < 3; sti++) {
-          m.sharpshootTargets.push({
-            x: rand(40, 260), y: rand(30, 140), size: rand(10, 20),
-            dx: randF(-1.5, 1.5), dy: randF(-0.5, 0.5), hp: 1
-          });
-        }
-        showNotification('SHARPSHOOTING! Hit the targets! WASD aim, SPACE shoot!');
-      }
-    }
-  }
   if (m.sharpshootContest) {
     m.sharpshootTimer -= dt;
     m._sharpAimX = m._sharpAimX || 150;
@@ -1439,32 +1467,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 11. BANDIT HIDEOUT RAID
   // ════════════════════════════════════════
-  if (!m.hideoutRaid && !isMinigameActive() && game.state === 'playing') {
-    if (m.hideoutCooldown > 0) { m.hideoutCooldown -= dt; }
-    else {
-      m._hideoutHintTimer = (m._hideoutHintTimer || 0) + dt;
-      if (m._hideoutHintTimer > 200 && game.dayCount > 5 && Math.random() < 0.003) {
-        m._hideoutHintTimer = 0;
-        showNotification('Informant says there\'s a bandit hideout nearby! Press I to raid it.');
-      }
-      if (consumeKey('KeyI')) {
-        if (startMinigame('hideoutRaid')) {
-          m.hideoutRaid = true;
-          m.hideoutRoom = 0;
-          m.hideoutPlayerX = 30;
-          m.hideoutPlayerY = 90;
-          m.hideoutHP = 10;
-          m.hideoutLoot = 0;
-          m.hideoutEnemies = [];
-          // Generate enemies for first room
-          for (var hei = 0; hei < 3; hei++) {
-            m.hideoutEnemies.push({ x: rand(150, 280), y: rand(30, 150), hp: 2, attackTimer: randF(1, 3) });
-          }
-          showNotification('HIDEOUT RAID! Clear 5 rooms! WASD move, SPACE shoot, E to advance.');
-        }
-      }
-    }
-  }
   if (m.hideoutRaid) {
     // Movement
     if (keys['KeyW'] || keys['ArrowUp']) m.hideoutPlayerY -= 2.5;
@@ -1551,30 +1553,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 12. RODEO BRONCO
   // ════════════════════════════════════════
-  if (!m.rodeoBronco && !isMinigameActive() && game.state === 'playing') {
-    var nearStable3 = false;
-    for (var rsi = 0; rsi < game.buildings.length; rsi++) {
-      if (game.buildings[rsi].type === BUILDING_TYPES.STABLE) {
-        if (Math.hypot(p.x - game.buildings[rsi].doorX * TILE, p.y - game.buildings[rsi].doorY * TILE) < 80) nearStable3 = true;
-      }
-    }
-    if (nearStable3 && consumeKey('KeyZ')) {
-      if (game.gold >= 20) {
-        game.gold -= 20;
-        if (startMinigame('rodeoBronco')) {
-          m.rodeoBronco = true;
-          m.rodeoBroncoTimer = 0;
-          m.rodeoBroncoBalance = 50;
-          m.rodeoBroncoBuckDir = 1;
-          m.rodeoBroncoBuckTimer = 0;
-          m.rodeoBroncoScore = 0;
-          showNotification('BRONCO RIDING! Stay on for 8 seconds! A/D to balance!');
-        }
-      } else {
-        showNotification('Need $20 for bronco riding.');
-      }
-    }
-  }
   if (m.rodeoBronco) {
     m.rodeoBroncoTimer += dt;
     m.rodeoBroncoBuckTimer += dt;
@@ -1624,32 +1602,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 13. TELEGRAPH DECODER
   // ════════════════════════════════════════
-  if (!m.telegraphDecode && !isMinigameActive() && game.state === 'playing') {
-    m._telegraphTimer = (m._telegraphTimer || 0) + dt;
-    if (m._telegraphTimer > 200 && game.dayCount > 2 && Math.random() < 0.004) {
-      m._telegraphTimer = 0;
-      showNotification('Urgent telegram received! Press P twice to decode it!');
-      m._telegraphReady = true;
-    }
-    if (m._telegraphReady && consumeKey('KeyP')) {
-      if (m._telegraphReadyConfirm) {
-        m._telegraphReady = false;
-        m._telegraphReadyConfirm = false;
-        if (startMinigame('telegraphDecode')) {
-          m.telegraphDecode = true;
-          var words = ['OUTLAW', 'AMBUSH', 'GOLD', 'WANTED', 'BANDIT', 'HEIST', 'POSSE', 'REWARD', 'DEPUTY', 'DANGER'];
-          m.telegraphMessage = words[rand(0, words.length - 1)];
-          m.telegraphInput = '';
-          m.telegraphTimer = 30;
-          m.telegraphRound = 0;
-          m.telegraphScore = 0;
-          showNotification('Type the word: ' + m.telegraphMessage + ' (use letter keys!)');
-        }
-      } else {
-        m._telegraphReadyConfirm = true;
-      }
-    }
-  }
   if (m.telegraphDecode) {
     m.telegraphTimer -= dt;
     // Check letter keys
@@ -1695,25 +1647,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 14. BANK VAULT CRACKING
   // ════════════════════════════════════════
-  if (!m.vaultCrack && !isMinigameActive() && game.state === 'playing') {
-    var nearBank = false;
-    for (var vbi = 0; vbi < game.buildings.length; vbi++) {
-      if (game.buildings[vbi].type === BUILDING_TYPES.BANK) {
-        if (Math.hypot(p.x - game.buildings[vbi].doorX * TILE, p.y - game.buildings[vbi].doorY * TILE) < 60) nearBank = true;
-      }
-    }
-    if (nearBank && game.time > 0.8 && consumeKey('KeyC')) { // Night only, C key
-      if (startMinigame('vaultCrack')) {
-        m.vaultCrack = true;
-        m.vaultPhase = 0;
-        m.vaultDials = [0, 0, 0];
-        m.vaultTargets = [rand(10, 90), rand(10, 90), rand(10, 90)];
-        m.vaultCurrentDial = 0;
-        m.vaultTimer = 30;
-        showNotification('VAULT CRACKING! Turn dial with A/D, SPACE to lock each tumbler. Night job!');
-      }
-    }
-  }
   if (m.vaultCrack) {
     m.vaultTimer -= dt;
     var dial = m.vaultCurrentDial;
@@ -1755,30 +1688,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 15. TOWN DEFENSE WAVE
   // ════════════════════════════════════════
-  if (!m.townDefense && !isMinigameActive() && game.state === 'playing' && game.dayCount > 7) {
-    if (m.townDefenseCooldown > 0) { m.townDefenseCooldown -= dt; }
-    else {
-      m._townDefenseChance = (m._townDefenseChance || 0) + dt;
-      if (m._townDefenseChance > 300 && Math.random() < 0.005) {
-        m._townDefenseChance = 0;
-        if (startMinigame('townDefense')) {
-          m.townDefense = true;
-          m.townDefenseWave = 1;
-          m.townDefenseTimer = 0;
-          m.townDefenseHP = 100;
-          m.townDefenseKills = 0;
-          m.townDefenseEnemies = [];
-          for (var tdi = 0; tdi < 5; tdi++) {
-            m.townDefenseEnemies.push({
-              x: Math.random() < 0.5 ? -10 : 310, y: rand(20, 160), hp: 2, speed: randF(0.5, 1.5), attackTimer: randF(2, 4)
-            });
-          }
-          showNotification('TOWN UNDER ATTACK! Defend the town! 3 waves! WASD aim, SPACE shoot!');
-          addJournalEntry('Town under attack! Defending against bandit waves.');
-        }
-      }
-    }
-  }
   if (m.townDefense) {
     m.townDefenseTimer += dt;
     m._townAimX = m._townAimX || 150;
@@ -1855,36 +1764,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 16. WANTED POSTER MATCH (Memory game)
   // ════════════════════════════════════════
-  if (!m.posterMatch && !isMinigameActive() && game.state === 'playing') {
-    var nearWantedBoard = false;
-    for (var wbi = 0; wbi < game.buildings.length; wbi++) {
-      if (game.buildings[wbi].type === BUILDING_TYPES.WANTED_BOARD) {
-        if (Math.hypot(p.x - game.buildings[wbi].x * TILE, p.y - game.buildings[wbi].y * TILE) < 80) nearWantedBoard = true;
-      }
-    }
-    if (nearWantedBoard && consumeKey('Digit8')) {
-      if (startMinigame('posterMatch')) {
-        m.posterMatch = true;
-        m.posterMatchTimer = 60;
-        m.posterMatchMatched = 0;
-        m.posterMatchMoves = 0;
-        m.posterMatchFlipped = [];
-        // Create 8 pairs (4x4 grid)
-        var faces = ['Bandit', 'Outlaw', 'Rustler', 'Gunman', 'Thief', 'Rogue', 'Killer', 'Crook'];
-        var cards = [];
-        for (var fi = 0; fi < faces.length; fi++) { cards.push(faces[fi]); cards.push(faces[fi]); }
-        // Shuffle
-        for (var shi = cards.length - 1; shi > 0; shi--) { var sj = rand(0, shi); var tmp = cards[shi]; cards[shi] = cards[sj]; cards[sj] = tmp; }
-        m.posterMatchCards = [];
-        for (var pci = 0; pci < 16; pci++) {
-          m.posterMatchCards.push({ name: cards[pci], revealed: false, matched: false });
-        }
-        m._posterSelected = -1;
-        m._posterCursor = 0;
-        showNotification('WANTED POSTER MATCH! Find pairs! WASD to move, SPACE to flip. 4x4 grid.');
-      }
-    }
-  }
   if (m.posterMatch) {
     m.posterMatchTimer -= dt;
     // Move cursor
@@ -1941,26 +1820,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 17. SUPPLY RUN (endless runner style)
   // ════════════════════════════════════════
-  if (!m.supplyRun && !isMinigameActive() && game.state === 'playing') {
-    var nearGeneral = false;
-    for (var ngi = 0; ngi < game.buildings.length; ngi++) {
-      if (game.buildings[ngi].type === BUILDING_TYPES.GENERAL) {
-        if (Math.hypot(p.x - game.buildings[ngi].doorX * TILE, p.y - game.buildings[ngi].doorY * TILE) < 60) nearGeneral = true;
-      }
-    }
-    if (nearGeneral && consumeKey('KeyG') && game.gold >= 0) {
-      if (startMinigame('supplyRun')) {
-        m.supplyRun = true;
-        m.supplyRunTimer = 0;
-        m.supplyRunDistance = 0;
-        m.supplyRunLane = 1;
-        m.supplyRunHP = 3;
-        m.supplyRunScore = 0;
-        m.supplyRunObstacles = [];
-        showNotification('SUPPLY RUN! Deliver supplies! W/S to change lanes, avoid obstacles!');
-      }
-    }
-  }
   if (m.supplyRun) {
     m.supplyRunTimer += dt;
     m.supplyRunDistance += dt * 100;
@@ -2025,28 +1884,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 18. RATTLESNAKE ROUNDUP
   // ════════════════════════════════════════
-  if (!m.snakeRoundup && !isMinigameActive() && game.state === 'playing') {
-    m._snakeEventTimer = (m._snakeEventTimer || 0) + dt;
-    if (m._snakeEventTimer > 250 && game.dayCount > 3 && Math.random() < 0.003) {
-      m._snakeEventTimer = 0;
-      if (startMinigame('snakeRoundup')) {
-        m.snakeRoundup = true;
-        m.snakeRoundupTimer = 30;
-        m.snakeRoundupCaught = 0;
-        m.snakeRoundupBitten = 0;
-        m.snakeRoundupPlayerX = 150;
-        m.snakeRoundupPlayerY = 90;
-        m.snakeRoundupSnakes = [];
-        for (var sni = 0; sni < 8; sni++) {
-          m.snakeRoundupSnakes.push({
-            x: rand(30, 270), y: rand(30, 150), dx: randF(-2, 2), dy: randF(-2, 2),
-            caught: false, strikeTimer: randF(2, 5)
-          });
-        }
-        showNotification('RATTLESNAKE ROUNDUP! Catch snakes with SPACE! WASD to move! Don\'t get bitten!');
-      }
-    }
-  }
   if (m.snakeRoundup) {
     m.snakeRoundupTimer -= dt;
     if (keys['KeyW'] || keys['ArrowUp']) m.snakeRoundupPlayerY -= 3;
@@ -2100,32 +1937,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 19. GOLD RUSH AUCTION
   // ════════════════════════════════════════
-  if (!m.goldAuction && !isMinigameActive() && game.state === 'playing') {
-    m._auctionTimer = (m._auctionTimer || 0) + dt;
-    if (m._auctionTimer > 200 && game.dayCount > 4 && game.dayCount % 5 === 0 && Math.random() < 0.01) {
-      m._auctionTimer = -9999;
-      showNotification('GOLD RUSH AUCTION at the saloon! Press 0 to join!');
-      m._auctionReady = true;
-    }
-    if (m._auctionReady && consumeKey('Digit0')) {
-      m._auctionReady = false;
-      if (startMinigame('goldAuction')) {
-        m.goldAuction = true;
-        m.goldAuctionCurrent = 0;
-        m.goldAuctionWon = [];
-        m.goldAuctionItems = [
-          { name: 'Gold Mine Deed', value: rand(200, 500), bid: rand(50, 100) },
-          { name: 'Stallion Horse', value: rand(100, 300), bid: rand(30, 80) },
-          { name: 'Map to Outlaw Cache', value: rand(150, 400), bid: rand(40, 90) },
-          { name: 'Silver Pocket Watch', value: rand(50, 150), bid: rand(20, 50) },
-          { name: 'Crate of Dynamite', value: rand(80, 200), bid: rand(25, 60) }
-        ];
-        m.goldAuctionBid = m.goldAuctionItems[0].bid;
-        m.goldAuctionTimer = 10;
-        showNotification('Auction starting! ' + m.goldAuctionItems[0].name + '! D to bid up, SPACE to buy, S to pass.');
-      }
-    }
-  }
   if (m.goldAuction) {
     m.goldAuctionTimer -= dt;
     var item = m.goldAuctionItems[m.goldAuctionCurrent];
@@ -2183,32 +1994,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 20. MOONSHINE BUST
   // ════════════════════════════════════════
-  if (!m.moonshineBust && !isMinigameActive() && game.state === 'playing' && game.dayCount > 5) {
-    m._moonshineTimer = (m._moonshineTimer || 0) + dt;
-    if (m._moonshineTimer > 280 && Math.random() < 0.003) {
-      m._moonshineTimer = 0;
-      showNotification('Tip: Illegal moonshine operation in town! Press 6 to investigate.');
-      m._moonshineReady = true;
-    }
-    if (m._moonshineReady && consumeKey('Digit6')) {
-      m._moonshineReady = false;
-      if (startMinigame('moonshineBust')) {
-        m.moonshineBust = true;
-        m.moonshineTimer = 60;
-        m.moonshineFound = false;
-        m.moonshineSearched = [];
-        m.moonshineLocations = [];
-        // 6 locations, 1 has the still
-        var locNames = ['Behind Saloon', 'Under Church', 'Old Barn', 'Mine Entrance', 'Hotel Cellar', 'Stable Loft'];
-        var stillLoc = rand(0, 5);
-        for (var mli = 0; mli < 6; mli++) {
-          m.moonshineLocations.push({ name: locNames[mli], hasStill: mli === stillLoc, searched: false });
-        }
-        m.moonshineClues = [];
-        showNotification('MOONSHINE BUST! Search 6 locations (1-6 keys). Find the still!');
-      }
-    }
-  }
   if (m.moonshineBust) {
     m.moonshineTimer -= dt;
     for (var mki = 1; mki <= 6; mki++) {
@@ -2250,30 +2035,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 21. PROSPECTOR'S CLAIM
   // ════════════════════════════════════════
-  if (!m.prospectorClaim && !isMinigameActive() && game.state === 'playing') {
-    m._prospectorTimer = (m._prospectorTimer || 0) + dt;
-    if (m._prospectorTimer > 200 && game.dayCount > 3) {
-      // Check if near edge of map (wilderness)
-      if ((p.x < 5 * TILE || p.x > (MAP_W - 5) * TILE || p.y < 5 * TILE || p.y > (MAP_H - 5) * TILE) && consumeKey('KeyP')) {
-        m._prospectorTimer = 0;
-        if (startMinigame('prospectorClaim')) {
-          m.prospectorClaim = true;
-          m.prospectorTimer = 40;
-          m.prospectorGold = 0;
-          m.prospectorDepth = 0;
-          m.prospectorRocks = [];
-          for (var pri = 0; pri < 12; pri++) {
-            m.prospectorRocks.push({
-              x: rand(30, 270), y: rand(30, 150), hasGold: Math.random() < 0.3,
-              goldAmount: rand(10, 50), mined: false
-            });
-          }
-          m.prospectorTool = 0;
-          showNotification('PROSPECTOR\'S CLAIM! Mine rocks with SPACE! 1=Pickaxe 2=Dynamite. WASD to move.');
-        }
-      }
-    }
-  }
   if (m.prospectorClaim) {
     m.prospectorTimer -= dt;
     m._prospectX = m._prospectX || 150;
@@ -2321,31 +2082,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 22. POKER TOURNAMENT
   // ════════════════════════════════════════
-  if (!m.pokerTourney && !isMinigameActive() && game.state === 'playing') {
-    var nearSaloon2 = false;
-    for (var psi = 0; psi < game.buildings.length; psi++) {
-      if (game.buildings[psi].type === BUILDING_TYPES.SALOON) {
-        if (Math.hypot(p.x - game.buildings[psi].doorX * TILE, p.y - game.buildings[psi].doorY * TILE) < 60) nearSaloon2 = true;
-      }
-    }
-    if (nearSaloon2 && consumeKey('KeyP') && game.gold >= 100) {
-      game.gold -= 100;
-      if (startMinigame('pokerTourney')) {
-        m.pokerTourney = true;
-        m.pokerTourneyRound = 1;
-        m.pokerTourneyChips = 500;
-        m.pokerTourneyPhase = 0;
-        m.pokerTourneyPot = 0;
-        m.pokerTourneyHeld = [];
-        var deck = newDeck();
-        m.pokerTourneyHand = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
-        m.pokerTourneyDealer = [deck.pop(), deck.pop(), deck.pop(), deck.pop(), deck.pop()];
-        m.pokerTourneyPot = 100;
-        m.pokerTourneyChips -= 50;
-        showNotification('POKER TOURNAMENT! Round 1. Your hand dealt. 1-5 to hold/unhold, SPACE to draw, D to raise.');
-      }
-    }
-  }
   if (m.pokerTourney) {
     if (m.pokerTourneyPhase === 0) {
       // Hold cards with 1-5
@@ -2428,31 +2164,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 23. HIGH NOON STANDOFF
   // ════════════════════════════════════════
-  if (!m.highNoonStandoff && !isMinigameActive() && game.state === 'playing') {
-    // Triggers at noon (time ~0.5)
-    if (game.time > 0.48 && game.time < 0.52 && game.dayCount > 5 && Math.random() < 0.001) {
-      if (startMinigame('highNoonStandoff')) {
-        m.highNoonStandoff = true;
-        m.highNoonPhase = 0;
-        m.highNoonTimer = 3;
-        m.highNoonShots = 6;
-        m.highNoonScore = 0;
-        m.highNoonEnemies = [];
-        var standoffNames = ['Snake Eyes', 'The Viper', 'Dead-Eye Doug', 'Rattlesnake Rita', 'Tombstone Terry'];
-        for (var hni = 0; hni < 4; hni++) {
-          var angle = (hni / 4) * Math.PI * 2;
-          m.highNoonEnemies.push({
-            name: standoffNames[rand(0, standoffNames.length - 1)],
-            angle: angle, distance: 120, hp: 1,
-            drawTimer: randF(1, 4), drawing: false
-          });
-        }
-        m.highNoonPlayerAngle = 0;
-        showNotification('HIGH NOON STANDOFF! 4 gunmen surround you! A/D to aim, SPACE to shoot!');
-        addJournalEntry('High noon standoff in the town square!');
-      }
-    }
-  }
   if (m.highNoonStandoff) {
     if (m.highNoonPhase === 0) {
       m.highNoonTimer -= dt;
@@ -2532,22 +2243,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 24. WAGON WHEEL REPAIR
   // ════════════════════════════════════════
-  if (!m.wagonRepair && !isMinigameActive() && game.state === 'playing') {
-    m._wagonTimer = (m._wagonTimer || 0) + dt;
-    if (m._wagonTimer > 180 && game.dayCount > 2 && Math.random() < 0.004) {
-      m._wagonTimer = 0;
-      if (startMinigame('wagonRepair')) {
-        m.wagonRepair = true;
-        m.wagonRepairTimer = 25;
-        m.wagonRepairPhase = 0;
-        m.wagonRepairProgress = 0;
-        m.wagonRepairTarget = rand(40, 80);
-        m.wagonRepairHits = 0;
-        m.wagonRepairScore = 0;
-        showNotification('WAGON BREAKDOWN! Fix the wheel! Tap SPACE when the hammer is in the sweet spot!');
-      }
-    }
-  }
   if (m.wagonRepair) {
     m.wagonRepairTimer -= dt;
     // Hammer oscillates
@@ -2584,27 +2279,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 25. CATTLE BRANDING
   // ════════════════════════════════════════
-  if (!m.cattleBranding && !isMinigameActive() && game.state === 'playing') {
-    var nearStable4 = false;
-    for (var cbi = 0; cbi < game.buildings.length; cbi++) {
-      if (game.buildings[cbi].type === BUILDING_TYPES.STABLE) {
-        if (Math.hypot(p.x - game.buildings[cbi].doorX * TILE, p.y - game.buildings[cbi].doorY * TILE) < 80) nearStable4 = true;
-      }
-    }
-    if (nearStable4 && consumeKey('Digit9') && game.gold >= 10) {
-      game.gold -= 10;
-      if (startMinigame('cattleBranding')) {
-        m.cattleBranding = true;
-        m.cattleBrandingTimer = 30;
-        m.cattleBrandingScore = 0;
-        m.cattleBrandingRound = 0;
-        m.cattleBrandingBrands = ['Circle S', 'Double T', 'Bar M', 'Diamond K', 'Lazy R'];
-        m.cattleBrandingTarget = rand(0, 4);
-        m.cattleBrandingSelected = 0;
-        showNotification('CATTLE BRANDING! Match the brand! 1-5 to pick, SPACE to brand! Target: ' + m.cattleBrandingBrands[m.cattleBrandingTarget]);
-      }
-    }
-  }
   if (m.cattleBranding) {
     m.cattleBrandingTimer -= dt;
     // Select brand
@@ -2644,27 +2318,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 26. MEDICINE MAN
   // ════════════════════════════════════════
-  if (!m.medicineMan && !isMinigameActive() && game.state === 'playing') {
-    m._medicineTimer = (m._medicineTimer || 0) + dt;
-    if (m._medicineTimer > 200 && game.dayCount > 4 && Math.random() < 0.004) {
-      m._medicineTimer = 0;
-      if (startMinigame('medicineMan')) {
-        m.medicineMan = true;
-        m.medicineTimer = 45;
-        m.medicineScore = 0;
-        m.medicineCurrentPatient = 0;
-        var ailments = ['Fever', 'Snakebite', 'Broken Arm', 'Cough', 'Headache', 'Stomachache'];
-        var remedies = ['Willow Bark', 'Anti-venom', 'Splint', 'Honey Tea', 'Cool Cloth', 'Ginger Root'];
-        m.medicinePatients = [];
-        for (var mpi = 0; mpi < 5; mpi++) {
-          var aidx = rand(0, ailments.length - 1);
-          m.medicinePatients.push({ ailment: ailments[aidx], remedy: aidx, treated: false });
-        }
-        m.medicineItems = remedies;
-        showNotification('MEDICINE MAN! Treat patients! Patient has: ' + m.medicinePatients[0].ailment + '. Pick remedy 1-6!');
-      }
-    }
-  }
   if (m.medicineMan) {
     m.medicineTimer -= dt;
     var patient = m.medicinePatients[m.medicineCurrentPatient];
@@ -2705,31 +2358,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 27. JAIL ESCAPE PREVENTION
   // ════════════════════════════════════════
-  if (!m.jailEscape && !isMinigameActive() && game.state === 'playing') {
-    var prisonerCount = (game.prisoners && game.prisoners.length) || 0;
-    if (prisonerCount >= 3) {
-      m._jailEscapeTimer = (m._jailEscapeTimer || 0) + dt;
-      if (m._jailEscapeTimer > 150 && Math.random() < 0.005) {
-        m._jailEscapeTimer = 0;
-        if (startMinigame('jailEscape')) {
-          m.jailEscape = true;
-          m.jailEscapeTimer = 45;
-          m.jailEscapeBlocked = 0;
-          m.jailEscapeEscaped = 0;
-          m.jailEscapePlayerX = 150;
-          m.jailEscapePlayerY = 90;
-          m.jailEscapePrisoners = [];
-          for (var jpi = 0; jpi < Math.min(prisonerCount, 6); jpi++) {
-            m.jailEscapePrisoners.push({
-              x: rand(20, 280), y: rand(20, 40), speed: randF(1, 2.5),
-              escaped: false, blocked: false
-            });
-          }
-          showNotification('JAIL BREAK! Prisoners escaping! Block them with SPACE! WASD to move!');
-        }
-      }
-    }
-  }
   if (m.jailEscape) {
     m.jailEscapeTimer -= dt;
     if (keys['KeyW'] || keys['ArrowUp']) m.jailEscapePlayerY -= 3;
@@ -2778,29 +2406,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 28. CARD SLINGER (Blackjack)
   // ════════════════════════════════════════
-  if (!m.cardSlinger && !isMinigameActive() && game.state === 'playing') {
-    var nearSaloon3 = false;
-    for (var csi = 0; csi < game.buildings.length; csi++) {
-      if (game.buildings[csi].type === BUILDING_TYPES.SALOON) {
-        if (Math.hypot(p.x - game.buildings[csi].doorX * TILE, p.y - game.buildings[csi].doorY * TILE) < 60) nearSaloon3 = true;
-      }
-    }
-    if (nearSaloon3 && consumeKey('Digit7') && game.gold >= 25) {
-      if (startMinigame('cardSlinger')) {
-        m.cardSlinger = true;
-        m.cardSlingerRound = 1;
-        m.cardSlingerWins = 0;
-        m.cardSlingerBet = 25;
-        game.gold -= 25;
-        var bjDeck = newDeck();
-        m.cardSlingerHand = [bjDeck.pop(), bjDeck.pop()];
-        m.cardSlingerDealer = [bjDeck.pop(), bjDeck.pop()];
-        m.cardSlingerPhase = 0;
-        m._bjDeck = bjDeck;
-        showNotification('BLACKJACK! Your hand: ' + handValue(m.cardSlingerHand) + '. 1=Hit, 2=Stand, 3=Double Down.');
-      }
-    }
-  }
   if (m.cardSlinger) {
     if (m.cardSlingerPhase === 0) {
       var pv = handValue(m.cardSlingerHand);
@@ -2882,27 +2487,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 29. SHOOTOUT AT SUNDOWN
   // ════════════════════════════════════════
-  if (!m.sundownShootout && !isMinigameActive() && game.state === 'playing') {
-    if (game.time > 0.75 && game.time < 0.8 && game.dayCount > 3 && Math.random() < 0.002) {
-      if (startMinigame('sundownShootout')) {
-        m.sundownShootout = true;
-        m.sundownPhase = 0;
-        m.sundownTimer = 2;
-        m.sundownAmmo = 12;
-        m.sundownScore = 0;
-        m.sundownWave = 1;
-        m.sundownEnemies = [];
-        for (var sdi = 0; sdi < 4; sdi++) {
-          m.sundownEnemies.push({
-            x: Math.random() < 0.5 ? rand(-10, 20) : rand(280, 310),
-            y: rand(30, 150), hp: 2, speed: randF(0.5, 1.5), attackTimer: randF(2, 4)
-          });
-        }
-        showNotification('SUNDOWN SHOOTOUT! Outlaws attacking at dusk! 3 waves! WASD aim, SPACE shoot!');
-        addJournalEntry('Sundown shootout! Multiple waves of outlaws.');
-      }
-    }
-  }
   if (m.sundownShootout) {
     if (m.sundownPhase === 0) {
       m.sundownTimer -= dt;
@@ -2977,35 +2561,6 @@ function updateMinigames(dt) {
   // ════════════════════════════════════════
   // 30. TREASURE MAP PUZZLE (Sliding puzzle)
   // ════════════════════════════════════════
-  if (!m.treasurePuzzle && !isMinigameActive() && game.state === 'playing') {
-    m._puzzleTimer = (m._puzzleTimer || 0) + dt;
-    if (m._puzzleTimer > 250 && game.dayCount > 3 && Math.random() < 0.003) {
-      m._puzzleTimer = 0;
-      if (startMinigame('treasurePuzzle')) {
-        m.treasurePuzzle = true;
-        m.treasurePuzzleMoves = 0;
-        m.treasurePuzzleTimer = 60;
-        m.treasurePuzzleSolved = false;
-        m.treasurePuzzleReward = rand(100, 400);
-        // 3x3 sliding puzzle (numbers 1-8, 0 = empty)
-        m.treasurePuzzleGrid = [1,2,3,4,5,6,7,8,0];
-        // Shuffle by making 30 random valid moves
-        for (var pzi = 0; pzi < 30; pzi++) {
-          var emptyIdx = m.treasurePuzzleGrid.indexOf(0);
-          var row = Math.floor(emptyIdx / 3), col = emptyIdx % 3;
-          var moves = [];
-          if (row > 0) moves.push(emptyIdx - 3);
-          if (row < 2) moves.push(emptyIdx + 3);
-          if (col > 0) moves.push(emptyIdx - 1);
-          if (col < 2) moves.push(emptyIdx + 1);
-          var swapIdx = moves[rand(0, moves.length - 1)];
-          m.treasurePuzzleGrid[emptyIdx] = m.treasurePuzzleGrid[swapIdx];
-          m.treasurePuzzleGrid[swapIdx] = 0;
-        }
-        showNotification('TREASURE MAP PUZZLE! Solve the 3x3 sliding puzzle! WASD to slide tiles. Prize: $' + m.treasurePuzzleReward);
-      }
-    }
-  }
   if (m.treasurePuzzle) {
     m.treasurePuzzleTimer -= dt;
     var emptyI = m.treasurePuzzleGrid.indexOf(0);
