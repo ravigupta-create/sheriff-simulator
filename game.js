@@ -993,14 +993,20 @@ const DIALOGS = {
     idle: [
       "Fine day, ain't it, Sheriff?",
       "Watch yourself out there, law man.",
-      "I heard there's trouble brewin' at the saloon.",
       "My crops ain't doin' so good this year.",
       "Thank the lord we got a sheriff in this town.",
-      "I saw some shady characters near the bank.",
       "The well water's been tastin' funny lately.",
       "You keepin' this town safe? Sure feels like it.",
-      "Heard tell of outlaws roamin' the desert.",
       "Good to see you makin' your rounds, Sheriff.",
+    ],
+    // These only trigger when the claim is true (checked at dialog open time)
+    threat_hints: [
+      "I heard there's trouble brewin' at the {place}.",
+      "I saw some shady characters near the {place}.",
+      "Heard tell of outlaws roamin' near the {place}.",
+      "Somebody's hidin' somethin' behind the {place}, I swear it.",
+      "A crime boss was spotted near the {place}. Watch yourself!",
+      "Saw someone tryin' to escape near the {place}!",
     ],
     crime: [
       "Sheriff! There's trouble! You gotta help!",
@@ -4045,12 +4051,44 @@ function openDialog(npc) {
     ];
   } else if (npc.type === NPC_TYPES.BARTENDER) {
     if (Math.random() > 0.5 && dialogs.tips) {
+      // Pick or spawn a REAL suspicious NPC and make the tip truthful
       var tipTemplates = dialogs.tips;
-      var randomNPC = game.npcs[rand(0, game.npcs.length - 1)];
-      var randomBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+      var suspectNPC = null;
+      var suspectBuilding = null;
+      // First, try to find an existing hostile/wanted NPC
+      for (var si = 0; si < game.npcs.length; si++) {
+        var sn = game.npcs[si];
+        if ((sn.hostile || sn._isWanted || sn.type === NPC_TYPES.OUTLAW || sn.type === NPC_TYPES.BOUNTY) && sn.state !== 'dead' && sn.state !== 'arrested') {
+          suspectNPC = sn; break;
+        }
+      }
+      // If no existing threat, spawn one hiding near a building
+      if (!suspectNPC) {
+        suspectBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+        var spawnX = suspectBuilding.doorX || (suspectBuilding.x + Math.floor(suspectBuilding.w / 2));
+        var spawnY = suspectBuilding.doorY || (suspectBuilding.y + suspectBuilding.h);
+        var hiddenNames = ['Shady Jake', 'Mystery Man', 'The Lurker', 'Sneaky Pete', 'Shadow', 'The Rat', 'Slippery Sam'];
+        suspectNPC = createNPC(game.npcs.length + 500, NPC_TYPES.OUTLAW, hiddenNames[rand(0, hiddenNames.length - 1)], spawnX + rand(-2, 2), spawnY + rand(1, 3), null);
+        suspectNPC.hostile = false; // Hiding — not hostile yet
+        suspectNPC._hiding = true;
+        suspectNPC._hideBuilding = suspectBuilding;
+        suspectNPC._hidingTimer = 0;
+        suspectNPC.hp = rand(4, 7);
+        suspectNPC.maxHp = suspectNPC.hp;
+        game.npcs.push(suspectNPC);
+        addJournalEntry('Bartender tip: ' + suspectNPC.name + ' acting suspicious near ' + suspectBuilding.name + '.');
+      }
+      if (!suspectBuilding) {
+        // Find building nearest to the suspect
+        var nearestBDist = 9999;
+        for (var bi2 = 0; bi2 < game.buildings.length; bi2++) {
+          var bd = Math.hypot(suspectNPC.x - game.buildings[bi2].x * TILE, suspectNPC.y - game.buildings[bi2].y * TILE);
+          if (bd < nearestBDist) { nearestBDist = bd; suspectBuilding = game.buildings[bi2]; }
+        }
+      }
       text = tipTemplates[rand(0, tipTemplates.length - 1)]
-        .replace('{name}', randomNPC.name)
-        .replace('{place}', randomBuilding.name);
+        .replace('{name}', suspectNPC.name)
+        .replace('{place}', suspectBuilding ? suspectBuilding.name : 'edge of town');
     } else {
       text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
     }
@@ -4095,7 +4133,44 @@ function openDialog(npc) {
       { text: '3. "You\'re under arrest."', action: 'arrest' }
     ];
   } else {
-    text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    // Check if there's a real threat to hint about
+    var _hasThreat = false;
+    var _threatNPC = null;
+    var _threatBuilding = null;
+    for (var _ti = 0; _ti < game.npcs.length; _ti++) {
+      var _tn = game.npcs[_ti];
+      if ((_tn.hostile || _tn._hiding || _tn._isWanted || _tn.type === NPC_TYPES.BOUNTY) && _tn.state !== 'dead' && _tn.state !== 'arrested') {
+        _hasThreat = true; _threatNPC = _tn; break;
+      }
+    }
+    // 30% chance to give a threat hint if one exists, or 15% to spawn one
+    if (_hasThreat && Math.random() < 0.3 && dialogs.threat_hints) {
+      // Find building nearest to threat
+      var _tbDist = 9999;
+      for (var _tbi = 0; _tbi < game.buildings.length; _tbi++) {
+        var _tbd = Math.hypot(_threatNPC.x - game.buildings[_tbi].x * TILE, _threatNPC.y - game.buildings[_tbi].y * TILE);
+        if (_tbd < _tbDist) { _tbDist = _tbd; _threatBuilding = game.buildings[_tbi]; }
+      }
+      text = dialogs.threat_hints[rand(0, dialogs.threat_hints.length - 1)].replace('{place}', _threatBuilding ? _threatBuilding.name : 'edge of town');
+    } else if (!_hasThreat && Math.random() < 0.15 && dialogs.threat_hints) {
+      // Spawn a real hidden outlaw so the hint is truthful
+      _threatBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+      var _spX = (_threatBuilding.doorX || (_threatBuilding.x + Math.floor(_threatBuilding.w / 2)));
+      var _spY = (_threatBuilding.doorY || (_threatBuilding.y + _threatBuilding.h));
+      var _hNames = ['Shady Stranger', 'The Drifter', 'Masked Figure', 'Wanted Man', 'Suspicious Joe'];
+      var _newOutlaw = createNPC(game.npcs.length + 600, NPC_TYPES.OUTLAW, _hNames[rand(0, _hNames.length - 1)], _spX + rand(-2, 2), _spY + rand(1, 3), null);
+      _newOutlaw._hiding = true;
+      _newOutlaw._hideBuilding = _threatBuilding;
+      _newOutlaw._hidingTimer = 0;
+      _newOutlaw.hostile = false;
+      _newOutlaw.hp = rand(4, 7);
+      _newOutlaw.maxHp = _newOutlaw.hp;
+      game.npcs.push(_newOutlaw);
+      text = dialogs.threat_hints[rand(0, dialogs.threat_hints.length - 1)].replace('{place}', _threatBuilding.name);
+      addJournalEntry('Townsfolk report: ' + _newOutlaw.name + ' spotted near ' + _threatBuilding.name + '.');
+    } else {
+      text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
+    }
     if (personality === 'grumpy') {
       text = "What do you want? I'm busy.";
     } else if (personality === 'friendly' && repMod === 'high') {
@@ -4298,7 +4373,36 @@ function handleDialogChoice(action, npc) {
       if (game.activeCrime) {
         showNotification('Heard about trouble near the ' + (game.activeCrime.building ? game.activeCrime.building.name : 'streets') + '!');
       } else {
-        showNotification('All quiet for now, Sheriff.');
+        // Check for hidden/hostile NPCs and report them truthfully
+        var _troubleNPC = null, _troubleBuilding = null;
+        for (var _tri = 0; _tri < game.npcs.length; _tri++) {
+          var _trn = game.npcs[_tri];
+          if ((_trn._hiding || _trn._isWanted || (_trn.hostile && _trn.type === NPC_TYPES.OUTLAW) || _trn.type === NPC_TYPES.BOUNTY) && _trn.state !== 'dead' && _trn.state !== 'arrested') {
+            _troubleNPC = _trn; break;
+          }
+        }
+        if (_troubleNPC) {
+          // Find nearest building to this NPC
+          var _trBDist = 9999;
+          for (var _trbi = 0; _trbi < game.buildings.length; _trbi++) {
+            var _trbd = Math.hypot(_troubleNPC.x - game.buildings[_trbi].x * TILE, _troubleNPC.y - game.buildings[_trbi].y * TILE);
+            if (_trbd < _trBDist) { _trBDist = _trbd; _troubleBuilding = game.buildings[_trbi]; }
+          }
+          var _troubleMsgs = [
+            'Saw ' + _troubleNPC.name + ' lurkin\' near the ' + (_troubleBuilding ? _troubleBuilding.name : 'edge of town') + '!',
+            _troubleNPC.name + ' is hidin\' out near the ' + (_troubleBuilding ? _troubleBuilding.name : 'outskirts') + '. Watch yourself!',
+            'Word is ' + _troubleNPC.name + ' been causin\' trouble near the ' + (_troubleBuilding ? _troubleBuilding.name : 'desert') + '.',
+          ];
+          showNotification(_troubleMsgs[rand(0, _troubleMsgs.length - 1)]);
+          // If they were hiding, now they become hostile (cover blown)
+          if (_troubleNPC._hiding) {
+            _troubleNPC._hiding = false;
+            _troubleNPC.hostile = true;
+            showNotification(_troubleNPC.name + '\'s cover is blown! They\'re now hostile!');
+          }
+        } else {
+          showNotification('All quiet for now, Sheriff.');
+        }
       }
       closeDialog();
       break;
@@ -4358,8 +4462,21 @@ function handleDialogChoice(action, npc) {
 
     case 'investigate':
       if (game.activeQuest && game.activeQuest.type === 'bounty') {
-        var dirs = ['north', 'south', 'east', 'west'];
-        showNotification('They say the outlaw was seen heading ' + dirs[rand(0, 3)] + ' of town.');
+        // Give a real direction to an actual wanted NPC
+        var _wantedNPC = null;
+        for (var _wi = 0; _wi < game.npcs.length; _wi++) {
+          if ((game.npcs[_wi]._isWanted || game.npcs[_wi].type === NPC_TYPES.BOUNTY) && game.npcs[_wi].state !== 'dead' && game.npcs[_wi].state !== 'arrested') {
+            _wantedNPC = game.npcs[_wi]; break;
+          }
+        }
+        if (_wantedNPC) {
+          var _dx = _wantedNPC.x - game.player.x;
+          var _dy = _wantedNPC.y - game.player.y;
+          var _realDir = Math.abs(_dx) > Math.abs(_dy) ? (_dx > 0 ? 'east' : 'west') : (_dy > 0 ? 'south' : 'north');
+          showNotification('They say ' + _wantedNPC.name + ' was seen heading ' + _realDir + ' of here.');
+        } else {
+          showNotification('No bounties to track right now.');
+        }
       } else if (npc.type === NPC_TYPES.STRANGER) {
         if (Math.random() < 0.3) {
           npc.hostile = true;
@@ -4367,9 +4484,30 @@ function handleDialogChoice(action, npc) {
           closeDialog();
           return;
         }
-        showNotification('"I told you, mind your own business."');
+        // Check if this stranger knows about a real threat
+        var _nearbyThreat = null;
+        for (var _ni = 0; _ni < game.npcs.length; _ni++) {
+          var _nn = game.npcs[_ni];
+          if ((_nn._hiding || _nn._isWanted) && _nn.state !== 'dead' && _nn.state !== 'arrested' && _nn !== npc) {
+            _nearbyThreat = _nn; break;
+          }
+        }
+        if (_nearbyThreat) {
+          showNotification('"Fine... I saw ' + _nearbyThreat.name + ' skulkin\' around. That\'s all I know."');
+        } else {
+          showNotification('"I told you, mind your own business."');
+        }
       } else {
-        showNotification('Nothing suspicious here.');
+        // Check for any hidden threats to report
+        var _hiddenThreat = null;
+        for (var _hi = 0; _hi < game.npcs.length; _hi++) {
+          if (game.npcs[_hi]._hiding && game.npcs[_hi].state !== 'dead') { _hiddenThreat = game.npcs[_hi]; break; }
+        }
+        if (_hiddenThreat) {
+          showNotification('Come to think of it... ' + _hiddenThreat.name + ' has been acting strange.');
+        } else {
+          showNotification('Nothing suspicious here.');
+        }
       }
       closeDialog();
       break;
@@ -5197,6 +5335,34 @@ function updateNPCs(dt) {
     var npc = game.npcs[i];
     if (npc.state === 'dead' || npc.state === 'arrested') continue;
     if (npc.dialogCooldown > 0) npc.dialogCooldown--;
+
+    // Hiding NPC behavior — lurk near building, become hostile when player is close
+    if (npc._hiding) {
+      npc._hidingTimer = (npc._hidingTimer || 0) + dt;
+      var hideDist = dist(npc, game.player);
+      // Become hostile if player gets close or after hiding too long
+      if (hideDist < 80 || npc._hidingTimer > 120) {
+        npc._hiding = false;
+        npc.hostile = true;
+        if (hideDist < 120) {
+          showNotification(npc.name + ' attacks from hiding!');
+          addJournalEntry(npc.name + ' ambushed you from their hiding spot!');
+        } else {
+          showNotification(npc.name + ' has been flushed out and is now hostile!');
+        }
+      } else {
+        // Lurk near their hiding building, move slowly
+        if (npc._hideBuilding) {
+          var hbx = (npc._hideBuilding.x + npc._hideBuilding.w / 2) * TILE;
+          var hby = (npc._hideBuilding.y + npc._hideBuilding.h) * TILE;
+          var hdx2 = hbx - npc.x, hdy2 = hby - npc.y;
+          var hlen = Math.hypot(hdx2, hdy2);
+          if (hlen > 40) { npc.x += (hdx2 / hlen) * 0.3; npc.y += (hdy2 / hlen) * 0.3; }
+          else { npc.x += randF(-0.2, 0.2); npc.y += randF(-0.2, 0.2); }
+        }
+        continue; // Skip normal NPC behavior while hiding
+      }
+    }
 
     // Schedule system: NPCs move toward buildings at certain times
     if (npc.building && npc.type !== NPC_TYPES.OUTLAW) {
