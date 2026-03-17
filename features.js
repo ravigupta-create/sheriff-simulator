@@ -1404,6 +1404,30 @@ function updateFeatures(dt) {
   }
 
   // ── FEATURE 8: ARM WRESTLING IN SALOON ──
+  // Countdown phase: 3... 2... 1... GO!
+  if (f._armWrestleCountdownActive) {
+    f.armWrestleCountdown -= dt;
+    if (f.armWrestleCountdown <= 2 && f.armWrestleCountdown > 1 && !f._awCountdown2) {
+      f._awCountdown2 = true;
+      showNotification('2...');
+    }
+    if (f.armWrestleCountdown <= 1 && f.armWrestleCountdown > 0 && !f._awCountdown1) {
+      f._awCountdown1 = true;
+      showNotification('1...');
+    }
+    if (f.armWrestleCountdown <= 0) {
+      f._armWrestleCountdownActive = false;
+      f._awCountdown2 = false;
+      f._awCountdown1 = false;
+      f.armWrestlingActive = true;
+      f.armWrestleTimer = 0;
+      f.armWrestlePower = 50;
+      showNotification('GO! MASH SPACE to win!');
+      if (typeof audio !== 'undefined' && audio.playDuelDraw) audio.playDuelDraw();
+    }
+    // Consume any early space presses during countdown
+    consumeKey('Space');
+  }
   if (f.armWrestlingActive) {
     f.armWrestleTimer += dt;
     // Opponent pushes back
@@ -1420,22 +1444,18 @@ function updateFeatures(dt) {
       f.armWrestlingActive = false;
       game.gold += f.armWrestleBet;
       game.totalGoldEarned += f.armWrestleBet;
-      showNotification('You WON arm wrestling! +$' + f.armWrestleBet);
+      showNotification('You WON arm wrestling! +$' + f.armWrestleBet + '!');
       if (typeof audio !== 'undefined' && audio.playVictory) audio.playVictory();
-      closeDialog();
     } else if (f.armWrestlePower <= 5) {
       f.armWrestlingActive = false;
-      game.gold -= f.armWrestleBet;
-      if (game.gold < 0) game.gold = 0;
-      showNotification('You LOST arm wrestling! -$' + f.armWrestleBet);
+      showNotification('You LOST arm wrestling! -$25');
       if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
-      closeDialog();
     }
     if (f.armWrestleTimer > 15) {
-      // Timeout — draw
+      // Timeout — draw, refund
       f.armWrestlingActive = false;
-      showNotification('Arm wrestling draw! No money exchanged.');
-      closeDialog();
+      game.gold += 25;
+      showNotification('Arm wrestling draw! $25 refunded.');
     }
   }
 
@@ -2598,6 +2618,30 @@ function renderFeaturesOverlay() {
   }
 
   // ── FEATURE 8: ARM WRESTLING overlay ──
+  if (f._armWrestleCountdownActive) {
+    ctx.fillStyle = 'rgba(30, 18, 6, 0.9)';
+    ctx.fillRect(w / 2 - 150, h / 2 - 80, 300, 160);
+    ctx.strokeStyle = '#8b6914';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w / 2 - 150, h / 2 - 80, 300, 160);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ARM WRESTLING vs ' + f.armWrestleOpponentName, w / 2, h / 2 - 55);
+    ctx.fillStyle = '#ddd';
+    ctx.font = '10px monospace';
+    ctx.fillText('Bet: $25 each — Winner takes $' + f.armWrestleBet, w / 2, h / 2 - 30);
+    // Big countdown number
+    var countNum = Math.ceil(f.armWrestleCountdown);
+    if (countNum < 1) countNum = 'GO!';
+    ctx.fillStyle = countNum === 'GO!' ? '#44ff44' : '#ff8844';
+    ctx.font = 'bold 48px monospace';
+    ctx.fillText('' + countNum, w / 2, h / 2 + 30);
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Get ready to MASH SPACE!', w / 2, h / 2 + 60);
+    ctx.textAlign = 'left';
+  }
   if (f.armWrestlingActive) {
     ctx.fillStyle = 'rgba(30, 18, 6, 0.9)';
     ctx.fillRect(w / 2 - 150, h / 2 - 80, 300, 160);

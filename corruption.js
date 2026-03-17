@@ -496,11 +496,30 @@ function _updateBodyguards(dt) {
       bg.moving = false;
     }
 
-    // Fight hostile NPCs nearby
+    // Fight hostile NPCs nearby OR whoever the player just shot
     bg.shootCooldown = (bg.shootCooldown || 0) - dt;
+    // Prioritize the NPC the player last hit (assist fire)
+    var playerTarget = game._playerLastHitNPC;
+    var playerTargetFresh = playerTarget && (Date.now() - (game._playerLastHitTime || 0)) < 8000;
+    if (playerTargetFresh && playerTarget.state !== 'dead' && !playerTarget.dead && bg.shootCooldown <= 0) {
+      var ptd = dist(bg, playerTarget);
+      if (ptd < 300) {
+        if (typeof bullets !== 'undefined' && bullets.fire) {
+          var ptAngle = Math.atan2(playerTarget.y - bg.y, playerTarget.x - bg.x);
+          bullets.fire(bg.x, bg.y, ptAngle, true, 'bodyguard');
+        } else {
+          playerTarget.hp--;
+          if (playerTarget.hp <= 0) { playerTarget.state = 'dead'; playerTarget.dead = true; }
+        }
+        bg.shootCooldown = 0.8;
+        bg.lastShotTime = Date.now();
+      }
+    }
     for (var k = 0; k < game.npcs.length; k++) {
       var npc = game.npcs[k];
       if (!npc.hostile || npc.state === 'dead' || npc.dead) continue;
+      // Skip if we already shot at the player's target this frame
+      if (npc === playerTarget && playerTargetFresh) continue;
       // Don't attack allied outlaws
       if (_outlawAllianceActive && (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) && !npc._corruptionForced) continue;
 

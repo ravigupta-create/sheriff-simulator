@@ -1948,6 +1948,9 @@ class BulletSystem {
             particles.emitBlood(npc.x, npc.y);
             if (typeof triggerShake === 'function') triggerShake(3, 5);
             hit = true;
+            // Track last NPC the player hit — bodyguards will assist
+            gameState._playerLastHitNPC = npc;
+            gameState._playerLastHitTime = Date.now();
             if (npc.hp <= 0) {
               npc.state = 'dead';
               npc.dead = true;
@@ -4213,9 +4216,7 @@ function handleDialogChoice(action, npc) {
     case 'arm_wrestle':
       if (game.gold >= 25) {
         if (typeof game._features !== 'undefined') {
-          game._features.armWrestlingActive = true;
-          game._features.armWrestlePower = 50;
-          game._features.armWrestleOpponentPower = 50;
+          game.gold -= 25;
           var awOpponents = [
             { name: 'Big Buck', str: 1.2 },
             { name: 'Iron Arm Pete', str: 1.5 },
@@ -4225,9 +4226,16 @@ function handleDialogChoice(action, npc) {
           var awOpp = awOpponents[rand(0, awOpponents.length - 1)];
           game._features.armWrestleOpponentStr = awOpp.str;
           game._features.armWrestleOpponentName = awOpp.name;
-          game._features.armWrestleBet = 25;
+          game._features.armWrestleBet = 50; // pot is $50 (both put in $25)
           game._features.armWrestleTimer = 0;
-          showNotification('Arm wrestling vs ' + awOpp.name + '! MASH SPACE!');
+          game._features.armWrestlePower = 50;
+          game._features.armWrestleOpponentPower = 50;
+          // Start with countdown phase, not active yet
+          game._features.armWrestleCountdown = 3;
+          game._features.armWrestlingActive = false;
+          game._features._armWrestleCountdownActive = true;
+          closeDialog();
+          showNotification('Arm wrestling vs ' + awOpp.name + '! Get ready...');
         }
       } else {
         showNotification("You can't afford the $25 bet.");
