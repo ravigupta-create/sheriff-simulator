@@ -270,8 +270,13 @@ function _attemptArrestCivilian(npc) {
   game.civiliansArrested++;
   game.reputation = clamp((game.reputation || 50) - 5, 0, REPUTATION_MAX);
 
-  showNotification('Arrested ' + npc.name + '! Rep -5, Corruption +8.', 'bad');
-  addJournalEntry('Falsely arrested ' + npc.name + '. Corruption +8.');
+  // Add to jail with a trumped-up charge
+  var fakeCrimes = ['Loitering', 'Suspicious Behavior', 'Disturbing the Peace', 'No Reason', 'Disorderly Conduct', 'Sheriff\'s Orders', 'Resisting Authority', 'Vagrancy'];
+  var charge = fakeCrimes[rand(0, fakeCrimes.length - 1)];
+  if (typeof addPrisoner === 'function') addPrisoner(npc.name, charge, npc);
+
+  showNotification('Arrested ' + npc.name + ' for "' + charge + '"! Rep -5, Corruption +8.', 'bad');
+  addJournalEntry('Falsely arrested ' + npc.name + ' for "' + charge + '". Corruption +8.');
   if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
 
   _arrestCivilianCooldown = 4;
