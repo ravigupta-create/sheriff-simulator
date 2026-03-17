@@ -1242,10 +1242,15 @@ function enterSheriffOffice() {
     }
   }
 
-  // Generate daily meeting queue
+  // Generate daily meeting queue — preserve any player-scheduled meetings
   if (office._lastMeetingDay !== (game.dayCount || 1)) {
     office._lastMeetingDay = game.dayCount || 1;
-    office.meetingQueue = [];
+    // Keep any meetings the player scheduled (they have _scheduled flag)
+    var preserved = [];
+    for (var pi = 0; pi < office.meetingQueue.length; pi++) {
+      if (office.meetingQueue[pi]._scheduled) preserved.push(office.meetingQueue[pi]);
+    }
+    office.meetingQueue = preserved;
     var meetCount = rand(1, 3);
     for (var mi = 0; mi < meetCount; mi++) {
       var mt = MEETING_TEMPLATES[rand(0, MEETING_TEMPLATES.length - 1)];
@@ -2030,9 +2035,11 @@ function updateOffice(dt) {
                 };
               }),
               bossName: bossName,
+              _scheduled: true,
             };
-            office.meetingQueue.push(scheduled);
-            showNotification('Meeting scheduled: ' + mt.name + (cat.corrupt ? ' (with ' + bossName + ')' : ''));
+            // Add at the front of the queue so scheduled meetings show up first
+            office.meetingQueue.unshift(scheduled);
+            showNotification('Meeting scheduled: ' + mt.name + (cat.corrupt ? ' (with ' + bossName + ')' : '') + ' — Check Waiting Meetings!');
             office.deskMode = 'meetings';
           }
           return;
