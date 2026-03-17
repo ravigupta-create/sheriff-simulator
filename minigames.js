@@ -306,6 +306,8 @@ function startMinigame(name) {
   }
   m.activeMinigame = name;
   m.totalMinigamesPlayed++;
+  // Switch to minigame state — completely disables player movement/shooting
+  game.state = 'minigame';
   return true;
 }
 
@@ -318,6 +320,195 @@ function endMinigame(name, won, cooldown) {
   m[name] = false;
   if (won) m.totalMinigamesWon++;
   if (cooldown) m.minigameCooldowns[name] = cooldown;
+  // Restore playing state
+  if (game.state === 'minigame') game.state = 'playing';
+}
+
+// ============================================================
+// MINIGAME MENU SYSTEM
+// ============================================================
+var MINIGAME_CATALOG = [
+  { key: 'trainHeist', name: 'Train Heist', desc: 'Rob a train! Fight guards, crack the safe, escape.', req: 'Near stopped train', trigger: 'T' },
+  { key: 'lassoRodeo', name: 'Lasso Rodeo', desc: 'Lasso cattle in the arena. $10 entry.', req: 'Near stable', cost: 10, trigger: 'L' },
+  { key: 'quickDrawTourney', name: 'Quick Draw Tournament', desc: '5-round quick draw dueling tournament. $50 entry.', req: 'Near gallows', cost: 50, trigger: 'U' },
+  { key: 'saloonBrawl', name: 'Saloon Brawl', desc: 'Fistfight in the saloon! Punch, dodge, combo.', req: 'Near saloon', trigger: 'B' },
+  { key: 'stagecoachDefense', name: 'Stagecoach Defense', desc: 'Defend a stagecoach from bandits.', req: 'Day 2+, random event', trigger: 'Auto' },
+  { key: 'knifeContest', name: 'Knife Throwing', desc: 'Throw knives at targets. $15 entry.', req: 'Near blacksmith', cost: 15, trigger: 'Y' },
+  { key: 'horseshoeToss', name: 'Horseshoe Toss', desc: 'Toss horseshoes at the stake. $10 entry.', req: 'Near stable', cost: 10, trigger: 'O' },
+  { key: 'sharpshootContest', name: 'Sharpshooting Contest', desc: 'Timed target shooting. $30 entry.', req: 'Even days', cost: 30, trigger: 'X' },
+  { key: 'hideoutRaid', name: 'Bandit Hideout Raid', desc: 'Clear 5 rooms of bandits.', req: 'Day 5+, after tip', trigger: 'I' },
+  { key: 'rodeoBronco', name: 'Bronco Riding', desc: 'Stay on a bucking bronco for 8 seconds. $20.', req: 'Near stable', cost: 20, trigger: 'Z' },
+  { key: 'vaultCrack', name: 'Vault Cracking', desc: 'Crack a bank vault at night. Corrupt path.', req: 'Near bank, nighttime', trigger: 'C' },
+  { key: 'posterMatch', name: 'Wanted Poster Match', desc: 'Memory card matching game.', req: 'Near wanted board', trigger: '8' },
+  { key: 'supplyRun', name: 'Supply Run', desc: 'Deliver supplies, dodge obstacles.', req: 'Near general store', trigger: 'G' },
+  { key: 'pokerTourney', name: 'Poker Tournament', desc: '5-round poker tournament. $100 buy-in.', req: 'Near saloon', cost: 100, trigger: 'P' },
+  { key: 'cardSlinger', name: 'Blackjack', desc: '5-round blackjack at the saloon. $25/round.', req: 'Near saloon', cost: 25, trigger: '7' },
+  { key: 'cattleBranding', name: 'Cattle Branding', desc: 'Match the right brand to each cow. $10.', req: 'Near stable', cost: 10, trigger: '9' },
+  { key: 'cattleDefense', name: 'Cattle Rustling Defense', desc: 'Protect cattle from rustlers.', req: 'Day 3+, random event', trigger: 'Auto' },
+  { key: 'dynamiteDefusal', name: 'Dynamite Defusal', desc: 'Cut the right wire before it blows!', req: 'Day 4+, random event', trigger: 'Auto' },
+  { key: 'townDefense', name: 'Town Defense', desc: 'Defend town from 3 waves of bandits.', req: 'Day 7+, random event', trigger: 'Auto' },
+  { key: 'highNoonStandoff', name: 'High Noon Standoff', desc: '4 gunmen surround you at noon.', req: 'Day 5+, at noon', trigger: 'Auto' },
+  { key: 'sundownShootout', name: 'Sundown Shootout', desc: '3 waves of outlaws at dusk.', req: 'Day 3+, at dusk', trigger: 'Auto' },
+  { key: 'snakeRoundup', name: 'Rattlesnake Roundup', desc: 'Catch snakes, avoid bites!', req: 'Day 3+, random event', trigger: 'Auto' },
+  { key: 'wagonRepair', name: 'Wagon Wheel Repair', desc: 'Fix a broken wagon wheel.', req: 'Day 2+, random event', trigger: 'Auto' },
+  { key: 'medicineMan', name: 'Medicine Man', desc: 'Treat patients with correct remedies.', req: 'Day 4+, random event', trigger: 'Auto' },
+  { key: 'jailEscape', name: 'Jail Escape Prevention', desc: 'Stop prisoners from escaping!', req: '3+ prisoners', trigger: 'Auto' },
+  { key: 'telegraphDecode', name: 'Telegraph Decoder', desc: 'Type words to decode telegrams.', req: 'Day 2+, random event', trigger: 'Auto' },
+  { key: 'moonshineBust', name: 'Moonshine Bust', desc: 'Search locations to find illegal still.', req: 'Day 5+, after tip', trigger: '6' },
+  { key: 'goldAuction', name: 'Gold Rush Auction', desc: 'Bid on valuable items.', req: 'Every 5 days', trigger: '0' },
+  { key: 'prospectorClaim', name: "Prospector's Claim", desc: 'Mine rocks for gold at map edge.', req: 'At map edge', trigger: 'P' },
+  { key: 'treasurePuzzle', name: 'Treasure Map Puzzle', desc: 'Solve a 3x3 sliding puzzle.', req: 'Day 3+, random event', trigger: 'Auto' }
+];
+
+function openMinigameMenu() {
+  initMinigames();
+  if (game._minigames.activeMinigame) return;
+  game._minigameMenuOpen = true;
+  game._minigameMenuScroll = 0;
+  game._minigameMenuCursor = 0;
+  game.state = 'minigame';
+}
+
+function closeMinigameMenu() {
+  game._minigameMenuOpen = false;
+  if (!game._minigames || !game._minigames.activeMinigame) {
+    game.state = 'playing';
+  }
+}
+
+function updateMinigameMenu() {
+  if (!game._minigameMenuOpen) return;
+
+  // Scroll
+  if (consumeKey('KeyW') || consumeKey('ArrowUp')) {
+    game._minigameMenuCursor = Math.max(0, game._minigameMenuCursor - 1);
+  }
+  if (consumeKey('KeyS') || consumeKey('ArrowDown')) {
+    game._minigameMenuCursor = Math.min(MINIGAME_CATALOG.length - 1, game._minigameMenuCursor + 1);
+  }
+
+  // Keep cursor in visible scroll window
+  if (game._minigameMenuCursor < game._minigameMenuScroll) game._minigameMenuScroll = game._minigameMenuCursor;
+  if (game._minigameMenuCursor >= game._minigameMenuScroll + 12) game._minigameMenuScroll = game._minigameMenuCursor - 11;
+
+  // Select
+  if (consumeKey('Space') || consumeKey('Enter') || consumeKey('KeyE')) {
+    var item = MINIGAME_CATALOG[game._minigameMenuCursor];
+    if (item.trigger === 'Auto') {
+      showNotification(item.name + ' triggers automatically during gameplay.');
+    } else {
+      var m = game._minigames;
+      if (m.minigameCooldowns[item.key] && m.minigameCooldowns[item.key] > 0) {
+        showNotification(item.name + ' is on cooldown. Try again later.');
+      } else {
+        closeMinigameMenu();
+        showNotification('Go to: ' + item.req + ' and press ' + item.trigger + ' to start ' + item.name + '!');
+      }
+    }
+  }
+
+  // Close
+  if (consumeKey('Escape') || consumeKey('KeyM')) {
+    closeMinigameMenu();
+  }
+}
+
+function renderMinigameMenu() {
+  if (!game._minigameMenuOpen) return;
+  var w = gameCanvas.width, h = gameCanvas.height;
+
+  // Full overlay
+  ctx.fillStyle = 'rgba(10, 6, 2, 0.92)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Title
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('MINIGAMES & ACTIVITIES', w / 2, 30);
+  ctx.font = '9px monospace';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('W/S: Navigate | SPACE: Select | M/ESC: Close', w / 2, 46);
+
+  // Stats
+  initMinigames();
+  var m = game._minigames;
+  ctx.fillStyle = '#888';
+  ctx.fillText('Played: ' + m.totalMinigamesPlayed + ' | Won: ' + m.totalMinigamesWon, w / 2, 60);
+
+  // List
+  var startY = 75;
+  var lineH = 18;
+  var visible = Math.min(12, MINIGAME_CATALOG.length);
+  var scroll = game._minigameMenuScroll || 0;
+
+  for (var i = 0; i < visible; i++) {
+    var idx = scroll + i;
+    if (idx >= MINIGAME_CATALOG.length) break;
+    var item = MINIGAME_CATALOG[idx];
+    var y = startY + i * lineH;
+    var selected = idx === game._minigameMenuCursor;
+
+    // Highlight
+    if (selected) {
+      ctx.fillStyle = 'rgba(139, 105, 20, 0.4)';
+      ctx.fillRect(20, y - 11, w - 40, lineH);
+    }
+
+    // Cooldown check
+    var onCooldown = m.minigameCooldowns[item.key] && m.minigameCooldowns[item.key] > 0;
+
+    // Name
+    ctx.textAlign = 'left';
+    ctx.font = selected ? 'bold 10px monospace' : '10px monospace';
+    ctx.fillStyle = onCooldown ? '#666' : (item.trigger === 'Auto' ? '#aa8855' : '#ffd700');
+    ctx.fillText((selected ? '> ' : '  ') + item.name, 30, y);
+
+    // Trigger key
+    ctx.textAlign = 'right';
+    ctx.fillStyle = item.trigger === 'Auto' ? '#665533' : '#44aa44';
+    ctx.font = '9px monospace';
+    ctx.fillText(item.trigger === 'Auto' ? 'AUTO' : '[' + item.trigger + ']', w - 30, y);
+
+    // Cost
+    if (item.cost) {
+      ctx.fillStyle = '#cc8833';
+      ctx.fillText('$' + item.cost, w - 70, y);
+    }
+
+    if (onCooldown) {
+      ctx.fillStyle = '#884444';
+      ctx.fillText('COOLDOWN', w - 70, y);
+    }
+  }
+
+  // Scroll indicators
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#665533';
+  if (scroll > 0) ctx.fillText('^ more ^', w / 2, startY - 5);
+  if (scroll + visible < MINIGAME_CATALOG.length) ctx.fillText('v more v', w / 2, startY + visible * lineH + 5);
+
+  // Selected item description
+  var sel = MINIGAME_CATALOG[game._minigameMenuCursor];
+  if (sel) {
+    var descY = startY + visible * lineH + 22;
+    ctx.fillStyle = 'rgba(30, 20, 8, 0.9)';
+    ctx.fillRect(20, descY - 12, w - 40, 40);
+    ctx.strokeStyle = '#5a3a18';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, descY - 12, w - 40, 40);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(sel.name, w / 2, descY + 2);
+    ctx.fillStyle = '#c8b888';
+    ctx.font = '9px monospace';
+    ctx.fillText(sel.desc, w / 2, descY + 16);
+    ctx.fillStyle = '#aa8855';
+    ctx.fillText('Requires: ' + sel.req + (sel.cost ? ' ($' + sel.cost + ')' : ''), w / 2, descY + 28);
+  }
+
+  ctx.textAlign = 'left';
 }
 
 // ============================================================
@@ -348,9 +539,15 @@ function handValue(hand) {
 // ============================================================
 function updateMinigames(dt) {
   initMinigames();
-  if (game.state !== 'playing' && game.state !== 'dialog') return;
+  if (game.state !== 'playing' && game.state !== 'dialog' && game.state !== 'minigame') return;
   var m = game._minigames;
   var p = game.player;
+
+  // Handle minigame menu
+  if (game._minigameMenuOpen) {
+    updateMinigameMenu();
+    return;
+  }
 
   // Update cooldowns
   for (var cd in m.minigameCooldowns) {
@@ -2855,6 +3052,11 @@ function updateMinigames(dt) {
 // RENDER MINIGAMES OVERLAY
 // ============================================================
 function renderMinigamesOverlay() {
+  // Render menu if open
+  if (game._minigameMenuOpen) {
+    renderMinigameMenu();
+    return;
+  }
   if (!game._minigames || !game._minigames.activeMinigame) return;
   var m = game._minigames;
   var w = gameCanvas.width, h = gameCanvas.height;

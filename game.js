@@ -7962,9 +7962,13 @@ function gameLoop(timestamp) {
       if (consumeKey('KeyJ')) {
         openJournal();
       }
-      // M -> minimap toggle (skip if minigame active)
-      if (!_inputBlockedByMinigameOrFeature() && consumeKey('KeyM')) {
-        game.showMinimap = !game.showMinimap;
+      // M -> minimap toggle or open minigame menu
+      if (consumeKey('KeyM')) {
+        if (typeof openMinigameMenu === 'function' && !_inputBlockedByMinigameOrFeature()) {
+          openMinigameMenu();
+        } else if (!_inputBlockedByMinigameOrFeature()) {
+          game.showMinimap = !game.showMinimap;
+        }
       }
       // TAB -> shop if near a store building
       if (consumeKey('Tab')) {
@@ -7991,6 +7995,23 @@ function gameLoop(timestamp) {
           }
         }
       }
+      break;
+
+    case 'minigame':
+      // Only run minigame logic, time, and rendering — NO player movement/shooting
+      updateTime(dt);
+      updateAmbientParticles();
+      particles.update();
+      updateCamera();
+      // updateMinigames is called via the updateFeatures wrapper
+      if (typeof updateFeatures === 'function') updateFeatures(dt);
+      render();
+      if (typeof renderFeaturesOverlay === 'function') renderFeaturesOverlay();
+      // If minigame ended (activeMinigame became null), go back to playing
+      if (game.state === 'minigame' && (!game._minigames || !game._minigames.activeMinigame) && !game._minigameMenuOpen) {
+        game.state = 'playing';
+      }
+      // ESC during minigame → handled by individual minigames, but also close menu
       break;
 
     case 'paused':

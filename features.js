@@ -271,7 +271,9 @@ function spawnWildlife() {
 // ============================================================
 function updateFeatures(dt) {
   initFeatures();
-  if (game.state !== 'playing' && game.state !== 'dialog' && game.state !== 'tutorial') return;
+  if (game.state !== 'playing' && game.state !== 'dialog' && game.state !== 'tutorial' && game.state !== 'minigame') return;
+  // During minigame state, skip all features — only let the wrapper call updateMinigames
+  if (game.state === 'minigame') return;
   var f = game._features;
   var p = game.player;
 
