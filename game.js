@@ -4168,10 +4168,11 @@ function openDialog(npc) {
     }
     choices = [
       { text: '1. "Stay safe out there."', action: 'leave' },
-      { text: '2. "Seen any trouble?"', action: 'ask_trouble' }
+      { text: '2. "Seen any trouble?"', action: 'ask_trouble' },
+      { text: '3. "You\'re under arrest."', action: 'arrest_civilian' }
     ];
     if (game.activeQuest && game.activeQuest.type === 'bounty') {
-      choices.push({ text: '3. Ask about bounty', action: 'investigate' });
+      choices[2] = { text: '3. Ask about bounty', action: 'investigate' };
     }
   }
 
@@ -4497,6 +4498,21 @@ function handleDialogChoice(action, npc) {
           showNotification('Nothing suspicious here.');
         }
       }
+      closeDialog();
+      break;
+
+    case 'arrest_civilian':
+      npc.state = 'arrested';
+      npc.hostile = false;
+      game.reputation = clamp((game.reputation || 50) - 10, 0, REPUTATION_MAX);
+      game.corruption = clamp((game.corruption || 0) + 5, 0, 100);
+      game.civiliansArrested = (game.civiliansArrested || 0) + 1;
+      var civilianCrimes = ['Loitering', 'Suspicious Behavior', 'Disturbing the Peace', 'No Reason', 'Looking Funny', 'Sheriff\'s Orders', 'Being in the Wrong Place', 'Mouthing Off'];
+      var fakeCrime = civilianCrimes[rand(0, civilianCrimes.length - 1)];
+      addPrisoner(npc.name, fakeCrime, npc);
+      showNotification('Arrested ' + npc.name + ' for "' + fakeCrime + '"! -10 Rep, +5 Corruption');
+      addJournalEntry('Wrongfully arrested civilian ' + npc.name + ' for "' + fakeCrime + '".');
+      if (typeof audio !== 'undefined' && typeof audio.playBad === 'function') audio.playBad();
       closeDialog();
       break;
   }
