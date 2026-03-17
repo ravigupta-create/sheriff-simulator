@@ -4055,40 +4055,24 @@ function openDialog(npc) {
       var tipTemplates = dialogs.tips;
       var suspectNPC = null;
       var suspectBuilding = null;
-      // First, try to find an existing hostile/wanted NPC
-      for (var si = 0; si < game.npcs.length; si++) {
-        var sn = game.npcs[si];
-        if ((sn.hostile || sn._isWanted || sn.type === NPC_TYPES.OUTLAW || sn.type === NPC_TYPES.BOUNTY) && sn.state !== 'dead' && sn.state !== 'arrested') {
-          suspectNPC = sn; break;
-        }
-      }
-      // If no existing threat, spawn one hiding near a building
-      if (!suspectNPC) {
-        suspectBuilding = game.buildings[rand(0, game.buildings.length - 1)];
-        var spawnX = suspectBuilding.doorX || (suspectBuilding.x + Math.floor(suspectBuilding.w / 2));
-        var spawnY = suspectBuilding.doorY || (suspectBuilding.y + suspectBuilding.h);
-        var hiddenNames = ['Shady Jake', 'Mystery Man', 'The Lurker', 'Sneaky Pete', 'Shadow', 'The Rat', 'Slippery Sam'];
-        suspectNPC = createNPC(game.npcs.length + 500, NPC_TYPES.OUTLAW, hiddenNames[rand(0, hiddenNames.length - 1)], spawnX + rand(-2, 2), spawnY + rand(1, 3), null);
-        suspectNPC.hostile = false; // Hiding — not hostile yet
-        suspectNPC._hiding = true;
-        suspectNPC._hideBuilding = suspectBuilding;
-        suspectNPC._hidingTimer = 0;
-        suspectNPC.hp = rand(4, 7);
-        suspectNPC.maxHp = suspectNPC.hp;
-        game.npcs.push(suspectNPC);
-        addJournalEntry('Bartender tip: ' + suspectNPC.name + ' acting suspicious near ' + suspectBuilding.name + '.');
-      }
-      if (!suspectBuilding) {
-        // Find building nearest to the suspect
-        var nearestBDist = 9999;
-        for (var bi2 = 0; bi2 < game.buildings.length; bi2++) {
-          var bd = Math.hypot(suspectNPC.x - game.buildings[bi2].x * TILE, suspectNPC.y - game.buildings[bi2].y * TILE);
-          if (bd < nearestBDist) { nearestBDist = bd; suspectBuilding = game.buildings[bi2]; }
-        }
-      }
+      // Always spawn a fresh hiding NPC near a random building
+      // This guarantees the person is ACTUALLY there when the bartender says so
+      suspectBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+      var spawnX = suspectBuilding.doorX || (suspectBuilding.x + Math.floor(suspectBuilding.w / 2));
+      var spawnY = suspectBuilding.doorY || (suspectBuilding.y + suspectBuilding.h);
+      var hiddenNames = ['Shady Jake', 'Mystery Man', 'The Lurker', 'Sneaky Pete', 'Shadow', 'The Rat', 'Slippery Sam', 'Crooked Carl', 'Two-Face Tom', 'Whisper'];
+      suspectNPC = createNPC(game.npcs.length + 500 + rand(0, 999), NPC_TYPES.OUTLAW, hiddenNames[rand(0, hiddenNames.length - 1)], spawnX + rand(-2, 2), spawnY + rand(1, 3), null);
+      suspectNPC.hostile = false; // Hiding — not hostile yet
+      suspectNPC._hiding = true;
+      suspectNPC._hideBuilding = suspectBuilding;
+      suspectNPC._hidingTimer = 0;
+      suspectNPC.hp = rand(4, 7);
+      suspectNPC.maxHp = suspectNPC.hp;
+      game.npcs.push(suspectNPC);
+      addJournalEntry('Bartender tip: ' + suspectNPC.name + ' acting suspicious near ' + suspectBuilding.name + '.');
       text = tipTemplates[rand(0, tipTemplates.length - 1)]
         .replace('{name}', suspectNPC.name)
-        .replace('{place}', suspectBuilding ? suspectBuilding.name : 'edge of town');
+        .replace('{place}', suspectBuilding.name);
     } else {
       text = dialogs.idle[rand(0, dialogs.idle.length - 1)];
     }
@@ -4145,13 +4129,17 @@ function openDialog(npc) {
     }
     // 30% chance to give a threat hint if one exists, or 15% to spawn one
     if (_hasThreat && Math.random() < 0.3 && dialogs.threat_hints) {
-      // Find building nearest to threat
-      var _tbDist = 9999;
-      for (var _tbi = 0; _tbi < game.buildings.length; _tbi++) {
-        var _tbd = Math.hypot(_threatNPC.x - game.buildings[_tbi].x * TILE, _threatNPC.y - game.buildings[_tbi].y * TILE);
-        if (_tbd < _tbDist) { _tbDist = _tbd; _threatBuilding = game.buildings[_tbi]; }
-      }
-      text = dialogs.threat_hints[rand(0, dialogs.threat_hints.length - 1)].replace('{place}', _threatBuilding ? _threatBuilding.name : 'edge of town');
+      // Pick a building and MOVE the threat NPC to it so the tip is truthful
+      _threatBuilding = game.buildings[rand(0, game.buildings.length - 1)];
+      var _mvX = (_threatBuilding.doorX || (_threatBuilding.x + Math.floor(_threatBuilding.w / 2))) * TILE;
+      var _mvY = ((_threatBuilding.doorY || (_threatBuilding.y + _threatBuilding.h)) + rand(1, 3)) * TILE;
+      _threatNPC.x = _mvX + rand(-20, 20);
+      _threatNPC.y = _mvY + rand(0, 30);
+      _threatNPC._hiding = true;
+      _threatNPC._hideBuilding = _threatBuilding;
+      _threatNPC._hidingTimer = 0;
+      _threatNPC.hostile = false;
+      text = dialogs.threat_hints[rand(0, dialogs.threat_hints.length - 1)].replace('{place}', _threatBuilding.name);
     } else if (!_hasThreat && Math.random() < 0.15 && dialogs.threat_hints) {
       // Spawn a real hidden outlaw so the hint is truthful
       _threatBuilding = game.buildings[rand(0, game.buildings.length - 1)];
