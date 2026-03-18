@@ -5775,3 +5775,2314 @@ function updateMysteryStrangers() {
   }
 }
 
+// ============================================================
+// OFFICE FEATURES V2 — Extended Systems
+// Features: 70 (Interrogation), 92 (Salary), 151 (CSI),
+// 152 (Evidence Board), 154 (Court Trials), 155 (Jailbreak),
+// 164 (Cold Cases), 166 (Parole), 167 (Crime Prediction),
+// 170 (Police Reports), 173 (Prison Labor), 175 (Law Library)
+// ============================================================
+
+// ─────────────────────────────────────────────
+// §V2-1  INITIALIZATION
+// ─────────────────────────────────────────────
+function _initOfficeV2() {
+  if (office._v2init) return;
+  office._v2init = true;
+
+  // Feature 70: Prisoner Interrogation
+  office._interrogation = {
+    active: false,
+    prisonerIdx: -1,
+    result: null,
+    resultTimer: 0,
+    selectedOption: 0,
+    cooldownPrisoner: {} // prisonerIdx -> day last interrogated
+  };
+
+  // Feature 92: Salary Negotiation
+  office._salary = {
+    current: 20,
+    lastNegotiateDay: -99,
+    negotiating: false,
+    selectedOption: 0,
+    result: null,
+    resultTimer: 0,
+    paydayAccum: 0
+  };
+
+  // Feature 151: Crime Scene Investigation
+  office._csi = {
+    scenes: [],
+    activeScene: null,
+    cluesFound: [],
+    suspectNarrowed: false,
+    investigating: false,
+    investigateTimer: 0,
+    clueIndex: 0,
+    resultText: null,
+    resultTimer: 0
+  };
+
+  // Feature 152: Evidence Board
+  office._evidenceBoard = {
+    items: [],
+    connections: [],
+    viewing: false,
+    selectedItem: -1,
+    connectMode: false,
+    connectFrom: -1,
+    scroll: 0
+  };
+
+  // Feature 154: Court Trials
+  office._trial = {
+    active: false,
+    defendant: null,
+    evidence: [],
+    witnesses: [],
+    phase: 0, // 0=select evidence, 1=witnesses, 2=verdict
+    verdict: null,
+    selectedEvidence: [],
+    selectedWitness: 0,
+    evidenceCursor: 0,
+    verdictTimer: 0,
+    trialCount: 0
+  };
+
+  // Feature 155: Jailbreak Prevention
+  office._jailSecurity = {
+    lockLevel: 0,
+    guardLevel: 0,
+    monitorLevel: 0,
+    breakChance: 30,
+    lastBreakDay: -1,
+    breakActive: false,
+    escapees: [],
+    upgradeMenu: false,
+    selectedUpgrade: 0
+  };
+
+  // Feature 164: Cold Case Files
+  office._coldCases = {
+    cases: _generateColdCases(),
+    activeCase: null,
+    cluesFound: {},
+    viewingCases: false,
+    selectedCase: 0
+  };
+
+  // Feature 166: Parole System
+  office._parole = {
+    paroled: [],
+    reformedCount: 0,
+    reoffendCount: 0,
+    viewingParole: false,
+    selectedPrisoner: 0,
+    reoffendCheckTimer: 0
+  };
+
+  // Feature 167: Crime Prediction
+  office._prediction = {
+    analyzing: false,
+    timer: 0,
+    predicted: null,
+    accuracy: 0,
+    history: [],
+    headStartActive: false,
+    headStartTimer: 0,
+    correctPredictions: 0
+  };
+
+  // Feature 170: Police Report Writing
+  office._reports = {
+    writing: false,
+    quality: '',
+    timer: 0,
+    maxTimer: 0,
+    reportsWritten: 0,
+    pendingReports: 0,
+    reward: 0,
+    selectedQuality: 0
+  };
+
+  // Feature 173: Prison Labor
+  office._prisonLabor = {
+    active: false,
+    laborers: 0,
+    totalEarned: 0,
+    dayAccum: 0,
+    cooperationPenalty: 0
+  };
+
+  // Feature 175: Law Library
+  office._lawLib = {
+    booksRead: [],
+    legalExpertBonus: false,
+    viewing: false,
+    selectedBook: 0,
+    readingTimer: 0,
+    readingBook: null,
+    books: [
+      { id: 'criminal_law', name: 'Criminal Law Basics', desc: 'Covers assault, theft, and murder statutes', bonus: '+5% arrest success' },
+      { id: 'civil_procedure', name: 'Civil Procedure', desc: 'Court processes and evidence handling', bonus: '+10% trial success' },
+      { id: 'frontier_justice', name: 'Frontier Justice', desc: 'Historical precedents for frontier law enforcement', bonus: '+$5 per arrest' },
+      { id: 'interrogation_tactics', name: 'Interrogation Tactics', desc: 'Psychology of confession and persuasion', bonus: '+10% interrogation success' },
+      { id: 'law_enforcement', name: 'Advanced Law Enforcement', desc: 'Modern techniques for maintaining order', bonus: 'Legal Expert title' }
+    ]
+  };
+}
+
+// ─────────────────────────────────────────────
+// §V2-2  COLD CASE GENERATOR
+// ─────────────────────────────────────────────
+function _generateColdCases() {
+  let cases = [
+    {
+      id: 'missing_gold',
+      name: 'The Missing Gold Shipment',
+      desc: 'A gold shipment vanished 3 months ago. The driver was found dead on the trail.',
+      reward: 200,
+      xpReward: 50,
+      clues: [
+        { id: 'tracks', type: 'location', hint: 'Check the trail north of town for wagon tracks', found: false, locX: 0.2, locY: 0.1 },
+        { id: 'witness', type: 'npc', hint: 'The bartender might have seen something', found: false, npcType: 'bartender' },
+        { id: 'hideout', type: 'location', hint: 'There\'s a cave near the canyon', found: false, locX: 0.8, locY: 0.15 },
+        { id: 'confession', type: 'npc', hint: 'A known outlaw may confess under pressure', found: false, npcType: 'outlaw' }
+      ],
+      solved: false
+    },
+    {
+      id: 'poisoned_well',
+      name: 'The Poisoned Well',
+      desc: 'Three townsfolk fell ill from the town well. Someone poisoned it deliberately.',
+      reward: 150,
+      xpReward: 40,
+      clues: [
+        { id: 'bottle', type: 'location', hint: 'Search near the well for discarded bottles', found: false, locX: 0.5, locY: 0.5 },
+        { id: 'apothecary', type: 'npc', hint: 'The shopkeeper sold arsenic recently', found: false, npcType: 'shopkeeper' },
+        { id: 'motive', type: 'npc', hint: 'Someone had a grudge against those families', found: false, npcType: 'townsperson' }
+      ],
+      solved: false
+    },
+    {
+      id: 'bank_plans',
+      name: 'The Bank Job Blueprint',
+      desc: 'Detailed bank robbery plans were found. Someone is planning a heist.',
+      reward: 250,
+      xpReward: 60,
+      clues: [
+        { id: 'blueprint', type: 'location', hint: 'Check behind the bank for dropped notes', found: false, locX: 0.45, locY: 0.4 },
+        { id: 'insider', type: 'npc', hint: 'A bank employee may be involved', found: false, npcType: 'townsperson' },
+        { id: 'tools', type: 'location', hint: 'Lockpicking tools were seen near the stable', found: false, locX: 0.6, locY: 0.65 },
+        { id: 'accomplice', type: 'npc', hint: 'A stranger has been asking about guard schedules', found: false, npcType: 'outlaw' }
+      ],
+      solved: false
+    },
+    {
+      id: 'cattle_rustling',
+      name: 'The Great Cattle Rustling',
+      desc: 'Dozens of cattle have vanished from local ranches over the past month.',
+      reward: 180,
+      xpReward: 45,
+      clues: [
+        { id: 'hoofprints', type: 'location', hint: 'Follow the hoofprints south of the ranch', found: false, locX: 0.3, locY: 0.85 },
+        { id: 'rancher', type: 'npc', hint: 'Talk to the rancher about suspicious activity', found: false, npcType: 'townsperson' },
+        { id: 'brand', type: 'location', hint: 'Find the re-branding iron', found: false, locX: 0.9, locY: 0.7 }
+      ],
+      solved: false
+    },
+    {
+      id: 'arson_series',
+      name: 'The Midnight Arsonist',
+      desc: 'Three buildings have been set ablaze at night. The arsonist strikes under cover of darkness.',
+      reward: 300,
+      xpReward: 70,
+      clues: [
+        { id: 'accelerant', type: 'location', hint: 'Kerosene stains found near the last fire site', found: false, locX: 0.55, locY: 0.3 },
+        { id: 'sighting', type: 'npc', hint: 'A night watchman saw someone fleeing', found: false, npcType: 'townsperson' },
+        { id: 'supply', type: 'npc', hint: 'Someone bought bulk kerosene from the general store', found: false, npcType: 'shopkeeper' },
+        { id: 'grudge', type: 'location', hint: 'A threatening letter was found in the ashes', found: false, locX: 0.4, locY: 0.25 }
+      ],
+      solved: false
+    }
+  ];
+  return cases;
+}
+
+// ─────────────────────────────────────────────
+// §V2-3  FEATURE 70: PRISONER INTERROGATION
+// ─────────────────────────────────────────────
+function _updateInterrogation(dt) {
+  let interr = office._interrogation;
+  if (!interr) return;
+
+  // Result display timer
+  if (interr.result) {
+    interr.resultTimer -= dt;
+    if (interr.resultTimer <= 0) {
+      interr.result = null;
+      interr.active = false;
+      interr.prisonerIdx = -1;
+    }
+    return;
+  }
+
+  if (!interr.active) {
+    // Check if near jail cells and pressing E on a prisoner
+    if (office.active && office.nearFurniture === 'jailCells' && office.prisoners.length > 0) {
+      if (typeof consumeKey === 'function' && consumeKey('KeyI')) {
+        let pIdx = office.selectedPrisoner || 0;
+        if (pIdx >= 0 && pIdx < office.prisoners.length) {
+          let prisoner = office.prisoners[pIdx];
+          let dayNow = game.dayCount || 1;
+          if (interr.cooldownPrisoner[pIdx] === dayNow) {
+            showNotification('Already interrogated this prisoner today.');
+            return;
+          }
+          interr.active = true;
+          interr.prisonerIdx = pIdx;
+          interr.selectedOption = 0;
+        }
+      }
+    }
+    return;
+  }
+
+  // Active interrogation - handle input
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    interr.selectedOption = Math.max(0, interr.selectedOption - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    interr.selectedOption = Math.min(2, interr.selectedOption + 1);
+  }
+  if (consumeKey('Escape')) {
+    interr.active = false;
+    interr.prisonerIdx = -1;
+    return;
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    let prisoner = office.prisoners[interr.prisonerIdx];
+    if (!prisoner) { interr.active = false; return; }
+
+    let dayNow = game.dayCount || 1;
+    interr.cooldownPrisoner[interr.prisonerIdx] = dayNow;
+
+    let success = false;
+    let infoType = '';
+    let tacticBonus = (office._lawLib && office._lawLib.booksRead.indexOf('interrogation_tactics') >= 0) ? 10 : 0;
+
+    if (interr.selectedOption === 0) {
+      // Threaten: +3 corruption, 60% info
+      game.corruption = clamp((game.corruption || 0) + 3, 0, 100);
+      success = Math.random() * 100 < (60 + tacticBonus);
+      showNotification('You slam the table and threaten the prisoner! +3 Corruption', 'bad');
+    } else if (interr.selectedOption === 1) {
+      // Persuade: 50% info based on charisma/reputation
+      let repBonus = Math.floor(((game.reputation || 50) - 50) / 5);
+      success = Math.random() * 100 < (50 + repBonus + tacticBonus);
+      showNotification('You try to reason with the prisoner...');
+    } else {
+      // Bribe: $20, 80% info
+      if ((game.gold || 0) < 20) {
+        interr.result = 'Not enough gold to bribe! Need $20.';
+        interr.resultTimer = 2;
+        return;
+      }
+      game.gold -= 20;
+      success = Math.random() * 100 < (80 + tacticBonus);
+      showNotification('You slip $20 to the prisoner. -$20');
+    }
+
+    if (success) {
+      let infoTypes = ['cache', 'crime_plan', 'gang_identity'];
+      infoType = infoTypes[rand(0, infoTypes.length - 1)];
+      let infoText = '';
+
+      if (infoType === 'cache') {
+        // Reveal a hidden cache
+        let cx = rand(3, MAP_W - 3) * TILE;
+        let cy = rand(3, MAP_H - 3) * TILE;
+        let goldAmount = rand(30, 80);
+        if (!game._hiddenCrates) game._hiddenCrates = [];
+        game._hiddenCrates.push({ x: cx, y: cy, gold: goldAmount, found: false });
+        infoText = 'Hidden cache revealed! $' + goldAmount + ' worth of stolen goods marked on your map.';
+        // Add to evidence board
+        _addEvidenceItem('Cache location from ' + (prisoner.name || 'prisoner'), 'interrogation');
+      } else if (infoType === 'crime_plan') {
+        infoText = 'The prisoner reveals a crime is being planned at ' + ['the bank', 'the saloon', 'the general store', 'the church'][rand(0, 3)] + '!';
+        _addEvidenceItem('Crime plan intel from ' + (prisoner.name || 'prisoner'), 'interrogation');
+        addXP(15);
+      } else {
+        let gangNames = ['Dalton Gang', 'Red River Boys', 'Black Hat Bandits', 'Coyote Pack'];
+        infoText = 'The prisoner identifies members of the ' + gangNames[rand(0, gangNames.length - 1)] + '!';
+        _addEvidenceItem('Gang ID from ' + (prisoner.name || 'prisoner'), 'interrogation');
+        addXP(20);
+      }
+      interr.result = 'SUCCESS: ' + infoText;
+      addJournalEntry('Interrogation success: ' + infoText);
+    } else {
+      interr.result = 'FAILED: The prisoner stays silent and glares at you.';
+    }
+    interr.resultTimer = 3.5;
+  }
+}
+
+function _renderInterrogation() {
+  let interr = office._interrogation;
+  if (!interr || !interr.active) return;
+
+  let W = gameCanvas.width, H = gameCanvas.height;
+  let panelW = 420, panelH = 280;
+  let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  // Dim background
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Panel
+  ctx.fillStyle = '#1a1208';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#8b6340';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  let prisoner = office.prisoners[interr.prisonerIdx];
+  let prisonerName = prisoner ? (prisoner.name || 'Unknown Prisoner') : 'Unknown';
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('INTERROGATION: ' + prisonerName, px + panelW / 2, py + 25);
+
+  if (interr.result) {
+    ctx.fillStyle = interr.result.indexOf('SUCCESS') === 0 ? '#44ff44' : '#ff4444';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    let words = interr.result.split(' ');
+    let lines = [];
+    let line = '';
+    for (let i = 0; i < words.length; i++) {
+      let test = line + (line ? ' ' : '') + words[i];
+      if (ctx.measureText(test).width > panelW - 40) {
+        lines.push(line);
+        line = words[i];
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], px + panelW / 2, py + 80 + i * 18);
+    }
+    return;
+  }
+
+  // Prisoner portrait (simple pixel art)
+  ctx.fillStyle = '#555';
+  ctx.fillRect(px + 20, py + 45, 50, 60);
+  ctx.fillStyle = '#c8a878';
+  ctx.beginPath();
+  ctx.arc(px + 45, py + 60, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillRect(px + 39, py + 55, 3, 3);
+  ctx.fillRect(px + 47, py + 55, 3, 3);
+
+  // Options
+  let options = [
+    { label: 'THREATEN', desc: '+3 Corruption, 60% chance of info', color: '#ff4444' },
+    { label: 'PERSUADE', desc: '50% chance (rep bonus)', color: '#44aaff' },
+    { label: 'BRIBE ($20)', desc: '80% chance of info', color: '#ffdd44' }
+  ];
+
+  ctx.textAlign = 'left';
+  for (let i = 0; i < options.length; i++) {
+    let optY = py + 130 + i * 45;
+    let selected = interr.selectedOption === i;
+    ctx.fillStyle = selected ? 'rgba(255,255,255,0.1)' : 'transparent';
+    ctx.fillRect(px + 15, optY - 8, panelW - 30, 38);
+    if (selected) {
+      ctx.strokeStyle = options[i].color;
+      ctx.strokeRect(px + 15, optY - 8, panelW - 30, 38);
+    }
+    ctx.fillStyle = selected ? options[i].color : '#999';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText((selected ? '> ' : '  ') + options[i].label, px + 25, optY + 8);
+    ctx.fillStyle = '#777';
+    ctx.font = '10px monospace';
+    ctx.fillText(options[i].desc, px + 35, optY + 22);
+  }
+
+  ctx.fillStyle = '#666';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  [Enter] Confirm  [Esc] Cancel', px + panelW / 2, py + panelH - 12);
+}
+
+// ─────────────────────────────────────────────
+// §V2-4  FEATURE 92: SALARY NEGOTIATION
+// ─────────────────────────────────────────────
+function _updateSalary(dt) {
+  let sal = office._salary;
+  if (!sal) return;
+
+  // Pay salary every game-day
+  sal.paydayAccum += dt;
+  if (sal.paydayAccum >= 60) { // roughly one game-day worth of seconds
+    sal.paydayAccum = 0;
+    game.gold = (game.gold || 0) + sal.current;
+    game.totalGoldEarned = (game.totalGoldEarned || 0) + sal.current;
+  }
+
+  // Result display
+  if (sal.result) {
+    sal.resultTimer -= dt;
+    if (sal.resultTimer <= 0) {
+      sal.result = null;
+      sal.negotiating = false;
+    }
+    return;
+  }
+
+  if (!sal.negotiating) {
+    // Start negotiation at desk
+    if (office.active && office.sittingAtDesk && consumeKey('KeyN')) {
+      let dayNow = game.dayCount || 1;
+      if (dayNow - sal.lastNegotiateDay < 10) {
+        let daysLeft = 10 - (dayNow - sal.lastNegotiateDay);
+        showNotification('Must wait ' + daysLeft + ' more days before negotiating again.');
+        return;
+      }
+      sal.negotiating = true;
+      sal.selectedOption = 0;
+    }
+    return;
+  }
+
+  // Handle negotiation input
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    sal.selectedOption = Math.max(0, sal.selectedOption - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    sal.selectedOption = Math.min(2, sal.selectedOption + 1);
+  }
+  if (consumeKey('Escape')) {
+    sal.negotiating = false;
+    return;
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    let dayNow = game.dayCount || 1;
+    sal.lastNegotiateDay = dayNow;
+
+    if (sal.selectedOption === 0) {
+      // Ask politely: 50% raise
+      if (Math.random() < 0.5) {
+        let raise = rand(5, 15);
+        sal.current = Math.min(100, sal.current + raise);
+        sal.result = 'The mayor agrees! Salary raised to $' + sal.current + '/day.';
+        addJournalEntry('Negotiated a raise: $' + sal.current + '/day.');
+      } else {
+        sal.result = 'The mayor declines politely. "Budget is tight, Sheriff."';
+      }
+    } else if (sal.selectedOption === 1) {
+      // Demand: 30% raise, -5 rep
+      game.reputation = clamp((game.reputation || 50) - 5, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+      if (Math.random() < 0.3) {
+        let raise = rand(10, 25);
+        sal.current = Math.min(100, sal.current + raise);
+        sal.result = 'The mayor begrudgingly agrees! Salary: $' + sal.current + '/day. (-5 Rep)';
+        addJournalEntry('Demanded a raise to $' + sal.current + '/day. Mayor is unhappy.');
+      } else {
+        sal.result = 'The mayor slams his fist: "Don\'t push me, Sheriff!" -5 Rep.';
+      }
+    } else {
+      // Accept current
+      sal.result = 'You accept your current salary of $' + sal.current + '/day.';
+    }
+    sal.resultTimer = 3;
+    if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+  }
+}
+
+function _renderSalary() {
+  let sal = office._salary;
+  if (!sal || !sal.negotiating) return;
+
+  let W = gameCanvas.width, H = gameCanvas.height;
+  let panelW = 400, panelH = 260;
+  let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#1a1a08';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#bba040';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('SALARY NEGOTIATION', px + panelW / 2, py + 25);
+  ctx.fillStyle = '#ccc';
+  ctx.font = '11px monospace';
+  ctx.fillText('Current salary: $' + sal.current + '/day', px + panelW / 2, py + 45);
+
+  if (sal.result) {
+    ctx.fillStyle = '#ffdd88';
+    ctx.font = '12px monospace';
+    ctx.fillText(sal.result, px + panelW / 2, py + 120);
+    return;
+  }
+
+  let options = [
+    { label: 'Ask Politely', desc: '50% chance of raise', color: '#88cc88' },
+    { label: 'Demand Raise', desc: '30% chance, -5 reputation', color: '#ff8844' },
+    { label: 'Accept Current', desc: 'Keep $' + sal.current + '/day', color: '#aaaaaa' }
+  ];
+
+  ctx.textAlign = 'left';
+  for (let i = 0; i < options.length; i++) {
+    let optY = py + 75 + i * 50;
+    let selected = sal.selectedOption === i;
+    ctx.fillStyle = selected ? 'rgba(255,255,255,0.08)' : 'transparent';
+    ctx.fillRect(px + 15, optY - 5, panelW - 30, 40);
+    if (selected) {
+      ctx.strokeStyle = options[i].color;
+      ctx.strokeRect(px + 15, optY - 5, panelW - 30, 40);
+    }
+    ctx.fillStyle = selected ? options[i].color : '#888';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText((selected ? '> ' : '  ') + options[i].label, px + 25, optY + 12);
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.fillText(options[i].desc, px + 35, optY + 26);
+  }
+
+  ctx.fillStyle = '#666';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  [Enter] Confirm  [Esc] Cancel', px + panelW / 2, py + panelH - 12);
+}
+
+// ─────────────────────────────────────────────
+// §V2-5  FEATURE 151: CRIME SCENE INVESTIGATION
+// ─────────────────────────────────────────────
+function _createCrimeScene(x, y, crimeType) {
+  if (!office._csi) return;
+  let clueTypes = ['footprints', 'casings', 'witness'];
+  let clueDescs = {
+    footprints: ['Tracks heading north', 'Tracks heading south', 'Tracks heading toward the saloon', 'Boot prints, size large'],
+    casings: ['Pistol casings', 'Rifle casings', 'Shotgun shells', 'Derringer caliber casings'],
+    witness: ['Saw a tall figure', 'Noticed someone limping', 'Heard a foreign accent', 'Saw a red bandana']
+  };
+
+  let scene = {
+    x: x,
+    y: y,
+    crimeType: crimeType || 'unknown',
+    clues: [],
+    investigated: false,
+    dayCreated: game.dayCount || 1,
+    suspectNPC: null
+  };
+
+  // Generate 3 clues
+  for (let i = 0; i < 3; i++) {
+    let type = clueTypes[i];
+    let descs = clueDescs[type];
+    scene.clues.push({
+      type: type,
+      description: descs[rand(0, descs.length - 1)],
+      found: false
+    });
+  }
+
+  // Assign a suspect from NPC pool
+  if (game.npcs && game.npcs.length > 0) {
+    let suspects = game.npcs.filter(function(n) { return !n.dead && n.type !== undefined; });
+    if (suspects.length > 0) {
+      scene.suspectNPC = suspects[rand(0, suspects.length - 1)];
+    }
+  }
+
+  office._csi.scenes.push(scene);
+  showNotification('Crime scene detected! Investigate for clues.', 'info');
+}
+
+function _updateCSI(dt) {
+  let csi = office._csi;
+  if (!csi) return;
+
+  // Result timer
+  if (csi.resultText) {
+    csi.resultTimer -= dt;
+    if (csi.resultTimer <= 0) {
+      csi.resultText = null;
+      csi.investigating = false;
+      csi.activeScene = null;
+    }
+    return;
+  }
+
+  // Auto-create crime scenes from existing crime events
+  if (!office.active && game.state === 'playing' && game._lastCrime) {
+    let lc = game._lastCrime;
+    if (lc._csiProcessed !== true) {
+      lc._csiProcessed = true;
+      _createCrimeScene(lc.x || game.player.x, lc.y || game.player.y, lc.type || 'crime');
+    }
+  }
+
+  // Check player proximity to crime scenes (when in world)
+  if (!office.active && game.state === 'playing' && csi.scenes.length > 0) {
+    let px = game.player.x, py = game.player.y;
+    for (let i = 0; i < csi.scenes.length; i++) {
+      let scene = csi.scenes[i];
+      if (scene.investigated) continue;
+      let d = Math.sqrt((px - scene.x) * (px - scene.x) + (py - scene.y) * (py - scene.y));
+      if (d < 50 && consumeKey('KeyE')) {
+        csi.activeScene = scene;
+        csi.investigating = true;
+        csi.clueIndex = 0;
+        csi.cluesFound = [];
+        csi.investigateTimer = 0;
+        showNotification('Investigating crime scene...');
+        return;
+      }
+    }
+  }
+
+  if (!csi.investigating || !csi.activeScene) return;
+
+  // Investigation process: find clues over time
+  csi.investigateTimer += dt;
+  let scene = csi.activeScene;
+
+  if (csi.investigateTimer >= 2 && csi.clueIndex < scene.clues.length) {
+    let clue = scene.clues[csi.clueIndex];
+    if (!clue.found) {
+      clue.found = true;
+      csi.cluesFound.push(clue);
+      showNotification('Clue found: ' + clue.description);
+      _addEvidenceItem(clue.type + ': ' + clue.description, 'csi');
+      addXP(10);
+    }
+    csi.clueIndex++;
+    csi.investigateTimer = 0;
+
+    if (csi.clueIndex >= scene.clues.length) {
+      // All clues found
+      scene.investigated = true;
+      let allFound = csi.cluesFound.length >= 3;
+      if (allFound && scene.suspectNPC) {
+        csi.suspectNarrowed = true;
+        csi.resultText = 'All clues point to: ' + (scene.suspectNPC.name || 'Unknown suspect') + '! Bonus XP!';
+        addXP(30);
+      } else {
+        csi.resultText = 'Scene investigated. ' + csi.cluesFound.length + '/3 clues found.';
+      }
+      csi.resultTimer = 3;
+      addJournalEntry('Crime scene investigation complete. ' + csi.cluesFound.length + ' clues found.');
+    }
+  }
+
+  // Allow cancel
+  if (consumeKey('Escape')) {
+    csi.investigating = false;
+    csi.activeScene = null;
+  }
+}
+
+function _renderCSI() {
+  let csi = office._csi;
+  if (!csi) return;
+
+  // Render crime scene markers in world
+  if (!office.active && game.state === 'playing' && csi.scenes.length > 0) {
+    let camX = game.camera ? game.camera.x : 0;
+    let camY = game.camera ? game.camera.y : 0;
+    for (let i = 0; i < csi.scenes.length; i++) {
+      let scene = csi.scenes[i];
+      if (scene.investigated) continue;
+      let sx = scene.x - camX;
+      let sy = scene.y - camY;
+      // Pulsing red circle
+      let pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
+      ctx.strokeStyle = 'rgba(255,50,50,' + pulse + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 25, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,50,50,0.2)';
+      ctx.fill();
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('CRIME SCENE', sx, sy - 30);
+      ctx.fillText('[E] Investigate', sx, sy + 35);
+    }
+  }
+
+  // Render investigation progress
+  if (csi.investigating && csi.activeScene) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let barW = 300, barH = 40;
+    let bx = (W - barW) / 2, by = H - 80;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(bx - 5, by - 25, barW + 10, barH + 35);
+    ctx.strokeStyle = '#ff6644';
+    ctx.strokeRect(bx - 5, by - 25, barW + 10, barH + 35);
+
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Investigating... Clue ' + (csi.clueIndex + 1) + '/' + csi.activeScene.clues.length, W / 2, by - 8);
+
+    // Progress bar
+    let progress = csi.investigateTimer / 2;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx, by + 5, barW, 12);
+    ctx.fillStyle = '#ff8844';
+    ctx.fillRect(bx, by + 5, barW * Math.min(1, progress), 12);
+
+    if (csi.resultText) {
+      ctx.fillStyle = '#44ff44';
+      ctx.fillText(csi.resultText, W / 2, by + 30);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-6  FEATURE 152: EVIDENCE BOARD
+// ─────────────────────────────────────────────
+function _addEvidenceItem(text, source) {
+  if (!office._evidenceBoard) return;
+  office._evidenceBoard.items.push({
+    text: text,
+    source: source || 'unknown',
+    day: game.dayCount || 1,
+    x: 50 + Math.random() * 300,
+    y: 50 + Math.random() * 180
+  });
+}
+
+function _updateEvidenceBoard(dt) {
+  let eb = office._evidenceBoard;
+  if (!eb) return;
+
+  if (!eb.viewing) {
+    if (office.active && office.nearFurniture === 'caseBoard' && consumeKey('KeyV')) {
+      eb.viewing = true;
+      eb.selectedItem = eb.items.length > 0 ? 0 : -1;
+      eb.connectMode = false;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape')) {
+    if (eb.connectMode) {
+      eb.connectMode = false;
+      eb.connectFrom = -1;
+    } else {
+      eb.viewing = false;
+    }
+    return;
+  }
+
+  if (eb.items.length === 0) return;
+
+  // Navigate items
+  if (consumeKey('ArrowLeft') || consumeKey('KeyA')) {
+    eb.selectedItem = Math.max(0, eb.selectedItem - 1);
+  }
+  if (consumeKey('ArrowRight') || consumeKey('KeyD')) {
+    eb.selectedItem = Math.min(eb.items.length - 1, eb.selectedItem + 1);
+  }
+
+  // Connect mode
+  if (consumeKey('KeyC')) {
+    if (!eb.connectMode) {
+      eb.connectMode = true;
+      eb.connectFrom = eb.selectedItem;
+      showNotification('Select second item to connect, then press C');
+    } else {
+      // Make connection
+      if (eb.connectFrom !== eb.selectedItem && eb.connectFrom >= 0) {
+        let exists = eb.connections.some(function(c) {
+          return (c[0] === eb.connectFrom && c[1] === eb.selectedItem) ||
+                 (c[0] === eb.selectedItem && c[1] === eb.connectFrom);
+        });
+        if (!exists) {
+          eb.connections.push([eb.connectFrom, eb.selectedItem]);
+          showNotification('Evidence connected!');
+          addXP(5);
+          // Check for breakthroughs: 3+ connections on one item
+          let counts = {};
+          eb.connections.forEach(function(c) {
+            counts[c[0]] = (counts[c[0]] || 0) + 1;
+            counts[c[1]] = (counts[c[1]] || 0) + 1;
+          });
+          for (let key in counts) {
+            if (counts[key] >= 3) {
+              showNotification('BREAKTHROUGH! Key evidence identified!', 'good');
+              addXP(25);
+              addJournalEntry('Evidence board breakthrough: connected multiple clues.');
+              break;
+            }
+          }
+        }
+      }
+      eb.connectMode = false;
+      eb.connectFrom = -1;
+    }
+  }
+}
+
+function _renderEvidenceBoard() {
+  let eb = office._evidenceBoard;
+  if (!eb || !eb.viewing) return;
+
+  let W = gameCanvas.width, H = gameCanvas.height;
+  let panelW = Math.min(W - 40, 600), panelH = Math.min(H - 40, 400);
+  let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  // Cork board background
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#8b6a3e';
+  ctx.fillRect(px, py, panelW, panelH);
+  // Wood frame
+  ctx.strokeStyle = '#5a3a1a';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(px, py, panelW, panelH);
+  // Cork texture dots
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = 'rgba(160,120,60,0.3)';
+    ctx.beginPath();
+    ctx.arc(px + Math.random() * panelW, py + Math.random() * panelH, 3 + Math.random() * 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('EVIDENCE BOARD', px + panelW / 2, py + 20);
+
+  if (eb.items.length === 0) {
+    ctx.fillStyle = '#ddd';
+    ctx.font = '12px monospace';
+    ctx.fillText('No evidence collected yet.', px + panelW / 2, py + panelH / 2);
+    ctx.fillText('[Esc] Close', px + panelW / 2, py + panelH - 15);
+    return;
+  }
+
+  // Draw connection strings
+  ctx.strokeStyle = '#cc2222';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < eb.connections.length; i++) {
+    let c = eb.connections[i];
+    if (c[0] < eb.items.length && c[1] < eb.items.length) {
+      let a = eb.items[c[0]], b = eb.items[c[1]];
+      ctx.beginPath();
+      ctx.moveTo(px + a.x + 50, py + 35 + a.y + 15);
+      ctx.lineTo(px + b.x + 50, py + 35 + b.y + 15);
+      ctx.stroke();
+    }
+  }
+
+  // Draw evidence items as pinned cards
+  for (let i = 0; i < eb.items.length; i++) {
+    let item = eb.items[i];
+    let ix = px + item.x, iy = py + 35 + item.y;
+    let selected = eb.selectedItem === i;
+
+    // Card
+    ctx.fillStyle = selected ? '#fff8dc' : '#f5e6c8';
+    ctx.fillRect(ix, iy, 100, 30);
+    if (selected) {
+      ctx.strokeStyle = eb.connectMode ? '#ff4444' : '#4488ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ix, iy, 100, 30);
+    }
+
+    // Pin
+    ctx.fillStyle = '#cc2222';
+    ctx.beginPath();
+    ctx.arc(ix + 50, iy, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Text
+    ctx.fillStyle = '#222';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    let label = item.text.length > 16 ? item.text.substring(0, 14) + '..' : item.text;
+    ctx.fillText(label, ix + 50, iy + 14);
+    ctx.fillStyle = '#666';
+    ctx.fillText('Day ' + item.day, ix + 50, iy + 24);
+  }
+
+  // Instructions
+  ctx.fillStyle = '#ddd';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  let modeText = eb.connectMode ? 'CONNECT MODE: Select target + [C]' : '[A/D] Navigate  [C] Connect  [Esc] Close';
+  ctx.fillText(modeText, px + panelW / 2, py + panelH - 10);
+}
+
+// ─────────────────────────────────────────────
+// §V2-7  FEATURE 154: COURT TRIALS
+// ─────────────────────────────────────────────
+function _startTrial(defendant) {
+  if (!office._trial) return;
+  let trial = office._trial;
+  trial.active = true;
+  trial.defendant = defendant;
+  trial.phase = 0;
+  trial.verdict = null;
+  trial.selectedEvidence = [];
+  trial.evidenceCursor = 0;
+  trial.selectedWitness = 0;
+  trial.verdictTimer = 0;
+
+  // Gather available evidence
+  trial.evidence = [];
+  if (office._evidenceBoard && office._evidenceBoard.items.length > 0) {
+    trial.evidence = office._evidenceBoard.items.slice(0, 8);
+  }
+  // Add generic evidence if not enough
+  while (trial.evidence.length < 3) {
+    trial.evidence.push({ text: 'Circumstantial evidence #' + (trial.evidence.length + 1), source: 'generic' });
+  }
+
+  // Gather witnesses
+  trial.witnesses = [];
+  if (game.npcs) {
+    let candidates = game.npcs.filter(function(n) {
+      return !n.dead && !n.hostile && n.name;
+    });
+    for (let i = 0; i < Math.min(3, candidates.length); i++) {
+      trial.witnesses.push({
+        name: candidates[i].name,
+        reliable: Math.random() > 0.3,
+        testified: false
+      });
+    }
+  }
+  while (trial.witnesses.length < 2) {
+    trial.witnesses.push({ name: 'Anonymous Witness', reliable: Math.random() > 0.5, testified: false });
+  }
+
+  showNotification('Court trial begins for ' + (defendant.name || 'the defendant') + '!');
+  addJournalEntry('Trial proceedings begin for ' + (defendant.name || 'the defendant') + '.');
+}
+
+function _updateTrial(dt) {
+  let trial = office._trial;
+  if (!trial || !trial.active) return;
+
+  if (trial.verdict !== null) {
+    trial.verdictTimer -= dt;
+    if (trial.verdictTimer <= 0) {
+      trial.active = false;
+      trial.trialCount++;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape') && trial.phase < 2) {
+    trial.active = false;
+    showNotification('Trial dismissed.');
+    return;
+  }
+
+  if (trial.phase === 0) {
+    // Evidence selection phase
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      trial.evidenceCursor = Math.max(0, trial.evidenceCursor - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      trial.evidenceCursor = Math.min(trial.evidence.length - 1, trial.evidenceCursor + 1);
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      let idx = trial.evidenceCursor;
+      let selIdx = trial.selectedEvidence.indexOf(idx);
+      if (selIdx >= 0) {
+        trial.selectedEvidence.splice(selIdx, 1);
+      } else if (trial.selectedEvidence.length < 3) {
+        trial.selectedEvidence.push(idx);
+      }
+    }
+    if (consumeKey('Space')) {
+      if (trial.selectedEvidence.length > 0) {
+        trial.phase = 1;
+        trial.selectedWitness = 0;
+      } else {
+        showNotification('Select at least one piece of evidence!');
+      }
+    }
+  } else if (trial.phase === 1) {
+    // Witness phase
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      trial.selectedWitness = Math.max(0, trial.selectedWitness - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      trial.selectedWitness = Math.min(trial.witnesses.length - 1, trial.selectedWitness + 1);
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      trial.witnesses[trial.selectedWitness].testified = true;
+      showNotification(trial.witnesses[trial.selectedWitness].name + ' gives testimony.');
+    }
+    if (consumeKey('Space')) {
+      // Calculate verdict
+      let evidenceScore = trial.selectedEvidence.length * 20;
+      let witnessScore = 0;
+      trial.witnesses.forEach(function(w) {
+        if (w.testified) witnessScore += w.reliable ? 20 : 5;
+      });
+      let repBonus = ((game.reputation || 50) - 50) * 0.5;
+      let legalBonus = (office._lawLib && office._lawLib.legalExpertBonus) ? 25 : 0;
+      let totalScore = evidenceScore + witnessScore + repBonus + legalBonus;
+
+      if (totalScore >= 50) {
+        trial.verdict = 'guilty';
+        let goldReward = rand(50, 150);
+        let repReward = rand(5, 15);
+        game.gold = (game.gold || 0) + goldReward;
+        game.totalGoldEarned = (game.totalGoldEarned || 0) + goldReward;
+        game.reputation = clamp((game.reputation || 50) + repReward, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        showNotification('GUILTY! +$' + goldReward + ', +' + repReward + ' Rep');
+        addJournalEntry('Trial verdict: GUILTY. Earned $' + goldReward + '.');
+        addXP(40);
+      } else {
+        trial.verdict = 'not_guilty';
+        let repLoss = rand(3, 10);
+        game.reputation = clamp((game.reputation || 50) - repLoss, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        showNotification('NOT GUILTY! The defendant goes free. -' + repLoss + ' Rep');
+        addJournalEntry('Trial verdict: NOT GUILTY. Lost ' + repLoss + ' reputation.');
+      }
+      trial.phase = 2;
+      trial.verdictTimer = 4;
+    }
+  }
+}
+
+function _renderTrial() {
+  let trial = office._trial;
+  if (!trial || !trial.active) return;
+
+  let W = gameCanvas.width, H = gameCanvas.height;
+  let panelW = 500, panelH = 360;
+  let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Courthouse panel
+  ctx.fillStyle = '#1a1410';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#8b6340';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  // Gavel icon
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(px + panelW / 2 - 20, py + 8, 40, 8);
+  ctx.fillRect(px + panelW / 2 - 3, py + 8, 6, 16);
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('COURT TRIAL', px + panelW / 2, py + 40);
+
+  let defName = trial.defendant ? (trial.defendant.name || 'Defendant') : 'Defendant';
+  ctx.fillStyle = '#ccc';
+  ctx.font = '11px monospace';
+  ctx.fillText('The Town vs. ' + defName, px + panelW / 2, py + 58);
+
+  if (trial.phase === 2 && trial.verdict) {
+    // Verdict display
+    let isGuilty = trial.verdict === 'guilty';
+    ctx.fillStyle = isGuilty ? '#44ff44' : '#ff4444';
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText(isGuilty ? 'G U I L T Y' : 'N O T   G U I L T Y', px + panelW / 2, py + 180);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '11px monospace';
+    ctx.fillText(isGuilty ? 'Justice has been served!' : 'The defendant walks free...', px + panelW / 2, py + 210);
+    return;
+  }
+
+  if (trial.phase === 0) {
+    // Evidence selection
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('PHASE 1: Select Evidence (' + trial.selectedEvidence.length + '/3)', px + 15, py + 80);
+
+    for (let i = 0; i < trial.evidence.length; i++) {
+      let ey = py + 100 + i * 28;
+      let selected = trial.evidenceCursor === i;
+      let picked = trial.selectedEvidence.indexOf(i) >= 0;
+
+      ctx.fillStyle = selected ? 'rgba(255,255,255,0.1)' : 'transparent';
+      ctx.fillRect(px + 15, ey - 5, panelW - 30, 24);
+
+      ctx.fillStyle = picked ? '#44ff44' : (selected ? '#fff' : '#888');
+      ctx.font = '11px monospace';
+      ctx.fillText((picked ? '[X] ' : '[ ] ') + trial.evidence[i].text, px + 25, ey + 10);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Navigate  [Enter] Toggle  [Space] Present to Court  [Esc] Dismiss', px + panelW / 2, py + panelH - 12);
+
+  } else if (trial.phase === 1) {
+    // Witness phase
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('PHASE 2: Call Witnesses', px + 15, py + 80);
+
+    for (let i = 0; i < trial.witnesses.length; i++) {
+      let wy = py + 100 + i * 35;
+      let selected = trial.selectedWitness === i;
+      let w = trial.witnesses[i];
+
+      ctx.fillStyle = selected ? 'rgba(255,255,255,0.1)' : 'transparent';
+      ctx.fillRect(px + 15, wy - 5, panelW - 30, 30);
+
+      ctx.fillStyle = selected ? '#fff' : '#888';
+      ctx.font = '12px monospace';
+      ctx.fillText((selected ? '> ' : '  ') + w.name, px + 25, wy + 10);
+      ctx.fillStyle = w.testified ? '#44ff44' : '#666';
+      ctx.font = '10px monospace';
+      ctx.fillText(w.testified ? 'Testified' : 'Waiting', px + 300, wy + 10);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Select  [Enter] Call Witness  [Space] Go to Verdict', px + panelW / 2, py + panelH - 12);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-8  FEATURE 155: JAILBREAK PREVENTION
+// ─────────────────────────────────────────────
+function _updateJailSecurity(dt) {
+  let js = office._jailSecurity;
+  if (!js) return;
+
+  // Upgrade menu
+  if (js.upgradeMenu) {
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      js.selectedUpgrade = Math.max(0, js.selectedUpgrade - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      js.selectedUpgrade = Math.min(2, js.selectedUpgrade + 1);
+    }
+    if (consumeKey('Escape')) {
+      js.upgradeMenu = false;
+      return;
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      let costs = [50, 100, 150];
+      let labels = ['locks', 'guards', 'monitors'];
+      let keys = ['lockLevel', 'guardLevel', 'monitorLevel'];
+      let sel = js.selectedUpgrade;
+      let cost = costs[sel];
+      if (js[keys[sel]] >= 3) {
+        showNotification(labels[sel] + ' already maxed out!');
+      } else if ((game.gold || 0) < cost) {
+        showNotification('Need $' + cost + ' to upgrade ' + labels[sel] + '.');
+      } else {
+        game.gold -= cost;
+        js[keys[sel]]++;
+        js.breakChance = Math.max(0, 30 - (js.lockLevel + js.guardLevel + js.monitorLevel) * 8);
+        showNotification('Upgraded ' + labels[sel] + '! Break chance: ' + js.breakChance + '%');
+        addJournalEntry('Jail ' + labels[sel] + ' upgraded to level ' + js[keys[sel]] + '.');
+        if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+      }
+    }
+    return;
+  }
+
+  // Open upgrade menu at jail
+  if (office.active && office.nearFurniture === 'jailCells' && consumeKey('KeyU')) {
+    js.upgradeMenu = true;
+    js.selectedUpgrade = 0;
+    return;
+  }
+
+  // Jailbreak event check (once per day)
+  let dayNow = game.dayCount || 1;
+  if (dayNow !== js.lastBreakDay && office.prisoners.length > 0 && !js.breakActive) {
+    js.lastBreakDay = dayNow;
+    if (Math.random() * 100 < js.breakChance) {
+      // Jailbreak!
+      js.breakActive = true;
+      js.escapees = [];
+      let escapeCount = Math.min(office.prisoners.length, rand(1, 3));
+      for (let i = 0; i < escapeCount; i++) {
+        let p = office.prisoners[i];
+        js.escapees.push({
+          name: p.name || 'Prisoner',
+          x: game.player.x + rand(-200, 200),
+          y: game.player.y + rand(-200, 200),
+          caught: false,
+          timer: 30 // 30 seconds to catch
+        });
+      }
+      showNotification('JAILBREAK! ' + escapeCount + ' prisoner(s) escaping! Catch them!', 'bad');
+      addJournalEntry('Jailbreak in progress! ' + escapeCount + ' prisoners escaping.');
+      if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+      if (typeof triggerShake === 'function') triggerShake(5, 20);
+    }
+  }
+
+  // Track escapees
+  if (js.breakActive && js.escapees.length > 0) {
+    let allDone = true;
+    let px = game.player.x, py = game.player.y;
+    for (let i = 0; i < js.escapees.length; i++) {
+      let esc = js.escapees[i];
+      if (esc.caught) continue;
+      esc.timer -= dt;
+      // Move away from player
+      let angle = Math.atan2(esc.y - py, esc.x - px);
+      esc.x += Math.cos(angle) * 60 * dt;
+      esc.y += Math.sin(angle) * 60 * dt;
+      esc.x = clamp(esc.x, TILE * 2, (MAP_W - 2) * TILE);
+      esc.y = clamp(esc.y, TILE * 2, (MAP_H - 2) * TILE);
+
+      // Check catch
+      let d = Math.sqrt((px - esc.x) * (px - esc.x) + (py - esc.y) * (py - esc.y));
+      if (d < 30) {
+        esc.caught = true;
+        showNotification('Caught ' + esc.name + '!');
+        addXP(20);
+        game.gold = (game.gold || 0) + 15;
+      } else if (esc.timer <= 0) {
+        esc.caught = true; // escaped for good
+        showNotification(esc.name + ' escaped!', 'bad');
+        game.reputation = clamp((game.reputation || 50) - 3, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        // Remove from prisoners
+        for (let j = office.prisoners.length - 1; j >= 0; j--) {
+          if (office.prisoners[j].name === esc.name) {
+            office.prisoners.splice(j, 1);
+            break;
+          }
+        }
+      } else {
+        allDone = false;
+      }
+    }
+    if (allDone) {
+      js.breakActive = false;
+      js.escapees = [];
+      showNotification('Jailbreak situation resolved.');
+    }
+  }
+}
+
+function _renderJailSecurity() {
+  let js = office._jailSecurity;
+  if (!js) return;
+
+  // Upgrade menu
+  if (js.upgradeMenu) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let panelW = 380, panelH = 250;
+    let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1208';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('JAIL SECURITY UPGRADES', px + panelW / 2, py + 22);
+    ctx.fillStyle = '#ff8844';
+    ctx.font = '10px monospace';
+    ctx.fillText('Break chance: ' + js.breakChance + '%', px + panelW / 2, py + 38);
+
+    let upgrades = [
+      { name: 'Better Locks', cost: 50, level: js.lockLevel, desc: 'Reinforced cell locks' },
+      { name: 'Guard Schedule', cost: 100, level: js.guardLevel, desc: 'Regular patrols' },
+      { name: 'Monitoring', cost: 150, level: js.monitorLevel, desc: 'Watchtower coverage' }
+    ];
+
+    ctx.textAlign = 'left';
+    for (let i = 0; i < upgrades.length; i++) {
+      let uy = py + 60 + i * 55;
+      let u = upgrades[i];
+      let sel = js.selectedUpgrade === i;
+      ctx.fillStyle = sel ? 'rgba(255,255,255,0.08)' : 'transparent';
+      ctx.fillRect(px + 10, uy - 3, panelW - 20, 48);
+      if (sel) { ctx.strokeStyle = '#ffd700'; ctx.strokeRect(px + 10, uy - 3, panelW - 20, 48); }
+
+      ctx.fillStyle = sel ? '#fff' : '#aaa';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText((sel ? '> ' : '  ') + u.name + ' (Lv ' + u.level + '/3)', px + 20, uy + 14);
+      ctx.fillStyle = '#888';
+      ctx.font = '10px monospace';
+      ctx.fillText(u.desc + '  |  $' + u.cost + '  |  -8% break chance', px + 30, uy + 30);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Select  [Enter] Buy  [Esc] Close', px + panelW / 2, py + panelH - 12);
+  }
+
+  // Render escapees in world
+  if (js.breakActive && js.escapees.length > 0 && !office.active && game.state === 'playing') {
+    let camX = game.camera ? game.camera.x : 0;
+    let camY = game.camera ? game.camera.y : 0;
+    for (let i = 0; i < js.escapees.length; i++) {
+      let esc = js.escapees[i];
+      if (esc.caught) continue;
+      let sx = esc.x - camX, sy = esc.y - camY;
+
+      // Prisoner sprite (striped)
+      ctx.fillStyle = '#888';
+      ctx.fillRect(sx - 6, sy - 8, 12, 16);
+      for (let s = 0; s < 4; s++) {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(sx - 6, sy - 8 + s * 4, 12, 2);
+      }
+      // Timer
+      ctx.fillStyle = esc.timer < 10 ? '#ff4444' : '#ffcc44';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.ceil(esc.timer) + 's', sx, sy - 14);
+      ctx.fillText(esc.name, sx, sy + 16);
+    }
+
+    // HUD alert
+    let W = gameCanvas.width;
+    ctx.fillStyle = 'rgba(255,0,0,0.15)';
+    ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    let uncaught = js.escapees.filter(function(e) { return !e.caught; }).length;
+    ctx.fillText('JAILBREAK! ' + uncaught + ' escapee(s) on the loose!', W / 2, 20);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-9  FEATURE 164: COLD CASE FILES
+// ─────────────────────────────────────────────
+function _updateColdCases(dt) {
+  let cc = office._coldCases;
+  if (!cc) return;
+
+  if (!cc.viewingCases) {
+    // Open cold case files at records/bookshelf
+    if (office.active && (office.nearFurniture === 'records' || office.nearFurniture === 'bookshelf') && consumeKey('KeyF')) {
+      cc.viewingCases = true;
+      cc.selectedCase = 0;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape')) {
+    cc.viewingCases = false;
+    cc.activeCase = null;
+    return;
+  }
+
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    cc.selectedCase = Math.max(0, cc.selectedCase - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    cc.selectedCase = Math.min(cc.cases.length - 1, cc.selectedCase + 1);
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    let selectedCase = cc.cases[cc.selectedCase];
+    if (selectedCase && !selectedCase.solved) {
+      cc.activeCase = selectedCase;
+      cc.viewingCases = false;
+      showNotification('Investigating: ' + selectedCase.name);
+      addJournalEntry('Started cold case: ' + selectedCase.name);
+    } else if (selectedCase && selectedCase.solved) {
+      showNotification('This case is already solved!');
+    }
+  }
+
+  // Check clue discovery in world for active case
+  if (cc.activeCase && !office.active && game.state === 'playing') {
+    let ac = cc.activeCase;
+    let px = game.player.x / (MAP_W * TILE);
+    let py = game.player.y / (MAP_H * TILE);
+
+    for (let i = 0; i < ac.clues.length; i++) {
+      let clue = ac.clues[i];
+      if (clue.found) continue;
+
+      if (clue.type === 'location') {
+        let dx = px - clue.locX;
+        let dy = py - clue.locY;
+        if (Math.sqrt(dx * dx + dy * dy) < 0.05) {
+          clue.found = true;
+          if (!cc.cluesFound[ac.id]) cc.cluesFound[ac.id] = 0;
+          cc.cluesFound[ac.id]++;
+          showNotification('Cold case clue found: ' + clue.hint);
+          _addEvidenceItem('Cold case: ' + clue.hint, 'cold_case');
+          addXP(15);
+        }
+      } else if (clue.type === 'npc' && game.npcs) {
+        // Check proximity to matching NPC type
+        for (let j = 0; j < game.npcs.length; j++) {
+          let npc = game.npcs[j];
+          if (npc.dead || npc.hostile) continue;
+          let npcMatch = false;
+          if (clue.npcType === 'bartender' && npc.role === 'bartender') npcMatch = true;
+          if (clue.npcType === 'shopkeeper' && npc.role === 'shopkeeper') npcMatch = true;
+          if (clue.npcType === 'townsperson' && npc.type === (typeof NPC_TYPES !== 'undefined' ? NPC_TYPES.TOWNSPERSON : 0)) npcMatch = true;
+          if (clue.npcType === 'outlaw' && (npc.type === (typeof NPC_TYPES !== 'undefined' ? NPC_TYPES.OUTLAW : 2) || npc.hostile)) npcMatch = true;
+
+          if (npcMatch) {
+            let d = Math.sqrt((game.player.x - npc.x) * (game.player.x - npc.x) + (game.player.y - npc.y) * (game.player.y - npc.y));
+            if (d < 50 && consumeKey('KeyT')) {
+              clue.found = true;
+              if (!cc.cluesFound[ac.id]) cc.cluesFound[ac.id] = 0;
+              cc.cluesFound[ac.id]++;
+              showNotification('Cold case clue from ' + (npc.name || 'NPC') + ': ' + clue.hint);
+              _addEvidenceItem('Cold case: ' + clue.hint, 'cold_case');
+              addXP(15);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Check if all clues found
+    let allFound = ac.clues.every(function(c) { return c.found; });
+    if (allFound && !ac.solved) {
+      ac.solved = true;
+      cc.activeCase = null;
+      game.gold = (game.gold || 0) + ac.reward;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + ac.reward;
+      addXP(ac.xpReward);
+      showNotification('COLD CASE SOLVED: ' + ac.name + '! +$' + ac.reward + ' +' + ac.xpReward + 'XP', 'good');
+      addJournalEntry('Solved cold case: ' + ac.name + '. Reward: $' + ac.reward + '.');
+      if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+    }
+  }
+}
+
+function _renderColdCases() {
+  let cc = office._coldCases;
+  if (!cc) return;
+
+  if (cc.viewingCases) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let panelW = 460, panelH = 340;
+    let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#12100a';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = '#6a5a3a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('COLD CASE FILES', px + panelW / 2, py + 22);
+
+    ctx.textAlign = 'left';
+    for (let i = 0; i < cc.cases.length; i++) {
+      let c = cc.cases[i];
+      let cy = py + 45 + i * 56;
+      let sel = cc.selectedCase === i;
+
+      ctx.fillStyle = sel ? 'rgba(255,255,255,0.06)' : 'transparent';
+      ctx.fillRect(px + 10, cy - 3, panelW - 20, 50);
+      if (sel) { ctx.strokeStyle = '#ffd700'; ctx.strokeRect(px + 10, cy - 3, panelW - 20, 50); }
+
+      ctx.fillStyle = c.solved ? '#44ff44' : (sel ? '#fff' : '#aaa');
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText((sel ? '> ' : '  ') + c.name + (c.solved ? ' [SOLVED]' : ''), px + 18, cy + 14);
+
+      ctx.fillStyle = '#888';
+      ctx.font = '9px monospace';
+      let desc = c.desc.length > 60 ? c.desc.substring(0, 58) + '..' : c.desc;
+      ctx.fillText('  ' + desc, px + 18, cy + 28);
+
+      let found = cc.cluesFound[c.id] || 0;
+      ctx.fillStyle = '#666';
+      ctx.fillText('  Clues: ' + found + '/' + c.clues.length + '  |  Reward: $' + c.reward, px + 18, cy + 40);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Select  [Enter] Investigate  [Esc] Close', px + panelW / 2, py + panelH - 10);
+  }
+
+  // Active case HUD indicator
+  if (cc.activeCase && !office.active && game.state === 'playing') {
+    let W = gameCanvas.width;
+    ctx.fillStyle = 'rgba(40,30,10,0.8)';
+    ctx.fillRect(W - 220, 60, 210, 40);
+    ctx.strokeStyle = '#8b6340';
+    ctx.strokeRect(W - 220, 60, 210, 40);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('COLD CASE: ' + cc.activeCase.name, W - 215, 76);
+    let found = cc.cluesFound[cc.activeCase.id] || 0;
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Clues: ' + found + '/' + cc.activeCase.clues.length, W - 215, 92);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-10  FEATURE 166: PAROLE SYSTEM
+// ─────────────────────────────────────────────
+function _updateParole(dt) {
+  let par = office._parole;
+  if (!par) return;
+
+  // Re-offend check timer
+  par.reoffendCheckTimer += dt;
+  if (par.reoffendCheckTimer >= 30) {
+    par.reoffendCheckTimer = 0;
+    for (let i = par.paroled.length - 1; i >= 0; i--) {
+      let p = par.paroled[i];
+      if (p.reformed || p.reoffended) continue;
+      if (Math.random() < 0.5) {
+        // Reformed
+        p.reformed = true;
+        par.reformedCount++;
+        showNotification(p.name + ' has reformed! They\'re a productive citizen now.', 'good');
+        addJournalEntry(p.name + ' reformed after parole.');
+        addXP(15);
+      } else {
+        // Re-offend
+        p.reoffended = true;
+        par.reoffendCount++;
+        showNotification(p.name + ' re-offended! Must arrest again.', 'bad');
+        addJournalEntry(p.name + ' committed another crime after parole.');
+        game.reputation = clamp((game.reputation || 50) - 5, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        // Spawn hostile NPC
+        if (game.npcs && typeof createNPC === 'function') {
+          let npc = createNPC(game.player.x + rand(-150, 150), game.player.y + rand(-150, 150));
+          if (npc) {
+            npc.name = p.name;
+            npc.hostile = true;
+            npc._parolee = true;
+            game.npcs.push(npc);
+          }
+        }
+      }
+    }
+  }
+
+  if (!par.viewingParole) {
+    // Open parole menu at jail
+    if (office.active && office.nearFurniture === 'jailCells' && office.prisoners.length > 0 && consumeKey('KeyP')) {
+      par.viewingParole = true;
+      par.selectedPrisoner = 0;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape')) {
+    par.viewingParole = false;
+    return;
+  }
+
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    par.selectedPrisoner = Math.max(0, par.selectedPrisoner - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    par.selectedPrisoner = Math.min(office.prisoners.length - 1, par.selectedPrisoner + 1);
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    if (par.selectedPrisoner < office.prisoners.length) {
+      let prisoner = office.prisoners[par.selectedPrisoner];
+      par.paroled.push({
+        name: prisoner.name || 'Ex-Prisoner',
+        day: game.dayCount || 1,
+        reformed: false,
+        reoffended: false
+      });
+      office.prisoners.splice(par.selectedPrisoner, 1);
+      par.selectedPrisoner = Math.min(par.selectedPrisoner, office.prisoners.length - 1);
+      showNotification('Prisoner released on parole. 50/50 chance of reform.');
+      addJournalEntry('Released ' + (prisoner.name || 'prisoner') + ' on parole.');
+
+      if (office.prisoners.length === 0) {
+        par.viewingParole = false;
+      }
+    }
+  }
+}
+
+function _renderParole() {
+  let par = office._parole;
+  if (!par || !par.viewingParole) return;
+
+  let W = gameCanvas.width, H = gameCanvas.height;
+  let panelW = 380, panelH = 280;
+  let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#121212';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('PAROLE SYSTEM', px + panelW / 2, py + 22);
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.fillText('Reformed: ' + par.reformedCount + '  |  Re-offended: ' + par.reoffendCount, px + panelW / 2, py + 38);
+
+  if (office.prisoners.length === 0) {
+    ctx.fillStyle = '#aaa';
+    ctx.font = '11px monospace';
+    ctx.fillText('No prisoners to parole.', px + panelW / 2, py + panelH / 2);
+    return;
+  }
+
+  ctx.textAlign = 'left';
+  for (let i = 0; i < office.prisoners.length; i++) {
+    let p = office.prisoners[i];
+    let iy = py + 55 + i * 32;
+    let sel = par.selectedPrisoner === i;
+    ctx.fillStyle = sel ? 'rgba(255,255,255,0.08)' : 'transparent';
+    ctx.fillRect(px + 10, iy - 5, panelW - 20, 28);
+    if (sel) { ctx.strokeStyle = '#ffd700'; ctx.strokeRect(px + 10, iy - 5, panelW - 20, 28); }
+    ctx.fillStyle = sel ? '#fff' : '#aaa';
+    ctx.font = '11px monospace';
+    ctx.fillText((sel ? '> ' : '  ') + (p.name || 'Prisoner'), px + 18, iy + 12);
+    ctx.fillStyle = '#888';
+    ctx.font = '9px monospace';
+    ctx.fillText(p.crime || 'General offense', px + 200, iy + 12);
+  }
+
+  ctx.fillStyle = '#666';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  [Enter] Release  [Esc] Close', px + panelW / 2, py + panelH - 10);
+}
+
+// ─────────────────────────────────────────────
+// §V2-11  FEATURE 167: CRIME PREDICTION
+// ─────────────────────────────────────────────
+function _updatePrediction(dt) {
+  let pred = office._prediction;
+  if (!pred) return;
+
+  // Head start countdown
+  if (pred.headStartActive) {
+    pred.headStartTimer -= dt;
+    if (pred.headStartTimer <= 0) {
+      pred.headStartActive = false;
+      pred.predicted = null;
+      showNotification('Prediction head start expired.');
+    }
+  }
+
+  if (pred.analyzing) {
+    pred.timer -= dt;
+    if (pred.timer <= 0) {
+      pred.analyzing = false;
+      // Generate prediction
+      let locations = ['Bank', 'Saloon', 'General Store', 'Church', 'Stable', 'Town Square'];
+      let crimes = ['robbery', 'assault', 'theft', 'vandalism', 'kidnapping'];
+      let accuracy = 50 + (pred.correctPredictions * 5);
+      accuracy = Math.min(90, accuracy);
+
+      pred.predicted = {
+        location: locations[rand(0, locations.length - 1)],
+        crime: crimes[rand(0, crimes.length - 1)],
+        accuracy: accuracy
+      };
+      pred.headStartActive = true;
+      pred.headStartTimer = 30;
+      pred.accuracy = accuracy;
+      pred.correctPredictions++;
+
+      showNotification('PREDICTION: ' + pred.predicted.crime + ' at ' + pred.predicted.location + '! 30s head start!', 'info');
+      addJournalEntry('Crime predicted: ' + pred.predicted.crime + ' at ' + pred.predicted.location + ' (' + accuracy + '% confidence).');
+      pred.history.push({ location: pred.predicted.location, crime: pred.predicted.crime, day: game.dayCount || 1 });
+    }
+    return;
+  }
+
+  // Start analysis at desk
+  if (office.active && office.sittingAtDesk && consumeKey('KeyR')) {
+    if (pred.headStartActive) {
+      showNotification('Already have an active prediction!');
+      return;
+    }
+    pred.analyzing = true;
+    pred.timer = 5;
+    showNotification('Analyzing crime patterns...');
+  }
+}
+
+function _renderPrediction() {
+  let pred = office._prediction;
+  if (!pred) return;
+
+  // Analysis progress
+  if (pred.analyzing && office.active) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let barW = 250, barX = (W - barW) / 2, barY = H - 100;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(barX - 10, barY - 25, barW + 20, 50);
+    ctx.strokeStyle = '#4488ff';
+    ctx.strokeRect(barX - 10, barY - 25, barW + 20, 50);
+
+    ctx.fillStyle = '#4488ff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Analyzing Crime Patterns...', W / 2, barY - 8);
+
+    let progress = 1 - (pred.timer / 5);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX, barY + 5, barW, 10);
+    ctx.fillStyle = '#4488ff';
+    ctx.fillRect(barX, barY + 5, barW * progress, 10);
+  }
+
+  // Head start HUD
+  if (pred.headStartActive && pred.predicted && !office.active && game.state === 'playing') {
+    let W = gameCanvas.width;
+    ctx.fillStyle = 'rgba(0,40,80,0.85)';
+    ctx.fillRect(W - 250, 105, 240, 50);
+    ctx.strokeStyle = '#4488ff';
+    ctx.strokeRect(W - 250, 105, 240, 50);
+    ctx.fillStyle = '#4488ff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('PREDICTED: ' + pred.predicted.crime, W - 245, 120);
+    ctx.fillText('Location: ' + pred.predicted.location, W - 245, 133);
+    ctx.fillStyle = '#ffcc44';
+    ctx.fillText('Head start: ' + Math.ceil(pred.headStartTimer) + 's', W - 245, 148);
+  }
+
+  // Crime history graph at desk
+  if (pred.history.length > 0 && office.active && office.sittingAtDesk && !pred.analyzing) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let gx = W * 0.6, gy = H * 0.7, gw = 160, gh = 60;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(gx - 5, gy - 15, gw + 10, gh + 25);
+    ctx.strokeStyle = '#444';
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    ctx.fillStyle = '#4488ff';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Crime History', gx + gw / 2, gy - 4);
+
+    // Draw bars
+    let maxBars = Math.min(pred.history.length, 8);
+    let barW = (gw - 10) / maxBars;
+    for (let i = 0; i < maxBars; i++) {
+      let h = rand(10, gh - 5);
+      ctx.fillStyle = '#4488ff';
+      ctx.fillRect(gx + 5 + i * barW, gy + gh - h, barW - 2, h);
+    }
+
+    ctx.fillStyle = '#888';
+    ctx.font = '7px monospace';
+    ctx.fillText('[R] New Analysis', gx + gw / 2, gy + gh + 10);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-12  FEATURE 170: POLICE REPORT WRITING
+// ─────────────────────────────────────────────
+function _updateReports(dt) {
+  let rep = office._reports;
+  if (!rep) return;
+
+  if (rep.writing) {
+    rep.timer -= dt;
+    if (rep.timer <= 0) {
+      rep.writing = false;
+      rep.reportsWritten++;
+      game.gold = (game.gold || 0) + rep.reward;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + rep.reward;
+      showNotification('Report complete! +$' + rep.reward);
+      addJournalEntry('Filed a ' + rep.quality + ' police report. Earned $' + rep.reward + '.');
+      addXP(rep.quality === 'thorough' ? 15 : (rep.quality === 'decent' ? 10 : 5));
+      if (rep.pendingReports > 0) rep.pendingReports--;
+    }
+    return;
+  }
+
+  // Open report menu at desk
+  if (office.active && office.sittingAtDesk && consumeKey('KeyO')) {
+    if (rep.pendingReports <= 0) {
+      showNotification('No reports to write right now.');
+      return;
+    }
+    rep.selectedQuality = 0;
+    // Show quality selection - handled in render
+    rep._selectingQuality = true;
+  }
+
+  if (rep._selectingQuality) {
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      rep.selectedQuality = Math.max(0, rep.selectedQuality - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      rep.selectedQuality = Math.min(2, rep.selectedQuality + 1);
+    }
+    if (consumeKey('Escape')) {
+      rep._selectingQuality = false;
+      return;
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      let qualities = [
+        { name: 'sloppy', time: 5, reward: 10 },
+        { name: 'decent', time: 10, reward: 25 },
+        { name: 'thorough', time: 15, reward: 50 }
+      ];
+      let q = qualities[rep.selectedQuality];
+      rep.quality = q.name;
+      rep.timer = q.time;
+      rep.maxTimer = q.time;
+      rep.reward = q.reward;
+      rep.writing = true;
+      rep._selectingQuality = false;
+      showNotification('Writing ' + q.name + ' report... ' + q.time + 's');
+    }
+  }
+}
+
+// Track crimes for pending reports
+function _onCrimeOccurred() {
+  if (office._reports) {
+    office._reports.pendingReports++;
+  }
+}
+
+function _renderReports() {
+  let rep = office._reports;
+  if (!rep) return;
+
+  if (rep._selectingQuality && office.active) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let panelW = 350, panelH = 220;
+    let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1a10';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = '#8b8b40';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('POLICE REPORT', px + panelW / 2, py + 22);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '10px monospace';
+    ctx.fillText('Pending reports: ' + rep.pendingReports + '  |  Written: ' + rep.reportsWritten, px + panelW / 2, py + 40);
+
+    let options = [
+      { label: 'Sloppy', desc: '5 seconds, $10 reward', color: '#ff6644' },
+      { label: 'Decent', desc: '10 seconds, $25 reward', color: '#ffcc44' },
+      { label: 'Thorough', desc: '15 seconds, $50 reward', color: '#44ff44' }
+    ];
+
+    ctx.textAlign = 'left';
+    for (let i = 0; i < options.length; i++) {
+      let oy = py + 60 + i * 45;
+      let sel = rep.selectedQuality === i;
+      ctx.fillStyle = sel ? 'rgba(255,255,255,0.08)' : 'transparent';
+      ctx.fillRect(px + 10, oy - 3, panelW - 20, 38);
+      if (sel) { ctx.strokeStyle = options[i].color; ctx.strokeRect(px + 10, oy - 3, panelW - 20, 38); }
+      ctx.fillStyle = sel ? options[i].color : '#888';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText((sel ? '> ' : '  ') + options[i].label, px + 20, oy + 13);
+      ctx.fillStyle = '#666';
+      ctx.font = '10px monospace';
+      ctx.fillText(options[i].desc, px + 30, oy + 27);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Select  [Enter] Start  [Esc] Cancel', px + panelW / 2, py + panelH - 10);
+  }
+
+  // Writing progress bar
+  if (rep.writing && office.active) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let barW = 280, barX = (W - barW) / 2, barY = H - 80;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(barX - 10, barY - 25, barW + 20, 50);
+    ctx.strokeStyle = '#8b8b40';
+    ctx.strokeRect(barX - 10, barY - 25, barW + 20, 50);
+
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Writing ' + rep.quality + ' report... ' + Math.ceil(rep.timer) + 's', W / 2, barY - 8);
+
+    let progress = 1 - (rep.timer / rep.maxTimer);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(barX, barY + 5, barW, 12);
+    ctx.fillStyle = rep.quality === 'thorough' ? '#44ff44' : (rep.quality === 'decent' ? '#ffcc44' : '#ff6644');
+    ctx.fillRect(barX, barY + 5, barW * progress, 12);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-13  FEATURE 173: PRISON LABOR
+// ─────────────────────────────────────────────
+function _updatePrisonLabor(dt) {
+  let pl = office._prisonLabor;
+  if (!pl) return;
+
+  // Toggle at jail
+  if (office.active && office.nearFurniture === 'jailCells' && consumeKey('KeyL')) {
+    if (office.prisoners.length === 0) {
+      showNotification('No prisoners for labor.');
+      return;
+    }
+    pl.active = !pl.active;
+    if (pl.active) {
+      pl.laborers = office.prisoners.length;
+      pl.cooperationPenalty = pl.laborers * 10; // -10% interrogation per laborer
+      showNotification('Prison labor activated! ' + pl.laborers + ' working. $' + (pl.laborers * 5) + '/day income.');
+      addJournalEntry('Put ' + pl.laborers + ' prisoners to work.');
+    } else {
+      pl.cooperationPenalty = 0;
+      showNotification('Prison labor deactivated.');
+    }
+  }
+
+  // Income accumulation
+  if (pl.active && office.prisoners.length > 0) {
+    pl.laborers = office.prisoners.length;
+    pl.dayAccum += dt;
+    if (pl.dayAccum >= 60) { // one game-day
+      pl.dayAccum = 0;
+      let income = pl.laborers * 5;
+      game.gold = (game.gold || 0) + income;
+      game.totalGoldEarned = (game.totalGoldEarned || 0) + income;
+      pl.totalEarned += income;
+    }
+  } else if (pl.active && office.prisoners.length === 0) {
+    pl.active = false;
+    pl.laborers = 0;
+    pl.cooperationPenalty = 0;
+  }
+}
+
+function _renderPrisonLabor() {
+  let pl = office._prisonLabor;
+  if (!pl || !pl.active || !office.active) return;
+
+  // Small indicator in office
+  let W = gameCanvas.width;
+  ctx.fillStyle = 'rgba(80,60,20,0.8)';
+  ctx.fillRect(10, 100, 180, 30);
+  ctx.strokeStyle = '#8b6340';
+  ctx.strokeRect(10, 100, 180, 30);
+  ctx.fillStyle = '#ffcc44';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('Prison Labor: ' + pl.laborers + ' working', 16, 114);
+  ctx.fillText('Total earned: $' + pl.totalEarned, 16, 126);
+}
+
+// ─────────────────────────────────────────────
+// §V2-14  FEATURE 175: LAW LIBRARY
+// ─────────────────────────────────────────────
+function _updateLawLibrary(dt) {
+  let lib = office._lawLib;
+  if (!lib) return;
+
+  // Reading a book
+  if (lib.readingBook) {
+    lib.readingTimer -= dt;
+    if (lib.readingTimer <= 0) {
+      lib.booksRead.push(lib.readingBook.id);
+      showNotification('Finished reading: ' + lib.readingBook.name + '! ' + lib.readingBook.bonus);
+      addJournalEntry('Read "' + lib.readingBook.name + '". ' + lib.readingBook.bonus);
+      addXP(20);
+
+      // Check for Legal Expert
+      if (lib.booksRead.length >= 5 && !lib.legalExpertBonus) {
+        lib.legalExpertBonus = true;
+        showNotification('LEGAL EXPERT achieved! +25% trial success, +$10 per arrest', 'good');
+        addJournalEntry('Earned Legal Expert status after reading all law books.');
+      }
+      lib.readingBook = null;
+    }
+    return;
+  }
+
+  if (!lib.viewing) {
+    if (office.active && office.nearFurniture === 'bookshelf' && consumeKey('KeyB')) {
+      lib.viewing = true;
+      lib.selectedBook = 0;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape')) {
+    lib.viewing = false;
+    return;
+  }
+
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    lib.selectedBook = Math.max(0, lib.selectedBook - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    lib.selectedBook = Math.min(lib.books.length - 1, lib.selectedBook + 1);
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    let book = lib.books[lib.selectedBook];
+    if (lib.booksRead.indexOf(book.id) >= 0) {
+      showNotification('Already read this book!');
+      return;
+    }
+    lib.readingBook = book;
+    lib.readingTimer = 10;
+    lib.viewing = false;
+    showNotification('Reading "' + book.name + '"... 10 seconds.');
+  }
+}
+
+function _renderLawLibrary() {
+  let lib = office._lawLib;
+  if (!lib) return;
+
+  if (lib.viewing) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let panelW = 420, panelH = 310;
+    let px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#0a0a08';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = '#5a4a2a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('LAW LIBRARY', px + panelW / 2, py + 22);
+    ctx.fillStyle = '#888';
+    ctx.font = '10px monospace';
+    ctx.fillText('Books read: ' + lib.booksRead.length + '/' + lib.books.length, px + panelW / 2, py + 38);
+
+    ctx.textAlign = 'left';
+    for (let i = 0; i < lib.books.length; i++) {
+      let b = lib.books[i];
+      let by = py + 55 + i * 48;
+      let sel = lib.selectedBook === i;
+      let read = lib.booksRead.indexOf(b.id) >= 0;
+
+      ctx.fillStyle = sel ? 'rgba(255,255,255,0.06)' : 'transparent';
+      ctx.fillRect(px + 10, by - 3, panelW - 20, 42);
+      if (sel) { ctx.strokeStyle = '#ffd700'; ctx.strokeRect(px + 10, by - 3, panelW - 20, 42); }
+
+      // Book icon
+      ctx.fillStyle = read ? '#44aa44' : '#8b6340';
+      ctx.fillRect(px + 16, by + 2, 12, 16);
+      ctx.fillStyle = read ? '#226622' : '#5a3a1a';
+      ctx.fillRect(px + 16, by + 2, 3, 16);
+
+      ctx.fillStyle = read ? '#44ff44' : (sel ? '#fff' : '#aaa');
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText((read ? '[READ] ' : '') + b.name, px + 35, by + 13);
+      ctx.fillStyle = '#777';
+      ctx.font = '9px monospace';
+      ctx.fillText(b.desc, px + 35, by + 25);
+      ctx.fillStyle = '#aa8844';
+      ctx.fillText('Bonus: ' + b.bonus, px + 35, by + 35);
+    }
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[W/S] Select  [Enter] Read  [Esc] Close', px + panelW / 2, py + panelH - 10);
+  }
+
+  // Reading progress
+  if (lib.readingBook && office.active) {
+    let W = gameCanvas.width, H = gameCanvas.height;
+    let barW = 250, barX = (W - barW) / 2, barY = H - 80;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(barX - 10, barY - 25, barW + 20, 50);
+    ctx.strokeStyle = '#5a4a2a';
+    ctx.strokeRect(barX - 10, barY - 25, barW + 20, 50);
+
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Reading: ' + lib.readingBook.name, W / 2, barY - 8);
+
+    let progress = 1 - (lib.readingTimer / 10);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX, barY + 5, barW, 10);
+    ctx.fillStyle = '#8b6340';
+    ctx.fillRect(barX, barY + 5, barW * progress, 10);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '9px monospace';
+    ctx.fillText(Math.ceil(lib.readingTimer) + 's remaining', W / 2, barY + 25);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-15  MASTER UPDATE / RENDER + PATCHING
+// ─────────────────────────────────────────────
+function _updateOfficeV2(dt) {
+  _initOfficeV2();
+  if (!game.player) return;
+
+  let realDt = dt || (1 / 60);
+
+  _updateInterrogation(realDt);
+  _updateSalary(realDt);
+  _updateCSI(realDt);
+  _updateEvidenceBoard(realDt);
+  _updateTrial(realDt);
+  _updateJailSecurity(realDt);
+  _updateColdCases(realDt);
+  _updateParole(realDt);
+  _updatePrediction(realDt);
+  _updateReports(realDt);
+  _updatePrisonLabor(realDt);
+  _updateLawLibrary(realDt);
+
+  // Increment pending reports on crimes (simple heuristic: check for new arrests)
+  if (office._reports && office.prisoners.length > (office._reports._lastPrisonerCount || 0)) {
+    let diff = office.prisoners.length - (office._reports._lastPrisonerCount || 0);
+    office._reports.pendingReports += diff;
+  }
+  if (office._reports) office._reports._lastPrisonerCount = office.prisoners.length;
+}
+
+function _renderOfficeV2() {
+  if (!office._v2init) return;
+
+  // Render order: world overlays first, then office panels
+  _renderCSI();
+  _renderJailSecurity();
+  _renderColdCases();
+  _renderPrediction();
+
+  // Office-only UI
+  if (office.active) {
+    _renderPrisonLabor();
+    _renderReports();
+    _renderLawLibrary();
+    _renderEvidenceBoard();
+    _renderInterrogation();
+    _renderSalary();
+    _renderTrial();
+    _renderParole();
+  }
+
+  // HUD hints when near furniture
+  if (office.active && !_isV2PanelOpen()) {
+    let hints = [];
+    if (office.nearFurniture === 'jailCells' && office.prisoners.length > 0) {
+      hints.push('[I] Interrogate  [U] Jail Upgrades  [P] Parole  [L] Prison Labor');
+    }
+    if (office.nearFurniture === 'caseBoard') {
+      hints.push('[V] Evidence Board');
+    }
+    if (office.nearFurniture === 'bookshelf') {
+      hints.push('[B] Law Library  [F] Cold Cases');
+    }
+    if (office.nearFurniture === 'records') {
+      hints.push('[F] Cold Cases');
+    }
+    if (office.sittingAtDesk) {
+      hints.push('[N] Negotiate Salary  [R] Crime Prediction  [O] Write Report');
+    }
+
+    if (hints.length > 0) {
+      let W = gameCanvas.width;
+      let hintText = hints.join('  |  ');
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, gameCanvas.height - 28, W, 28);
+      ctx.fillStyle = '#aaa';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(hintText, W / 2, gameCanvas.height - 10);
+    }
+  }
+}
+
+function _isV2PanelOpen() {
+  if (!office._v2init) return false;
+  return (office._interrogation && office._interrogation.active) ||
+         (office._salary && office._salary.negotiating) ||
+         (office._evidenceBoard && office._evidenceBoard.viewing) ||
+         (office._trial && office._trial.active) ||
+         (office._jailSecurity && office._jailSecurity.upgradeMenu) ||
+         (office._coldCases && office._coldCases.viewingCases) ||
+         (office._parole && office._parole.viewingParole) ||
+         (office._reports && (office._reports.writing || office._reports._selectingQuality)) ||
+         (office._lawLib && (office._lawLib.viewing || office._lawLib.readingBook)) ||
+         (office._prediction && office._prediction.analyzing) ||
+         (office._csi && office._csi.investigating);
+}
+
+// ── Patch existing functions ──
+var _origUpdateOffice = updateOffice;
+updateOffice = function(dt) {
+  _origUpdateOffice(dt);
+  _updateOfficeV2(dt);
+};
+
+var _origRenderOffice = renderOfficeOverlay;
+renderOfficeOverlay = function() {
+  _origRenderOffice();
+  _renderOfficeV2();
+};
+
+// Expose crime scene creator for external use
+if (typeof window !== 'undefined') {
+  window._createCrimeScene = _createCrimeScene;
+  window._onCrimeOccurred = _onCrimeOccurred;
+  window._startTrial = _startTrial;
+}
+

@@ -1202,18 +1202,7 @@ function _updatePlayerVisuals() {
   }
 }
 
-// Hook visuals update into main update cycle
-var _origUpdateCorruption = updateCorruption;
-
-// We need to wrap updateCorruption to also handle visuals
-// But since we're defining it fresh, just add visual update to the main function.
-// We do this by replacing the function and calling both.
-
-// Actually, let's just call it inside updateCorruption directly.
-// We already defined updateCorruption above — let's modify it.
-
-// The simplest approach: update visuals in the render overlay instead.
-// This way we don't need to wrap anything.
+// Visual updates are handled in the render overlay below.
 
 // ─────────────────────────────────────────────
 // §20  COMBINED RENDER (override renderCorruptionOverlay)
@@ -1410,4 +1399,802 @@ function _handleBuyBodyguard() {
   showNotification('Hired bodyguard #' + _maxBodyguards + '! -$' + cost + ' (Next: $' + nextCost + ')');
   addJournalEntry('Hired bodyguard #' + _maxBodyguards + ' for $' + cost + '.');
   if (typeof audio !== 'undefined' && typeof audio.playDing === 'function') audio.playDing();
+}
+
+// ============================================================
+// CORRUPTION FEATURES V2 — Extended Dark Path Systems
+// Features: 61 (NPC Betrayal), 81 (Black Market), 87 (Gambling Den),
+// 94 (Moonshine), 158 (Fed Investigation), 169 (Wanted Level),
+// 171 (Evidence Tampering)
+// ============================================================
+
+// ─────────────────────────────────────────────
+// §V2-1  STATE INITIALIZATION
+// ─────────────────────────────────────────────
+var _corruptionV2Init = false;
+
+// Feature 61: NPC Betrayal
+var _betrayalCooldown = 0;
+
+// Feature 81: Black Market
+var _blackMarketInventory = [];
+var _blackMarketSales = 0;
+var _blackMarketOpen = false;
+var _blackMarketCursor = 0;
+
+// Feature 87: Gambling Den
+var _gamblingDen = { active: false, income: 0, totalIncome: 0, raidChance: 10, dayAccum: 0, lastRaidDay: -1 };
+
+// Feature 94: Moonshine Operation
+var _moonshine = { active: false, quality: 0, income: 0, totalIncome: 0, explosionRisk: 5, dayAccum: 0, lastExplosionDay: -1 };
+
+// Feature 158: Corruption Investigation
+var _fedInvestigation = { active: false, timer: 0, investigatorNPC: null, phase: 0, selectedOption: 0 };
+
+// Feature 169: Wanted Level
+var _wantedStars = 0;
+var _wantedDecayTimer = 0;
+var _wantedFlash = 0;
+
+// Feature 171: Evidence Tampering
+var _tamperCooldown = 0;
+var _tamperCount = 0;
+var _tamperMenu = false;
+var _tamperCursor = 0;
+
+function _initCorruptionV2() {
+  if (_corruptionV2Init) return;
+  if (typeof game === 'undefined' || !game.player) return;
+  _corruptionV2Init = true;
+
+  // Populate black market inventory
+  _blackMarketInventory = [
+    { id: 'lockpick', name: 'Lockpicks', price: 15, desc: 'Open locked doors and chests', owned: 0 },
+    { id: 'poison', name: 'Poison', price: 25, desc: 'Secretly poison an NPC', owned: 0 },
+    { id: 'fakebadge', name: 'Fake Badge', price: 50, desc: 'Impersonate a federal agent', owned: 0 },
+    { id: 'dynamite', name: 'Dynamite', price: 40, desc: 'Blow open safes or cause diversions', owned: 0 },
+    { id: 'bribemoney', name: 'Counterfeit Bills', price: 30, desc: 'Use for bribes without spending real gold', owned: 0 },
+    { id: 'disguise', name: 'Disguise Kit', price: 35, desc: 'Reduce wanted level temporarily', owned: 0 }
+  ];
+}
+
+// ─────────────────────────────────────────────
+// §V2-2  FEATURE 61: NPC BETRAYAL
+// ─────────────────────────────────────────────
+function _updateBetrayal(dt) {
+  var corruption = game.corruption || 0;
+  if (corruption < 40) return;
+
+  if (_betrayalCooldown > 0) {
+    _betrayalCooldown -= dt;
+    return;
+  }
+
+  // Check NPC interactions — piggyback on player proximity
+  if (!game.npcs || game.state !== 'playing') return;
+
+  var p = game.player;
+  for (var i = 0; i < game.npcs.length; i++) {
+    var npc = game.npcs[i];
+    if (npc.dead || npc.hostile || npc.type === (typeof NPC_TYPES !== 'undefined' ? NPC_TYPES.OUTLAW : 2)) continue;
+
+    var d = dist(p, npc);
+    if (d > 40 || d < 5) continue;
+
+    // Check betrayal chance
+    var chance = corruption >= 80 ? 15 : 5;
+    if (Math.random() * 100 < chance * dt) {
+      _betrayalCooldown = 30; // 30 second cooldown between betrayals
+      npc.hostile = true;
+
+      var betrayalType = rand(0, 2);
+      if (betrayalType === 0) {
+        // Attack
+        showNotification(npc.name + ' betrays you! "I\'ve had enough of your corruption!"', 'bad');
+        addJournalEntry(npc.name + ' turned hostile due to your corruption.');
+        if (typeof triggerShake === 'function') triggerShake(3, 10);
+      } else if (betrayalType === 1) {
+        // Alert enemies — spawn a bounty hunter
+        showNotification(npc.name + ' rats you out! Bounty hunters alerted!', 'bad');
+        addJournalEntry(npc.name + ' informed bounty hunters of your location.');
+        if (typeof _spawnBountyHunters === 'function') _spawnBountyHunters(1);
+      } else {
+        // Spread false info
+        showNotification(npc.name + ' spreads lies about you! -5 Reputation', 'bad');
+        game.reputation = clamp((game.reputation || 50) - 5, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        addJournalEntry(npc.name + ' spread false rumors, damaging your reputation.');
+      }
+
+      // Increase wanted level
+      _addWantedStars(0.5);
+      break; // Only one betrayal per frame
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-3  FEATURE 81: BLACK MARKET EXPANSION
+// ─────────────────────────────────────────────
+function _updateBlackMarket(dt) {
+  var corruption = game.corruption || 0;
+  if (corruption < 40) {
+    if (_blackMarketOpen) _blackMarketOpen = false;
+    return;
+  }
+
+  if (_blackMarketOpen) {
+    // Menu navigation
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      _blackMarketCursor = Math.max(0, _blackMarketCursor - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      _blackMarketCursor = Math.min(_blackMarketInventory.length - 1, _blackMarketCursor + 1);
+    }
+    if (consumeKey('Escape')) {
+      _blackMarketOpen = false;
+      return;
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      var item = _blackMarketInventory[_blackMarketCursor];
+      if (!item) return;
+      if ((game.gold || 0) < item.price) {
+        showNotification('Not enough gold! Need $' + item.price);
+        return;
+      }
+      game.gold -= item.price;
+      item.owned++;
+      _blackMarketSales++;
+      game.blackMarketDeals = (game.blackMarketDeals || 0) + 1;
+      showNotification('Purchased ' + item.name + '! -$' + item.price);
+      addJournalEntry('Black market purchase: ' + item.name + ' for $' + item.price + '.');
+      if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+
+      // Buying increases wanted level slightly
+      _addWantedStars(0.2);
+    }
+    return;
+  }
+
+  // Open black market near outlaw NPCs (press M)
+  if (game.state !== 'playing' || !game.npcs) return;
+  if (!consumeKey('KeyM')) return;
+
+  var p = game.player;
+  for (var i = 0; i < game.npcs.length; i++) {
+    var npc = game.npcs[i];
+    if (npc.dead) continue;
+    var isOutlaw = npc.type === (typeof NPC_TYPES !== 'undefined' ? NPC_TYPES.OUTLAW : 2);
+    if (!isOutlaw && !npc._isBlackMarket) continue;
+    var d = dist(p, npc);
+    if (d < 50) {
+      _blackMarketOpen = true;
+      _blackMarketCursor = 0;
+      showNotification('Black market opened...');
+      return;
+    }
+  }
+}
+
+function _renderBlackMarket() {
+  if (!_blackMarketOpen) return;
+
+  var W = gameCanvas.width, H = gameCanvas.height;
+  var panelW = 420, panelH = 320;
+  var px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Dark panel
+  ctx.fillStyle = '#0a0808';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#661122';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  // Skull decoration
+  ctx.fillStyle = '#441111';
+  ctx.font = '18px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('\u2620', px + panelW / 2, py + 22);
+
+  ctx.fillStyle = '#cc2222';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('BLACK MARKET', px + panelW / 2, py + 40);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.fillText('Your gold: $' + (game.gold || 0) + '  |  Purchases: ' + _blackMarketSales, px + panelW / 2, py + 55);
+
+  ctx.textAlign = 'left';
+  for (var i = 0; i < _blackMarketInventory.length; i++) {
+    var item = _blackMarketInventory[i];
+    var iy = py + 72 + i * 38;
+    var sel = _blackMarketCursor === i;
+
+    ctx.fillStyle = sel ? 'rgba(100,20,20,0.3)' : 'transparent';
+    ctx.fillRect(px + 10, iy - 3, panelW - 20, 34);
+    if (sel) { ctx.strokeStyle = '#cc2222'; ctx.strokeRect(px + 10, iy - 3, panelW - 20, 34); }
+
+    ctx.fillStyle = sel ? '#ff4444' : '#aa6666';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText((sel ? '> ' : '  ') + item.name + ' — $' + item.price, px + 18, iy + 11);
+    ctx.fillStyle = '#666';
+    ctx.font = '9px monospace';
+    ctx.fillText('  ' + item.desc + (item.owned > 0 ? '  [Owned: ' + item.owned + ']' : ''), px + 18, iy + 24);
+  }
+
+  ctx.fillStyle = '#555';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  [Enter] Buy  [Esc] Close', px + panelW / 2, py + panelH - 10);
+}
+
+// ─────────────────────────────────────────────
+// §V2-4  FEATURE 87: GAMBLING DEN
+// ─────────────────────────────────────────────
+function _updateGamblingDen(dt) {
+  var corruption = game.corruption || 0;
+  if (corruption < 50) return;
+
+  // Setup gambling den (press G at saloon — handled by corruption 50+ prompt)
+  if (!_gamblingDen.active) {
+    if (game.state === 'playing' && consumeKey('KeyJ')) {
+      if ((game.gold || 0) < 100) {
+        showNotification('Need $100 to set up a gambling den.');
+        return;
+      }
+      game.gold -= 100;
+      _gamblingDen.active = true;
+      _gamblingDen.income = rand(30, 100);
+      showNotification('Gambling den established! $' + _gamblingDen.income + '/day income. Watch for raids!');
+      addJournalEntry('Set up an illegal gambling den. Income: $' + _gamblingDen.income + '/day.');
+      _addWantedStars(1);
+    }
+    return;
+  }
+
+  // Accumulate income
+  _gamblingDen.dayAccum += dt;
+  if (_gamblingDen.dayAccum >= 60) {
+    _gamblingDen.dayAccum = 0;
+    game.gold = (game.gold || 0) + _gamblingDen.income;
+    game.totalGoldEarned = (game.totalGoldEarned || 0) + _gamblingDen.income;
+    _gamblingDen.totalIncome += _gamblingDen.income;
+
+    // Federal raid check
+    var dayNow = game.dayCount || 1;
+    if (dayNow !== _gamblingDen.lastRaidDay) {
+      _gamblingDen.lastRaidDay = dayNow;
+      if (Math.random() * 100 < _gamblingDen.raidChance) {
+        _gamblingDen.active = false;
+        var fine = rand(100, 300);
+        game.gold = Math.max(0, (game.gold || 0) - fine);
+        _gamblingDen.income = 0;
+        showNotification('FEDERAL RAID! Gambling den shut down! -$' + fine, 'bad');
+        addJournalEntry('Federal agents raided the gambling den. Fined $' + fine + '.');
+        if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+        if (typeof triggerShake === 'function') triggerShake(5, 15);
+        _addWantedStars(1);
+        game.reputation = clamp((game.reputation || 50) - 10, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-5  FEATURE 94: MOONSHINE OPERATION
+// ─────────────────────────────────────────────
+function _updateMoonshine(dt) {
+  var corruption = game.corruption || 0;
+  if (corruption < 40) return;
+
+  if (!_moonshine.active) {
+    if (game.state === 'playing' && consumeKey('KeyH')) {
+      if ((game.gold || 0) < 75) {
+        showNotification('Need $75 to build a moonshine still.');
+        return;
+      }
+      game.gold -= 75;
+      _moonshine.active = true;
+      _moonshine.quality = 1;
+      _moonshine.income = 15;
+      showNotification('Moonshine still built! $15/day income. Careful of explosions!');
+      addJournalEntry('Built a moonshine still outside of town. Income: $15/day.');
+      _addWantedStars(0.5);
+    }
+    return;
+  }
+
+  _moonshine.dayAccum += dt;
+  if (_moonshine.dayAccum >= 60) {
+    _moonshine.dayAccum = 0;
+
+    // Quality improves income
+    _moonshine.income = 15 + _moonshine.quality * 5;
+    game.gold = (game.gold || 0) + _moonshine.income;
+    game.totalGoldEarned = (game.totalGoldEarned || 0) + _moonshine.income;
+    _moonshine.totalIncome += _moonshine.income;
+    _moonshine.quality = Math.min(10, _moonshine.quality + 1);
+
+    // Explosion risk
+    var dayNow = game.dayCount || 1;
+    if (dayNow !== _moonshine.lastExplosionDay) {
+      _moonshine.lastExplosionDay = dayNow;
+      var risk = _moonshine.explosionRisk + (_moonshine.quality - 1) * 1;
+      if (Math.random() * 100 < risk) {
+        _moonshine.active = false;
+        _moonshine.quality = 0;
+        var damage = rand(10, 30);
+        game.player.hp = Math.max(1, (game.player.hp || 100) - damage);
+        showNotification('BOOM! Moonshine still exploded! -' + damage + ' HP', 'bad');
+        addJournalEntry('Moonshine still exploded! Suffered ' + damage + ' damage.');
+        if (typeof triggerShake === 'function') triggerShake(8, 25);
+        if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+        if (typeof particles !== 'undefined') {
+          particles.emit(game.player.x, game.player.y, 15, '#ff6600', 1.5, 40);
+        }
+      }
+
+      // Federal attention
+      if (_moonshine.active && Math.random() * 100 < 8) {
+        showNotification('Feds are snooping around about your moonshine...', 'bad');
+        _addWantedStars(0.5);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-6  FEATURE 158: CORRUPTION INVESTIGATION
+// ─────────────────────────────────────────────
+function _updateFedInvestigation(dt) {
+  var corruption = game.corruption || 0;
+
+  // Trigger at corruption 70+
+  if (!_fedInvestigation.active && corruption >= 70) {
+    var dayNow = game.dayCount || 1;
+    // Only trigger once every 20 days
+    if (!_fedInvestigation._lastTriggerDay) _fedInvestigation._lastTriggerDay = 0;
+    if (dayNow - _fedInvestigation._lastTriggerDay < 20) return;
+
+    if (Math.random() < 0.1 * dt) {
+      _fedInvestigation.active = true;
+      _fedInvestigation.timer = 180; // 3 minutes (3 game-days)
+      _fedInvestigation.phase = 0;
+      _fedInvestigation.selectedOption = 0;
+      _fedInvestigation._lastTriggerDay = dayNow;
+      showNotification('FEDERAL INVESTIGATOR has arrived! 3 days to act!', 'bad');
+      addJournalEntry('A federal investigator is in town, looking into your activities. You have 3 days.');
+      if (typeof audio !== 'undefined' && audio.playBad) audio.playBad();
+      _addWantedStars(1);
+    }
+    return;
+  }
+
+  if (!_fedInvestigation.active) return;
+
+  if (_fedInvestigation.phase === 0) {
+    // Countdown phase — show options
+    _fedInvestigation.timer -= dt;
+
+    if (_fedInvestigation.timer <= 0) {
+      // Time's up — arrested
+      _fedInvestigation.active = false;
+      game.gold = Math.max(0, (game.gold || 0) - 500);
+      game.corruption = clamp((game.corruption || 0) - 30, 0, 100);
+      game.reputation = clamp((game.reputation || 50) - 20, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+      showNotification('ARRESTED! Evidence was overwhelming! -$500, -30 corruption, -20 rep', 'bad');
+      addJournalEntry('Arrested by federal investigators. Massive fines and reputation damage.');
+      _wantedStars = Math.max(0, _wantedStars - 2);
+      return;
+    }
+
+    // Handle player choosing option
+    if (consumeKey('Digit1')) {
+      // Bribe ($200)
+      if ((game.gold || 0) < 200) {
+        showNotification('Need $200 to bribe the investigator!');
+        return;
+      }
+      game.gold -= 200;
+      _fedInvestigation.active = false;
+      showNotification('Investigator bribed! He leaves town quietly. -$200');
+      addJournalEntry('Bribed the federal investigator with $200. Investigation closed.');
+      game.corruption = clamp((game.corruption || 0) + 5, 0, 100);
+    }
+    if (consumeKey('Digit2')) {
+      // Destroy evidence (-20 corruption)
+      game.corruption = clamp((game.corruption || 0) - 20, 0, 100);
+      _fedInvestigation.active = false;
+      showNotification('Evidence destroyed! -20 corruption. Investigator finds nothing.');
+      addJournalEntry('Destroyed incriminating evidence. Corruption reduced.');
+      _wantedStars = Math.max(0, _wantedStars - 1);
+    }
+    if (consumeKey('Digit3')) {
+      // Flee town (teleport to edge, lose some gold)
+      var fleeGold = Math.floor((game.gold || 0) * 0.3);
+      game.gold = (game.gold || 0) - fleeGold;
+      game.player.x = TILE * 3;
+      game.player.y = TILE * 3;
+      _fedInvestigation.active = false;
+      showNotification('You fled town! Lost $' + fleeGold + ' in the escape.');
+      addJournalEntry('Fled town to avoid federal arrest. Lost $' + fleeGold + '.');
+    }
+    if (consumeKey('Digit4')) {
+      // Face arrest willingly
+      _fedInvestigation.active = false;
+      game.gold = Math.max(0, (game.gold || 0) - 300);
+      game.corruption = clamp((game.corruption || 0) - 40, 0, 100);
+      game.reputation = clamp((game.reputation || 50) + 10, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+      showNotification('You turn yourself in. -$300, -40 corruption, +10 rep (honesty bonus)');
+      addJournalEntry('Turned self in to federal investigators. Heavy penalty but reputation restored slightly.');
+      _wantedStars = Math.max(0, _wantedStars - 3);
+    }
+  }
+}
+
+function _renderFedInvestigation() {
+  if (!_fedInvestigation.active) return;
+
+  var W = gameCanvas.width, H = gameCanvas.height;
+
+  // Alert bar at top
+  var flash = Math.sin(Date.now() * 0.008) * 0.3 + 0.7;
+  ctx.fillStyle = 'rgba(150,0,0,' + (flash * 0.3) + ')';
+  ctx.fillRect(0, 0, W, 55);
+
+  ctx.fillStyle = '#ff4444';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('FEDERAL INVESTIGATION IN PROGRESS', W / 2, 18);
+
+  var daysLeft = Math.ceil(_fedInvestigation.timer / 60);
+  var secsLeft = Math.ceil(_fedInvestigation.timer);
+  ctx.fillStyle = '#ffcc44';
+  ctx.font = '11px monospace';
+  ctx.fillText('Time remaining: ' + daysLeft + ' day(s) (' + secsLeft + 's)', W / 2, 33);
+
+  ctx.fillStyle = '#ddd';
+  ctx.font = '10px monospace';
+  ctx.fillText('[1] Bribe $200  [2] Destroy Evidence  [3] Flee Town  [4] Turn Self In', W / 2, 48);
+}
+
+// ─────────────────────────────────────────────
+// §V2-7  FEATURE 169: WANTED LEVEL SYSTEM
+// ─────────────────────────────────────────────
+function _addWantedStars(amount) {
+  var old = _wantedStars;
+  _wantedStars = Math.min(5, _wantedStars + amount);
+  _wantedFlash = 1;
+  if (Math.floor(_wantedStars) > Math.floor(old) && _wantedStars >= 1) {
+    showNotification('Wanted level: ' + Math.floor(_wantedStars) + ' star(s)!', 'bad');
+  }
+}
+
+function _updateWantedLevel(dt) {
+  // Decay over time with good behavior (no corrupt actions)
+  _wantedDecayTimer += dt;
+  if (_wantedDecayTimer >= 30 && _wantedStars > 0) {
+    _wantedDecayTimer = 0;
+    _wantedStars = Math.max(0, _wantedStars - 0.1);
+  }
+
+  // Flash animation decay
+  if (_wantedFlash > 0) {
+    _wantedFlash = Math.max(0, _wantedFlash - dt * 2);
+  }
+
+  // Increase bounty hunter frequency at higher wanted levels
+  if (_wantedStars >= 2 && typeof _spawnBountyHunters === 'function') {
+    var hunterChance = (_wantedStars - 1) * 0.5 * dt; // per second
+    if (Math.random() < hunterChance * 0.01) { // very low chance per frame
+      _spawnBountyHunters(Math.floor(_wantedStars / 2));
+      showNotification('Bounty hunters drawn by your wanted level!', 'bad');
+    }
+  }
+
+  // Corruption actions increase wanted level
+  // (handled by individual features calling _addWantedStars)
+}
+
+function _renderWantedLevel() {
+  if (_wantedStars <= 0) return;
+
+  var W = gameCanvas.width;
+  var starCount = Math.floor(_wantedStars);
+  var partial = _wantedStars - starCount;
+  var sx = W - 15 - starCount * 22;
+  var sy = 12;
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(sx - 8, sy - 5, starCount * 22 + 30, 24);
+
+  // Stars
+  for (var i = 0; i < 5; i++) {
+    var x = sx + i * 22;
+    var active = i < starCount;
+    var partialStar = i === starCount && partial > 0;
+
+    if (active || partialStar) {
+      var alpha = active ? 1.0 : partial;
+      var flashBoost = _wantedFlash > 0 ? Math.sin(_wantedFlash * 10) * 0.3 : 0;
+      alpha = Math.min(1, alpha + flashBoost);
+
+      ctx.fillStyle = 'rgba(255,215,0,' + alpha + ')';
+      _drawStar(ctx, x + 8, sy + 7, 5, 8, 3);
+    } else {
+      ctx.fillStyle = 'rgba(80,80,80,0.4)';
+      _drawStar(ctx, x + 8, sy + 7, 5, 8, 3);
+    }
+  }
+}
+
+function _drawStar(c, cx, cy, spikes, outerR, innerR) {
+  var rot = Math.PI / 2 * 3;
+  var step = Math.PI / spikes;
+  c.beginPath();
+  c.moveTo(cx, cy - outerR);
+  for (var i = 0; i < spikes; i++) {
+    var xo = cx + Math.cos(rot) * outerR;
+    var yo = cy + Math.sin(rot) * outerR;
+    c.lineTo(xo, yo);
+    rot += step;
+    xo = cx + Math.cos(rot) * innerR;
+    yo = cy + Math.sin(rot) * innerR;
+    c.lineTo(xo, yo);
+    rot += step;
+  }
+  c.lineTo(cx, cy - outerR);
+  c.closePath();
+  c.fill();
+}
+
+// ─────────────────────────────────────────────
+// §V2-8  FEATURE 171: EVIDENCE TAMPERING
+// ─────────────────────────────────────────────
+function _updateEvidenceTampering(dt) {
+  if (_tamperCooldown > 0) _tamperCooldown -= dt;
+
+  if (_tamperMenu) {
+    if (consumeKey('Escape')) {
+      _tamperMenu = false;
+      return;
+    }
+    if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+      _tamperCursor = Math.max(0, _tamperCursor - 1);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+      _tamperCursor = Math.min(1, _tamperCursor + 1);
+    }
+    if (consumeKey('Enter') || consumeKey('KeyE')) {
+      if (_tamperCooldown > 0) {
+        showNotification('Tampering on cooldown! Wait ' + Math.ceil(_tamperCooldown) + 's.');
+        return;
+      }
+
+      // Lockpick check: own lockpicks = +30% success
+      var hasLockpick = false;
+      for (var i = 0; i < _blackMarketInventory.length; i++) {
+        if (_blackMarketInventory[i].id === 'lockpick' && _blackMarketInventory[i].owned > 0) {
+          hasLockpick = true;
+          break;
+        }
+      }
+
+      var baseChance = 40;
+      var chance = baseChance + (hasLockpick ? 30 : 0) + (_tamperCount * 5);
+      chance = Math.min(85, chance);
+
+      if (Math.random() * 100 < chance) {
+        // Success
+        _tamperCount++;
+        _tamperCooldown = 60; // 1 minute cooldown
+        game.corruption = clamp((game.corruption || 0) + 10, 0, 100);
+
+        if (_tamperCursor === 0) {
+          // Frame an NPC
+          var targetName = 'an innocent townsperson';
+          if (game.npcs && game.npcs.length > 0) {
+            var candidates = game.npcs.filter(function(n) { return !n.dead && !n.hostile; });
+            if (candidates.length > 0) {
+              var target = candidates[rand(0, candidates.length - 1)];
+              targetName = target.name || 'a townsperson';
+              target.hostile = true;
+              target._framed = true;
+            }
+          }
+          showNotification('Evidence planted! ' + targetName + ' framed for crimes. +10 corruption');
+          addJournalEntry('Tampered with evidence to frame ' + targetName + '.');
+          addXP(10);
+        } else {
+          // Free a prisoner
+          if (typeof office !== 'undefined' && office.prisoners && office.prisoners.length > 0) {
+            var freed = office.prisoners.pop();
+            showNotification('Evidence destroyed! ' + (freed.name || 'Prisoner') + ' released. +10 corruption');
+            addJournalEntry('Tampered with evidence to free ' + (freed.name || 'a prisoner') + '.');
+          } else {
+            showNotification('No prisoners to free. Evidence tampered anyway. +10 corruption');
+          }
+        }
+        if (hasLockpick) {
+          for (var j = 0; j < _blackMarketInventory.length; j++) {
+            if (_blackMarketInventory[j].id === 'lockpick' && _blackMarketInventory[j].owned > 0) {
+              _blackMarketInventory[j].owned--;
+              break;
+            }
+          }
+        }
+        _addWantedStars(0.5);
+      } else {
+        // Caught!
+        _tamperCooldown = 120;
+        game.reputation = clamp((game.reputation || 50) - 20, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
+        showNotification('CAUGHT tampering with evidence! -20 reputation!', 'bad');
+        addJournalEntry('Caught tampering with evidence in the sheriff\'s office. Reputation severely damaged.');
+        _addWantedStars(1.5);
+
+        // Start federal investigation if not already active
+        if (!_fedInvestigation.active && (game.corruption || 0) >= 50) {
+          _fedInvestigation.active = true;
+          _fedInvestigation.timer = 180;
+          _fedInvestigation.phase = 0;
+          showNotification('Federal investigation triggered!', 'bad');
+        }
+      }
+
+      _tamperMenu = false;
+    }
+    return;
+  }
+
+  // Open tamper menu at office (KeyX near records)
+  if (typeof office !== 'undefined' && office.active && office.nearFurniture === 'records') {
+    if ((game.corruption || 0) >= 30 && consumeKey('KeyX')) {
+      _tamperMenu = true;
+      _tamperCursor = 0;
+    }
+  }
+}
+
+function _renderEvidenceTampering() {
+  if (!_tamperMenu) return;
+
+  var W = gameCanvas.width, H = gameCanvas.height;
+  var panelW = 380, panelH = 200;
+  var px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#100808';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#881122';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+
+  ctx.fillStyle = '#ff4444';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('EVIDENCE TAMPERING', px + panelW / 2, py + 25);
+
+  // Check lockpick
+  var hasLP = false;
+  for (var i = 0; i < _blackMarketInventory.length; i++) {
+    if (_blackMarketInventory[i].id === 'lockpick' && _blackMarketInventory[i].owned > 0) { hasLP = true; break; }
+  }
+  var chance = Math.min(85, 40 + (hasLP ? 30 : 0) + _tamperCount * 5);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.fillText('Success chance: ' + chance + '% ' + (hasLP ? '(lockpick bonus!)' : '(buy lockpicks for +30%)'), px + panelW / 2, py + 45);
+  ctx.fillText('+10 corruption on success  |  -20 rep on failure', px + panelW / 2, py + 60);
+
+  var options = [
+    { label: 'Frame an Innocent NPC', desc: 'Plant evidence to make someone look guilty', color: '#ff6644' },
+    { label: 'Free a Prisoner', desc: 'Destroy evidence to release an ally', color: '#ffcc44' }
+  ];
+
+  ctx.textAlign = 'left';
+  for (var j = 0; j < options.length; j++) {
+    var oy = py + 80 + j * 45;
+    var sel = _tamperCursor === j;
+    ctx.fillStyle = sel ? 'rgba(100,20,20,0.3)' : 'transparent';
+    ctx.fillRect(px + 10, oy - 3, panelW - 20, 38);
+    if (sel) { ctx.strokeStyle = options[j].color; ctx.strokeRect(px + 10, oy - 3, panelW - 20, 38); }
+    ctx.fillStyle = sel ? options[j].color : '#888';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText((sel ? '> ' : '  ') + options[j].label, px + 18, oy + 13);
+    ctx.fillStyle = '#666';
+    ctx.font = '9px monospace';
+    ctx.fillText(options[j].desc, px + 28, oy + 27);
+  }
+
+  ctx.fillStyle = '#555';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('[W/S] Select  [Enter] Attempt  [Esc] Cancel', px + panelW / 2, py + panelH - 10);
+}
+
+// ─────────────────────────────────────────────
+// §V2-9  PASSIVE INCOME INDICATORS
+// ─────────────────────────────────────────────
+function _renderPassiveIncomeHUD() {
+  if (game.state !== 'playing') return;
+
+  var lines = [];
+  if (_gamblingDen.active) {
+    lines.push('Gambling Den: $' + _gamblingDen.income + '/day (Raid: ' + _gamblingDen.raidChance + '%)');
+  }
+  if (_moonshine.active) {
+    lines.push('Moonshine: $' + _moonshine.income + '/day (Q' + _moonshine.quality + ')');
+  }
+
+  if (lines.length === 0) return;
+
+  var W = gameCanvas.width;
+  var bw = 260, bh = 12 + lines.length * 14;
+  var bx = 10, by = W > 500 ? 160 : 135;
+
+  ctx.fillStyle = 'rgba(40,10,10,0.7)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = '#661122';
+  ctx.strokeRect(bx, by, bw, bh);
+
+  ctx.fillStyle = '#cc6644';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'left';
+  for (var i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], bx + 6, by + 11 + i * 14);
+  }
+}
+
+// ─────────────────────────────────────────────
+// §V2-10  MASTER UPDATE / RENDER + PATCHING
+// ─────────────────────────────────────────────
+function _updateCorruptionV2(dt) {
+  _initCorruptionV2();
+  if (!game.player || game.state !== 'playing') return;
+
+  var realDt = dt || (1 / 60);
+
+  _updateBetrayal(realDt);
+  _updateBlackMarket(realDt);
+  _updateGamblingDen(realDt);
+  _updateMoonshine(realDt);
+  _updateFedInvestigation(realDt);
+  _updateWantedLevel(realDt);
+  _updateEvidenceTampering(realDt);
+}
+
+function _renderCorruptionV2() {
+  if (!_corruptionV2Init) return;
+
+  // World overlays
+  _renderWantedLevel();
+  _renderPassiveIncomeHUD();
+  _renderFedInvestigation();
+
+  // Menus (only one at a time)
+  _renderBlackMarket();
+  _renderEvidenceTampering();
+}
+
+// ── Patch existing functions ──
+var _origUpdateCorruption = updateCorruption;
+updateCorruption = function(dt) {
+  _origUpdateCorruption(dt);
+  _updateCorruptionV2(dt);
+};
+
+var _origRenderCorruption = renderCorruptionOverlay;
+renderCorruptionOverlay = function() {
+  _origRenderCorruption();
+  _renderCorruptionV2();
+};
+
+// Expose for cross-file use
+if (typeof window !== 'undefined') {
+  window._addWantedStars = _addWantedStars;
+  window._blackMarketInventory = _blackMarketInventory;
 }

@@ -2601,6 +2601,13 @@ function updateMinigames(dt) {
       showNotification('Discarded the puzzle.');
     }
   }
+
+  // ════════════════════════════════════════
+  // FEATURE 162: FORGERY DETECTION
+  // ════════════════════════════════════════
+  _initForgeryMinigame();
+  if (m.forgeryCooldown > 0) m.forgeryCooldown -= dt;
+  if (m.forgery) _updateForgery(dt);
 }
 
 // ============================================================
@@ -3418,6 +3425,207 @@ function renderMinigamesOverlay() {
     ctx.fillText('WASD to slide tiles', w / 2, 210);
   }
 
+  // Forgery Detection
+  if (mg === 'forgery') _renderForgery();
+
+  ctx.textAlign = 'left';
+}
+
+// ============================================================
+// FEATURE 162: FORGERY DETECTION MINIGAME
+// Spot-the-difference on bank bills. Catch forgers for reward.
+// ============================================================
+function _initForgeryMinigame() {
+  var m = game._minigames;
+  if (m.forgery !== undefined) return;
+  m.forgery = false;
+  m.forgeryBills = [];
+  m.forgerySelected = -1;
+  m.forgeryTimer = 30;
+  m.forgeryScore = 0;
+  m.forgeryRound = 0;
+  m.forgeryDifferences = [];
+  m.forgeryCooldown = 0;
+}
+
+function _generateForgeryBill() {
+  // Generate two "bills" as arrays of features — one real, one forged
+  var features = [];
+  var differences = [];
+  var numFeatures = 8;
+  for (var i = 0; i < numFeatures; i++) {
+    features.push({
+      x: 30 + rand(0, 140),
+      y: 20 + rand(0, 60),
+      type: rand(0, 3), // 0=line, 1=circle, 2=rect, 3=text
+      size: rand(4, 12),
+      color: ['#2a4a2a', '#4a2a2a', '#2a2a4a', '#4a4a2a'][rand(0, 3)]
+    });
+  }
+  // Pick 2-3 features to change in the forged version
+  var numDiffs = rand(2, 3);
+  var diffIndices = [];
+  while (diffIndices.length < numDiffs) {
+    var idx = rand(0, numFeatures - 1);
+    if (diffIndices.indexOf(idx) === -1) diffIndices.push(idx);
+  }
+  var forgedFeatures = JSON.parse(JSON.stringify(features));
+  for (var di = 0; di < diffIndices.length; di++) {
+    var fi = diffIndices[di];
+    // Alter the feature
+    forgedFeatures[fi].x += rand(-8, 8);
+    forgedFeatures[fi].size += rand(-3, 3);
+    forgedFeatures[fi].color = ['#3a5a3a', '#5a3a3a', '#3a3a5a', '#5a5a3a'][rand(0, 3)];
+    differences.push({ index: fi, x: forgedFeatures[fi].x, y: forgedFeatures[fi].y });
+  }
+  return { real: features, forged: forgedFeatures, differences: differences, isLeft: Math.random() < 0.5 };
+}
+
+function startForgeryMinigame() {
+  _initForgeryMinigame();
+  var m = game._minigames;
+  if (m.forgeryCooldown > 0) {
+    showNotification('Forgery detection on cooldown.');
+    return;
+  }
+  m.forgery = true;
+  m.forgeryScore = 0;
+  m.forgeryRound = 0;
+  m.forgeryTimer = 30;
+  m.forgerySelected = -1;
+  m.forgeryBills = _generateForgeryBill();
+  m.activeMinigame = 'forgery';
+  game.state = 'minigame';
+  showNotification('FORGERY DETECTION: Find the fake bill!');
+}
+
+function _updateForgery(dt) {
+  var m = game._minigames;
+  if (!m.forgery) return;
+  m.forgeryTimer -= dt;
+  if (m.forgeryTimer <= 0) {
+    // Time up
+    m.forgery = false;
+    m.activeMinigame = null;
+    m.forgeryCooldown = 60;
+    game.state = 'playing';
+    var reward = m.forgeryScore * 15;
+    if (reward > 0) {
+      game.gold += reward;
+      game.totalGoldEarned += reward;
+      addXP(m.forgeryScore * 20);
+      showNotification('Forgery detection complete! ' + m.forgeryScore + ' caught, +$' + reward, 'good');
+    } else {
+      showNotification('Failed to catch any forgers.');
+    }
+    return;
+  }
+  // Cooldown decrement
+  if (m.forgeryCooldown > 0) m.forgeryCooldown -= dt;
+
+  // 1 = select left, 2 = select right
+  if (consumeKey('Digit1')) m.forgerySelected = 0;
+  if (consumeKey('Digit2')) m.forgerySelected = 1;
+  if (consumeKey('KeyE') && m.forgerySelected >= 0) {
+    // Check if selected the forged bill
+    var isForged = (m.forgerySelected === 0 && !m.forgeryBills.isLeft) ||
+                   (m.forgerySelected === 1 && m.forgeryBills.isLeft);
+    if (isForged) {
+      m.forgeryScore++;
+      addFloatingText(game.player.x, game.player.y - 30, 'FORGERY FOUND!', '#44cc44');
+      audio.playDing();
+    } else {
+      addFloatingText(game.player.x, game.player.y - 30, 'WRONG BILL!', '#cc4444');
+      m.forgeryTimer -= 5; // penalty
+    }
+    m.forgeryRound++;
+    if (m.forgeryRound >= 5) {
+      m.forgeryTimer = 0; // end
+    } else {
+      m.forgeryBills = _generateForgeryBill();
+      m.forgerySelected = -1;
+    }
+  }
+  if (consumeKey('Escape')) {
+    m.forgery = false;
+    m.activeMinigame = null;
+    game.state = 'playing';
+  }
+}
+
+function _renderForgery() {
+  var m = game._minigames;
+  if (!m.forgery) return;
+  var w = canvas.width, h = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(10, 6, 2, 0.92)';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('FORGERY DETECTION', w / 2, 30);
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#cc8800';
+  ctx.fillText('Round ' + (m.forgeryRound + 1) + '/5 | Score: ' + m.forgeryScore + ' | Time: ' + Math.ceil(m.forgeryTimer) + 's', w / 2, 50);
+
+  // Draw two bills side by side
+  var billW = 200, billH = 100;
+  var leftX = w / 2 - billW - 20, rightX = w / 2 + 20;
+  var billY = h / 2 - billH / 2;
+
+  function drawBill(features, x, y, selected) {
+    ctx.fillStyle = '#f4e8c8';
+    ctx.fillRect(x, y, billW, billH);
+    ctx.strokeStyle = selected ? '#ffd700' : '#8a6a38';
+    ctx.lineWidth = selected ? 3 : 1;
+    ctx.strokeRect(x, y, billW, billH);
+    // Border pattern
+    ctx.strokeStyle = '#4a3a2a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 4, y + 4, billW - 8, billH - 8);
+    // Features
+    for (var fi = 0; fi < features.length; fi++) {
+      var f = features[fi];
+      ctx.fillStyle = f.color;
+      switch (f.type) {
+        case 0: // line
+          ctx.fillRect(x + f.x, y + f.y, f.size * 2, 2);
+          break;
+        case 1: // circle
+          ctx.beginPath();
+          ctx.arc(x + f.x, y + f.y, f.size, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case 2: // rect
+          ctx.fillRect(x + f.x, y + f.y, f.size, f.size);
+          break;
+        case 3: // text squiggle
+          ctx.fillRect(x + f.x, y + f.y, f.size * 3, 3);
+          ctx.fillRect(x + f.x + 2, y + f.y + 4, f.size * 2, 2);
+          break;
+      }
+    }
+    // "$100" text
+    ctx.fillStyle = '#2a4a2a';
+    ctx.font = 'bold 18px serif';
+    ctx.fillText('$100', x + billW / 2, y + billH / 2 + 6);
+    ctx.font = '9px monospace';
+  }
+
+  var leftFeatures = m.forgeryBills.isLeft ? m.forgeryBills.real : m.forgeryBills.forged;
+  var rightFeatures = m.forgeryBills.isLeft ? m.forgeryBills.forged : m.forgeryBills.real;
+
+  drawBill(leftFeatures, leftX, billY, m.forgerySelected === 0);
+  drawBill(rightFeatures, rightX, billY, m.forgerySelected === 1);
+
+  // Labels
+  ctx.fillStyle = '#b8944a';
+  ctx.font = '11px monospace';
+  ctx.fillText('[1] Bill A', leftX + billW / 2, billY + billH + 20);
+  ctx.fillText('[2] Bill B', rightX + billW / 2, billY + billH + 20);
+  ctx.fillText('Select the FORGED bill, then press E', w / 2, billY + billH + 45);
   ctx.textAlign = 'left';
 }
 

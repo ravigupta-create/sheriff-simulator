@@ -314,6 +314,20 @@ const DIFFICULTY = {
     repLossMult:     2.0,
     nightCrimeMult:  2.5,
   },
+  legendary: {
+    label:           'Legendary',
+    crimeFreqMult:   2.5,
+    outlawHPMult:    3.0,
+    playerHP:        4,
+    startingAmmo:    12,
+    startingMoney:   20,
+    duelWindow:      200,
+    outlawDamageMult: 2.5,
+    rewardMult:      0.5,
+    repGainMult:     0.5,
+    repLossMult:     2.5,
+    nightCrimeMult:  3.0,
+  },
 };
 
 // ─────────────────────────────────────────────
@@ -2182,6 +2196,11 @@ let _notifTimer = null;
 
 function showNotification(text, type) {
   type = type || 'neutral';
+  // Notification log (Feature 188)
+  if (!game._notifLog) game._notifLog = [];
+  game._notifLog.unshift({ text: text, type: type, time: Date.now() });
+  if (game._notifLog.length > 50) game._notifLog.pop();
+
   const el = document.getElementById('notification');
   if (!el) return;
   el.textContent = text;
@@ -3744,18 +3763,41 @@ function drawMinimap(game) {
     }
   }
 
-  // NPCs as colored dots
+  // Fog of War overlay on minimap (Feature 118)
+  if (game._fogOfWar) {
+    mmCtx.fillStyle = 'rgba(0,0,0,0.6)';
+    var fogTileSize = TILE * 4;
+    var fogCols = Math.ceil(WORLD_W / fogTileSize);
+    var fogRows = Math.ceil(WORLD_H / fogTileSize);
+    for (var ffy = 0; ffy < fogRows; ffy++) {
+      for (var ffx = 0; ffx < fogCols; ffx++) {
+        if (!game._fogOfWar[ffx + ',' + ffy]) {
+          var fmx = ffx * fogTileSize * scaleX;
+          var fmy = ffy * fogTileSize * scaleY;
+          var fmw = fogTileSize * scaleX;
+          var fmh = fogTileSize * scaleY;
+          mmCtx.fillRect(fmx, fmy, fmw, fmh);
+        }
+      }
+    }
+  }
+
+  // NPCs as colored dots (Feature 190: enhanced colors)
   if (game.npcs) {
     for (const npc of game.npcs) {
       if (npc.dead) continue;
       const nx = npc.x * scaleX;
       const ny = npc.y * scaleY;
       if (npc.hostile) {
-        mmCtx.fillStyle = '#ff0000';
+        mmCtx.fillStyle = '#ff0000'; // red = hostile
       } else if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) {
-        mmCtx.fillStyle = '#ff8800';
+        mmCtx.fillStyle = '#ff8800'; // orange = outlaw
+      } else if (npc.type === NPC_TYPES.SHOPKEEPER || npc.type === NPC_TYPES.BLACKSMITH) {
+        mmCtx.fillStyle = '#4488ff'; // blue = merchant
+      } else if (npc.hasQuest || (game.activeQuest && game.activeQuest.targetNPC === npc.id)) {
+        mmCtx.fillStyle = '#ffff00'; // yellow = quest
       } else {
-        mmCtx.fillStyle = '#44cc44';
+        mmCtx.fillStyle = '#44cc44'; // green = friendly
       }
       mmCtx.fillRect(nx - 1, ny - 1, 2, 2);
     }
@@ -5022,6 +5064,8 @@ function endDuel() {
   game.duelState = null;
   if (game.player.hp <= 0 && !game._cheatMode) {
     game.state = 'gameover';
+    game.gameOverReason = game.gameOverReason || 'Lost the duel!';
+    onPlayerDeath();
   } else {
     if (game._cheatMode && game.player.hp <= 0) game.player.hp = game.player.maxHp;
     game.state = 'playing';
@@ -5392,6 +5436,14 @@ function updateNPCs(dt) {
       }
     }
 
+    // NPC Schedules v2 (Feature 55): weather & day-of-week modifiers
+    var _npcSpeedMod = 1.0;
+    if (game._weather === 'rain' || game._weather === 'storm') _npcSpeedMod *= 0.7;
+    if (game._weather === 'heat') _npcSpeedMod *= 0.85;
+    // Weekend (days 6,7 of each week cycle): NPCs wander more, shops busier
+    var _dayOfWeek = ((game.dayCount - 1) % 7) + 1;
+    if (_dayOfWeek >= 6) _npcSpeedMod *= 1.15;
+
     // Schedule system: NPCs move toward buildings at certain times
     if (npc.building && npc.type !== NPC_TYPES.OUTLAW) {
       // Night: go home
@@ -5404,8 +5456,8 @@ function updateNPCs(dt) {
             var tdy = (target.doorY * TILE) - npc.y;
             var tlen = Math.hypot(tdx, tdy);
             if (tlen > 16) {
-              npc.x += (tdx / tlen) * npc.speed * 0.5;
-              npc.y += (tdy / tlen) * npc.speed * 0.5;
+              npc.x += (tdx / tlen) * npc.speed * 0.5 * _npcSpeedMod;
+              npc.y += (tdy / tlen) * npc.speed * 0.5 * _npcSpeedMod;
               npc.state = 'walking';
               npc.animTimer++;
               continue;
@@ -5549,6 +5601,15 @@ function updateCrimes(dt) {
   var ngMult = 1 + game.ngPlusLevel * 0.3;
   var interval = rand(20, 45) / diff.crimeFreqMult / ngMult;
 
+  // Crime Spree (Feature 156)
+  if (game.dayCount > 5 && Math.random() < 0.0005 && !game._crimeSpreeActive && !game.activeCrime) {
+    game._crimeSpreeActive = true;
+    game._crimeSpreeCount = rand(3, 5);
+    game._crimeSpreeRemaining = game._crimeSpreeCount;
+    game.crimeSpawnTimer = 0; // Trigger immediate crime
+    showNotification('CRIME SPREE! ' + game._crimeSpreeCount + ' crimes reported!', 'bad');
+  }
+
   if (game.crimeSpawnTimer <= 0 && !game.activeCrime) {
     game.crimeSpawnTimer = interval;
 
@@ -5677,6 +5738,17 @@ function updateCrimes(dt) {
       game.fireEffects = [];
 
       document.getElementById('crime-timer').classList.add('hidden');
+
+      // Crime Spree continuation (Feature 156)
+      if (game._crimeSpreeActive && game._crimeSpreeRemaining > 1) {
+        game._crimeSpreeRemaining--;
+        game.crimeSpawnTimer = rand(2, 5); // Next crime spawns quickly
+        showNotification('Crime spree: ' + game._crimeSpreeRemaining + ' more!', 'bad');
+      } else if (game._crimeSpreeActive) {
+        game._crimeSpreeActive = false;
+        game._crimeSpreeRemaining = 0;
+        showNotification('Crime spree defeated!', 'good');
+      }
       return;
     }
 
@@ -5684,6 +5756,11 @@ function updateCrimes(dt) {
     if (crime.timeRemaining <= 0) {
       game.activeCrime = null;
       game.crimesIgnored++;
+      // End crime spree on failure
+      if (game._crimeSpreeActive) {
+        game._crimeSpreeActive = false;
+        game._crimeSpreeRemaining = 0;
+      }
       game.reputation = clamp(game.reputation - Math.round(crime.type.repLoss * diff.repLossMult), 0, REPUTATION_MAX);
       showNotification('Crime went unresolved! -' + crime.type.repLoss + ' Rep');
       audio.playBad();
@@ -5849,6 +5926,7 @@ function updateTime(dt) {
   if (game.reputation <= 0 && !game._cheatMode) {
     game.state = 'gameover';
     game.gameOverReason = 'Your reputation hit rock bottom. The town ran you out.';
+    onPlayerDeath();
   }
 }
 
@@ -6144,7 +6222,8 @@ function updateAchievements() {
     if (unlocked) {
       game.achievements.push(ach.id);
       showNotification('Achievement Unlocked: ' + ach.icon + ' ' + ach.name);
-      audio.playVictory();
+      // Achievement Fanfare (Feature 177)
+      triggerAchievementFanfare(ach.name);
       addJournalEntry('Earned badge: ' + ach.name + '.');
     }
   }
@@ -6437,7 +6516,16 @@ function saveGame() {
     noDamageDays: game.noDamageDays,
     tutorialShown: game.tutorialShown,
     visitedBuildings: visitedArr,
-    rank: game.rank
+    rank: game.rank,
+    // New features save data
+    statPoints: game.statPoints || null,
+    fogOfWar: game._fogOfWar || {},
+    fogExplored: game._fogExplored || 0,
+    notifLog: game._notifLog || [],
+    speedrunTimer: game._speedrunTimer || null,
+    deathCount: game._deathCount || 0,
+    xp: game.xp || 0,
+    level: game.level || 1
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   showNotification('Game saved!');
@@ -6490,6 +6578,16 @@ function loadGame() {
     game.noDamageDays = data.noDamageDays || 0;
     game.tutorialShown = data.tutorialShown || {};
     game.rank = data.rank || 'Deputy';
+
+    // New features load data
+    game.statPoints = data.statPoints || null;
+    game._fogOfWar = data.fogOfWar || {};
+    game._fogExplored = data.fogExplored || 0;
+    game._notifLog = data.notifLog || [];
+    game._speedrunTimer = data.speedrunTimer || null;
+    game._deathCount = data.deathCount || 0;
+    game.xp = data.xp || 0;
+    game.level = data.level || 1;
 
     if (data.npcstalkedTo) {
       game.npcstalkedTo = new Set(data.npcstalkedTo);
@@ -6641,6 +6739,18 @@ function initGame(difficulty, ngPlus) {
   game.currentWeapon = 'revolver';
   game.mounted = false;
 
+  // New features init
+  game.statPoints = null; // created on first level up (Feature 133)
+  game._fogOfWar = {}; // Feature 118
+  game._fogExplored = 0;
+  game._autoSaveTimer = 0; // Feature 191
+  game._notifLog = []; // Feature 188
+  game._deathCount = 0; // Feature 198
+  game._crimeSpreeActive = false; // Feature 156
+  game._crimeSpreeRemaining = 0;
+  game._speedrunTimer = null; // Feature 185
+  game._achievementFanfare = null; // Feature 177
+
   // Spawn horse at stables
   var stable = null;
   for (var si = 0; si < game.buildings.length; si++) {
@@ -6686,6 +6796,9 @@ function initGame(difficulty, ngPlus) {
     applyCheatCode();
     cheatActivated = false;
   }
+
+  // Apply legacy perks (Feature 141)
+  applyLegacyPerks();
 
   updateXPBar();
 }
@@ -6844,7 +6957,7 @@ function updateStreak() {
 // --- XP & Level System ---
 // Earn XP from everything, level up for permanent bonuses
 var XP_PER_LEVEL = 100;
-var LEVEL_CAP = 50;
+var LEVEL_CAP = 100;
 
 function addXP(amount) {
   if (!game.xp) game.xp = 0;
@@ -6862,7 +6975,8 @@ function addXP(amount) {
 }
 
 function xpForLevel(level) {
-  return XP_PER_LEVEL + (level - 1) * 20; // 100, 120, 140, 160...
+  if (level <= 50) return XP_PER_LEVEL + (level - 1) * 20; // 100, 120, 140...
+  return 1000 + (level - 50) * 50; // steeper after 50
 }
 
 function onLevelUp() {
@@ -6887,6 +7001,11 @@ function onLevelUp() {
     game.totalGoldEarned += goldBonus;
     showNotification('Level ' + game.level + ' bonus: +$' + goldBonus, 'good');
   }
+
+  // Stat points (Feature 133)
+  if (!game.statPoints) game.statPoints = { grit: 0, aim: 0, speed: 0, charisma: 0, luck: 0, unspent: 0 };
+  game.statPoints.unspent += 2;
+  showNotification('+2 Stat Points! Open Journal to assign.', 'good');
 }
 
 function updateXPBar() {
@@ -7055,6 +7174,15 @@ function showGameOver() {
     ngBtn.style.display = '';
     ngBtn.onclick = function() {
       screen.classList.add('hidden');
+      // Feature 141: Legacy Perk selection on NG+
+      var unlockedPerks = getLegacyPerks();
+      var availablePerks = LEGACY_PERKS.filter(function(p) { return unlockedPerks.indexOf(p.id) === -1; });
+      if (availablePerks.length > 0) {
+        var perk = availablePerks[rand(0, availablePerks.length - 1)];
+        addLegacyPerk(perk.id);
+        showNotification('Legacy Perk Unlocked: ' + perk.name + ' — ' + perk.desc, 'good');
+      }
+      // Feature 200: NG+ Enhanced — carry more data
       var ngData = {
         level: game.ngPlusLevel + 1,
         rank: game.rank,
@@ -7064,11 +7192,22 @@ function showGameOver() {
         hasShotgun: game.hasShotgun,
         hasRifle: game.hasRifle,
         achievements: game.achievements.slice(),
-        tutorialShown: Object.assign({}, game.tutorialShown)
+        tutorialShown: Object.assign({}, game.tutorialShown),
+        // NG+ Enhanced carry-overs
+        fogOfWar: game._fogOfWar || {},
+        fogExplored: game._fogExplored || 0,
+        statPoints: game.statPoints || null,
+        npcstalkedTo: Array.from(game.npcstalkedTo || []),
       };
       initGame(game.difficulty, ngData);
+      // Feature 200: Apply NG+ enhanced carry-overs
+      if (ngData.fogOfWar) { game._fogOfWar = ngData.fogOfWar; game._fogExplored = ngData.fogExplored; }
+      if (ngData.statPoints) game.statPoints = ngData.statPoints;
+      if (ngData.npcstalkedTo) game.npcstalkedTo = new Set(ngData.npcstalkedTo);
+      // NG+ enemies get +50% per cycle
+      applyLegacyPerks();
       game.state = 'playing';
-      showNotification('New Game+ (Level ' + game.ngPlusLevel + ') - Outlaws are tougher!');
+      showNotification('New Game+ (Level ' + game.ngPlusLevel + ') - Outlaws are ' + (50 * game.ngPlusLevel) + '% tougher!');
       addJournalEntry('Started New Game+ level ' + game.ngPlusLevel + '.');
     };
   } else {
@@ -7087,6 +7226,173 @@ function getTimeString(t) {
   var ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12 || 12;
   return hours + ':' + minutes.toString().padStart(2, '0') + ' ' + ampm;
+}
+
+// ─────────────────────────────────────────────
+// §NEW  FEATURES V2 (126-200)
+// ─────────────────────────────────────────────
+
+// Feature 177: Achievement Fanfare
+game._achievementFanfare = null;
+function triggerAchievementFanfare(name) {
+  game._achievementFanfare = { name: name, timer: 3, alpha: 1 };
+  audio.playVictory();
+  triggerShake(6, 20);
+}
+
+// Feature 183: Jukebox — procedural saloon music themes
+var JUKEBOX_THEMES = [
+  { name: 'Dusty Trail',     notes: [261,293,329,349,392,349,329,293], tempo: 0.25 },
+  { name: 'High Noon',       notes: [392,349,329,293,261,293,329,392], tempo: 0.2 },
+  { name: 'Saloon Swing',    notes: [329,349,392,440,392,349,329,261], tempo: 0.18 },
+  { name: 'Outlaw Blues',    notes: [220,261,293,261,220,196,220,261], tempo: 0.3 },
+  { name: 'Gold Rush',       notes: [349,392,440,493,523,493,440,392], tempo: 0.15 },
+  { name: 'Sunset Waltz',    notes: [293,329,392,329,293,261,293,329], tempo: 0.28 },
+  { name: 'Canyon Echo',     notes: [440,392,349,329,293,329,349,440], tempo: 0.22 },
+  { name: 'Frontier March',  notes: [261,329,392,523,392,329,261,196], tempo: 0.2 },
+];
+game._jukeboxPlaying = false;
+game._jukeboxTheme = 0;
+function playJukeboxTheme(themeIdx) {
+  if (!audio || !audio.ctx) return;
+  var theme = JUKEBOX_THEMES[themeIdx % JUKEBOX_THEMES.length];
+  game._jukeboxPlaying = true;
+  game._jukeboxTheme = themeIdx;
+  var actx = audio.ctx;
+  var now = actx.currentTime;
+  for (var ni = 0; ni < theme.notes.length; ni++) {
+    var osc = actx.createOscillator();
+    var gain = actx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = theme.notes[ni];
+    gain.gain.setValueAtTime(0.08, now + ni * theme.tempo);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (ni + 1) * theme.tempo);
+    osc.connect(gain);
+    gain.connect(actx.destination);
+    osc.start(now + ni * theme.tempo);
+    osc.stop(now + (ni + 1) * theme.tempo);
+  }
+  setTimeout(function() { game._jukeboxPlaying = false; }, theme.notes.length * theme.tempo * 1000 + 200);
+}
+
+// Feature 189: Control Rebinding
+var KEY_BINDINGS = {
+  move_up: 'KeyW', move_down: 'KeyS', move_left: 'KeyA', move_right: 'KeyD',
+  shoot: 'Space', melee: 'KeyF', interact: 'KeyE', dodge: 'KeyQ',
+  journal: 'KeyJ', mount: 'KeyH', lasso: 'KeyR'
+};
+// Load saved bindings
+(function() {
+  try {
+    var saved = localStorage.getItem('sheriff_keybindings');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      for (var k in parsed) {
+        if (KEY_BINDINGS.hasOwnProperty(k)) KEY_BINDINGS[k] = parsed[k];
+      }
+    }
+  } catch(e) {}
+})();
+function saveKeyBindings() {
+  localStorage.setItem('sheriff_keybindings', JSON.stringify(KEY_BINDINGS));
+}
+
+// Feature 141: Legacy Perks — permanent perks across NG+ runs
+var LEGACY_PERKS = [
+  { id: 'tough_skin',    name: 'Tough Skin',    desc: '+2 starting HP',        apply: function() { game.player.maxHp += 2; game.player.hp += 2; } },
+  { id: 'deep_pockets',  name: 'Deep Pockets',  desc: '+50 starting gold',     apply: function() { game.gold += 50; game.totalGoldEarned += 50; } },
+  { id: 'quick_loader',  name: 'Quick Loader',  desc: '+12 starting ammo',     apply: function() { game.ammo += 12; } },
+  { id: 'silver_tongue', name: 'Silver Tongue',  desc: '+10 starting rep',      apply: function() { game.reputation = Math.min(100, game.reputation + 10); } },
+  { id: 'lucky_star',    name: 'Lucky Star',    desc: 'Better loot drops',     apply: function() { game._luckyPerk = true; } },
+  { id: 'iron_will',     name: 'Iron Will',     desc: 'Slower rep decay',      apply: function() { game._ironWillPerk = true; } },
+];
+function getLegacyPerks() {
+  try {
+    return JSON.parse(localStorage.getItem('sheriff_legacy_perks') || '[]');
+  } catch(e) { return []; }
+}
+function addLegacyPerk(perkId) {
+  var perks = getLegacyPerks();
+  if (perks.indexOf(perkId) === -1) {
+    perks.push(perkId);
+    localStorage.setItem('sheriff_legacy_perks', JSON.stringify(perks));
+  }
+}
+function applyLegacyPerks() {
+  var perks = getLegacyPerks();
+  for (var pi = 0; pi < LEGACY_PERKS.length; pi++) {
+    if (perks.indexOf(LEGACY_PERKS[pi].id) !== -1) {
+      LEGACY_PERKS[pi].apply();
+    }
+  }
+}
+
+// Feature 198: Dynamic Difficulty Hints
+var GAMEPLAY_TIPS = [
+  'Use cover behind buildings to avoid outlaw bullets.',
+  'Arrest outlaws for more reputation than killing them.',
+  'Visit the General Store to buy Health Tonics.',
+  'Ride your horse (H) to reach crimes faster.',
+  'The Blacksmith sells armor and weapon upgrades.',
+  'Dodge (Q) has a brief invincibility window.',
+  'Night crimes are more dangerous but give more rewards.',
+  'Talk to NPCs to discover side missions.',
+  'Save your game often — use the Pause menu.',
+  'Melee (F) saves ammo and works well up close.',
+];
+function onPlayerDeath() {
+  game._deathCount = (game._deathCount || 0) + 1;
+  if (game._deathCount >= 3) {
+    showNotification('TIP: ' + GAMEPLAY_TIPS[rand(0, GAMEPLAY_TIPS.length - 1)]);
+    game._deathCount = 0;
+  }
+}
+
+// Feature 199: End Credits after Syndicate defeat
+function showEndCredits() {
+  var accuracy = game.totalShots > 0 ? Math.round((game.totalHits / game.totalShots) * 100) : 0;
+  var totalTime = Math.floor((game._gameTime || 0) / 60);
+  var creditsHTML = '<div style="position:fixed;inset:0;background:#000;color:#ffd700;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:monospace;animation:creditsFade 1s ease-in">';
+  creditsHTML += '<h1 style="font-size:36px;margin-bottom:10px">SHERIFF SIMULATOR</h1>';
+  creditsHTML += '<h2 style="color:#fff;margin-bottom:20px">THE END</h2>';
+  creditsHTML += '<div style="color:#ccc;text-align:center;line-height:2">';
+  creditsHTML += 'Final Rank: ' + game.rank + '<br>';
+  creditsHTML += 'Days Served: ' + game.daysServed + '<br>';
+  creditsHTML += 'Crimes Resolved: ' + game.crimesResolved + '<br>';
+  creditsHTML += 'Outlaws Arrested: ' + game.outlawsArrested + '<br>';
+  creditsHTML += 'Accuracy: ' + accuracy + '%<br>';
+  creditsHTML += 'Total Gold: $' + game.totalGoldEarned + '<br>';
+  creditsHTML += 'Badges: ' + game.achievements.length + '/' + ACHIEVEMENTS.length + '<br>';
+  creditsHTML += 'Playtime: ' + totalTime + ' minutes<br>';
+  if (game._fogExplored) creditsHTML += 'Map Explored: ' + game._fogExplored + ' zones<br>';
+  if (game.ngPlusLevel) creditsHTML += 'NG+ Level: ' + game.ngPlusLevel + '<br>';
+  creditsHTML += '</div>';
+  creditsHTML += '<p style="color:#888;margin-top:30px;font-size:12px">Thanks for playing!</p>';
+  creditsHTML += '<button onclick="this.parentElement.remove()" style="margin-top:20px;padding:10px 30px;background:#ffd700;color:#000;border:none;cursor:pointer;font-family:monospace;font-size:14px">Continue</button>';
+  creditsHTML += '</div>';
+  var el = document.createElement('div');
+  el.innerHTML = creditsHTML;
+  document.body.appendChild(el.firstChild);
+}
+
+// Feature 192: Quick Restart from auto-save
+function quickRestartFromAutoSave() {
+  var autoSave = localStorage.getItem(SAVE_KEY + '_auto_0') ||
+                 localStorage.getItem(SAVE_KEY + '_auto_1') ||
+                 localStorage.getItem(SAVE_KEY + '_auto_2') ||
+                 localStorage.getItem(SAVE_KEY);
+  if (autoSave) {
+    try {
+      localStorage.setItem(SAVE_KEY, autoSave);
+      loadGame();
+      game.state = 'playing';
+      game._gameOverShown = false;
+      document.getElementById('game-over-screen').classList.add('hidden');
+      showNotification('Loaded auto-save!');
+      return true;
+    } catch(e) { return false; }
+  }
+  return false;
 }
 
 // === END PART 4 ===// === PART 5: MAIN LOOP ===
@@ -7629,6 +7935,60 @@ function render() {
 
   // 17. Day/night overlay
   drawDayNightOverlay(game.time);
+
+  // Fog of War update (Feature 118)
+  if (game._fogOfWar === undefined) {
+    game._fogOfWar = {};
+    game._fogExplored = 0;
+  }
+  if (game.player) {
+    var fogTX = Math.floor(game.player.x / (TILE * 4));
+    var fogTY = Math.floor(game.player.y / (TILE * 4));
+    for (var fy = fogTY - 2; fy <= fogTY + 2; fy++) {
+      for (var fx = fogTX - 2; fx <= fogTX + 2; fx++) {
+        var fogKey = fx + ',' + fy;
+        if (!game._fogOfWar[fogKey]) {
+          game._fogOfWar[fogKey] = true;
+          game._fogExplored++;
+        }
+      }
+    }
+  }
+
+  // Achievement Fanfare overlay (Feature 177)
+  if (game._achievementFanfare && game._achievementFanfare.timer > 0) {
+    var af = game._achievementFanfare;
+    af.alpha = Math.min(1, af.timer);
+    ctx.save();
+    ctx.globalAlpha = af.alpha * 0.3;
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = af.alpha;
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('BADGE EARNED!', canvas.width / 2, canvas.height / 2 - 20);
+    ctx.font = '18px monospace';
+    ctx.fillText(af.name, canvas.width / 2, canvas.height / 2 + 15);
+    ctx.restore();
+    af.timer -= 0.016; // ~1 frame
+    if (af.timer <= 0) game._achievementFanfare = null;
+  }
+
+  // Speedrun Timer display (Feature 185)
+  if (game._speedrunTimer && game._speedrunTimer.active) {
+    var srt = game._speedrunTimer;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(canvas.width - 160, 5, 155, 22);
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'right';
+    var srtMin = Math.floor(srt.elapsed / 60);
+    var srtSec = (srt.elapsed % 60).toFixed(1);
+    ctx.fillText('SR: ' + srtMin + ':' + (srtSec < 10 ? '0' : '') + srtSec, canvas.width - 10, 20);
+    ctx.restore();
+  }
 
   // 18. Draw minimap
   drawMinimap(game);
@@ -8229,6 +8589,7 @@ function gameLoop(timestamp) {
       if (game.player.dead && game.player.hp <= 0 && !game._cheatMode) {
         game.state = 'gameover';
         game.gameOverReason = 'You were gunned down!';
+        onPlayerDeath(); // Feature 198: Dynamic Difficulty Hints
         break;
       }
       particles.update();
@@ -8245,11 +8606,47 @@ function gameLoop(timestamp) {
       if (typeof updateOffice === 'function') updateOffice(dt);
       if (typeof updateCorruption === 'function') updateCorruption(dt);
       if (typeof updateFeatures === 'function') updateFeatures(dt);
+      if (typeof updateTowns === 'function') updateTowns(dt);
+      if (typeof updateFeaturesV2 === 'function') updateFeaturesV2(dt);
+
+      // Auto-save every 5 minutes (Feature 191)
+      game._autoSaveTimer = (game._autoSaveTimer || 0) + dt;
+      if (game._autoSaveTimer > 300) {
+        game._autoSaveTimer = 0;
+        if (!game._autoSaveSlot) game._autoSaveSlot = 0;
+        game._autoSaveSlot = (game._autoSaveSlot + 1) % 3;
+        var slotKey = SAVE_KEY + '_auto_' + game._autoSaveSlot;
+        saveGame();
+        var autoData = localStorage.getItem(SAVE_KEY);
+        if (autoData) localStorage.setItem(slotKey, autoData);
+        showNotification('Auto-saved (slot ' + (game._autoSaveSlot + 1) + ')');
+      }
+
+      // Speedrun Timer update (Feature 185)
+      if (game._speedrunTimer && game._speedrunTimer.active) {
+        game._speedrunTimer.elapsed += dt;
+      }
+
       render();
       // Render extension systems
       if (typeof renderOfficeOverlay === 'function') renderOfficeOverlay();
       if (typeof renderCorruptionOverlay === 'function') renderCorruptionOverlay();
       if (typeof renderFeaturesOverlay === 'function') renderFeaturesOverlay();
+      if (typeof renderTownsOverlay === 'function') renderTownsOverlay();
+      if (typeof renderFeaturesV2Overlay === 'function') renderFeaturesV2Overlay();
+
+      // F9 -> toggle speedrun timer (Feature 185)
+      if (consumeKey('F9')) {
+        if (!game._speedrunTimer) game._speedrunTimer = { active: false, elapsed: 0, splits: {} };
+        game._speedrunTimer.active = !game._speedrunTimer.active;
+        if (game._speedrunTimer.active) {
+          game._speedrunTimer.elapsed = 0;
+          game._speedrunTimer.splits = {};
+          showNotification('Speedrun Timer: ON');
+        } else {
+          showNotification('Speedrun Timer: OFF (' + Math.floor(game._speedrunTimer.elapsed / 60) + 'm ' + Math.floor(game._speedrunTimer.elapsed % 60) + 's)');
+        }
+      }
 
       // Escape -> pause
       if (consumeKey('Escape')) {
@@ -8577,9 +8974,36 @@ document.getElementById('btn-restart').addEventListener('click', function() {
       initGame();
     }
   }
+  applyLegacyPerks();
   game.state = 'playing';
   seedAmbientParticles();
 });
+
+// 7b. Quick Restart from auto-save (Feature 192)
+(function() {
+  var restartBtn = document.getElementById('btn-restart');
+  if (restartBtn && restartBtn.parentNode) {
+    var autoBtn = document.createElement('button');
+    autoBtn.id = 'btn-load-autosave';
+    autoBtn.className = restartBtn.className;
+    autoBtn.textContent = 'Load Auto-Save';
+    autoBtn.style.display = 'none';
+    restartBtn.parentNode.insertBefore(autoBtn, restartBtn.nextSibling);
+    autoBtn.addEventListener('click', function() {
+      quickRestartFromAutoSave();
+      seedAmbientParticles();
+    });
+    // Show/hide based on auto-save existence
+    var origShowGO = showGameOver;
+    showGameOver = function() {
+      origShowGO();
+      var hasAuto = localStorage.getItem(SAVE_KEY + '_auto_0') ||
+                    localStorage.getItem(SAVE_KEY + '_auto_1') ||
+                    localStorage.getItem(SAVE_KEY + '_auto_2');
+      autoBtn.style.display = hasAuto ? '' : 'none';
+    };
+  }
+})();
 
 // 8. New Game+ button
 var ngPlusBtn = document.getElementById('btn-ng-plus');
@@ -8587,6 +9011,14 @@ if (ngPlusBtn) {
   ngPlusBtn.addEventListener('click', function() {
     document.getElementById('game-over-screen').classList.add('hidden');
     var ngLevel = (game.ngPlusLevel || 0) + 1;
+    // Feature 141: Legacy Perk on NG+
+    var unlockedPerks = getLegacyPerks();
+    var availablePerks = LEGACY_PERKS.filter(function(p) { return unlockedPerks.indexOf(p.id) === -1; });
+    if (availablePerks.length > 0) {
+      var perk = availablePerks[rand(0, availablePerks.length - 1)];
+      addLegacyPerk(perk.id);
+    }
+    // Feature 200: NG+ Enhanced
     var ngData = {
       level: ngLevel,
       rank: game.rank,
@@ -8596,14 +9028,20 @@ if (ngPlusBtn) {
       hasShotgun: game.hasShotgun,
       hasRifle: game.hasRifle,
       achievements: game.achievements ? game.achievements.slice() : [],
-      tutorialShown: Object.assign({}, game.tutorialShown)
+      tutorialShown: Object.assign({}, game.tutorialShown),
+      fogOfWar: game._fogOfWar || {},
+      fogExplored: game._fogExplored || 0,
+      statPoints: game.statPoints || null,
     };
     if (typeof initGame === 'function') {
       initGame(game.difficulty || 'normal', ngData);
     }
+    if (ngData.fogOfWar) { game._fogOfWar = ngData.fogOfWar; game._fogExplored = ngData.fogExplored; }
+    if (ngData.statPoints) game.statPoints = ngData.statPoints;
+    applyLegacyPerks();
     game.state = 'playing';
     seedAmbientParticles();
-    showNotification('New Game+ (Level ' + ngLevel + ') started!');
+    showNotification('New Game+ (Level ' + ngLevel + ') started! Enemies +' + (50 * ngLevel) + '% tougher!');
   });
 }
 
@@ -8638,6 +9076,26 @@ document.querySelectorAll('.jtab').forEach(function(tab) {
         html += '<div class="journal-entry">Crimes Ignored: ' + game.crimesIgnored + '</div>';
         if (game.ngPlusLevel) {
           html += '<div class="journal-entry">NG+ Level: ' + game.ngPlusLevel + '</div>';
+        }
+        if (game._fogExplored) {
+          html += '<div class="journal-entry">Map Zones Explored: ' + game._fogExplored + '</div>';
+        }
+        // Stat Points display (Feature 133)
+        if (game.statPoints && game.statPoints.unspent > 0) {
+          html += '<div class="journal-section"><h4>STAT POINTS (' + game.statPoints.unspent + ' unspent)</h4>';
+          var statNames = ['grit', 'aim', 'speed', 'charisma', 'luck'];
+          for (var si = 0; si < statNames.length; si++) {
+            var sn = statNames[si];
+            html += '<div class="journal-entry">' + sn.charAt(0).toUpperCase() + sn.slice(1) + ': ' + (game.statPoints[sn] || 0) + ' <a href="#" onclick="if(game.statPoints.unspent>0){game.statPoints.' + sn + '++;game.statPoints.unspent--;document.querySelector(\'.jtab[data-tab=stats]\').click();}return false;" style="color:#ffd700">[+]</a></div>';
+          }
+          html += '</div>';
+        } else if (game.statPoints) {
+          html += '<div class="journal-section"><h4>STATS</h4>';
+          var statNames2 = ['grit', 'aim', 'speed', 'charisma', 'luck'];
+          for (var si2 = 0; si2 < statNames2.length; si2++) {
+            html += '<div class="journal-entry">' + statNames2[si2].charAt(0).toUpperCase() + statNames2[si2].slice(1) + ': ' + (game.statPoints[statNames2[si2]] || 0) + '</div>';
+          }
+          html += '</div>';
         }
         html += '</div>';
         break;
@@ -8754,9 +9212,12 @@ if (localStorage.getItem(SAVE_KEY)) {
   document.getElementById('btn-continue').classList.remove('hidden');
 }
 
-// Prevent default on Tab key so it doesn't shift focus
+// Prevent default on Tab and F9 keys
 document.addEventListener('keydown', function(e) {
   if (e.code === 'Tab' && game.state !== 'title') {
+    e.preventDefault();
+  }
+  if (e.code === 'F9') {
     e.preventDefault();
   }
 });

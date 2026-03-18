@@ -59,6 +59,10 @@
         <button class="jtab" data-tab="missions">Missions</button>
         <button class="jtab" data-tab="wanted">Wanted</button>
         <button class="jtab" data-tab="achievements">Badges</button>
+        <button class="jtab" data-tab="empire">Empire</button>
+        <button class="jtab" data-tab="income">Income</button>
+        <button class="jtab" data-tab="lore">Lore</button>
+        <button class="jtab" data-tab="notiflog">Notifications</button>
         <button class="jtab" data-tab="log">Log</button>
       </div>
       <div id="journal-content"></div>
@@ -125,8 +129,109 @@
       <div id="skill-tree-content"></div>
       <button id="skill-tree-close" class="menu-btn">Close [K]</button>
     </div>
+    <div id="travel-map-overlay" class="hidden">
+      <h3>WESTERN TERRITORIES</h3>
+      <canvas id="travelMapCanvas" width="800" height="500"></canvas>
+      <div id="travel-map-info"></div>
+      <div id="travel-map-controls">
+        <span>WASD/Arrows: Select Town | E: Travel | S: Stagecoach | ESC: Close</span>
+      </div>
+    </div>
+    <div id="travel-scene" class="hidden">
+      <canvas id="travelSceneCanvas" width="800" height="400"></canvas>
+      <div id="travel-progress-bar"><div id="travel-progress-fill"></div></div>
+      <div id="travel-tip"></div>
+    </div>
+    <div id="empire-dashboard" class="hidden">
+      <h3>EMPIRE DASHBOARD</h3>
+      <div id="empire-content"></div>
+      <button id="empire-close" class="menu-btn">Close</button>
+    </div>
+    <div id="weapon-wheel" class="hidden">
+      <canvas id="weaponWheelCanvas" width="300" height="300"></canvas>
+    </div>
+    <div id="codex-panel" class="hidden">
+      <h3>CODEX</h3>
+      <div id="codex-tabs">
+        <button class="jtab active" data-codex="npcs">NPCs</button>
+        <button class="jtab" data-codex="weapons">Weapons</button>
+        <button class="jtab" data-codex="locations">Locations</button>
+        <button class="jtab" data-codex="creatures">Creatures</button>
+        <button class="jtab" data-codex="lore">Lore</button>
+      </div>
+      <div id="codex-content"></div>
+      <button id="codex-close" class="menu-btn">Close</button>
+    </div>
+    <div id="class-select" class="hidden">
+      <h3>CHOOSE YOUR PATH</h3>
+      <div id="class-options"></div>
+    </div>
+    <div id="stat-panel" class="hidden">
+      <h3>STAT POINTS</h3>
+      <div id="stat-content"></div>
+      <button id="stat-close" class="menu-btn">Close</button>
+    </div>
+    <div id="crafting-panel" class="hidden">
+      <h3>CRAFTING</h3>
+      <div id="crafting-content"></div>
+      <button id="crafting-close" class="menu-btn">Close</button>
+    </div>
+    <div id="photo-mode-ui" class="hidden">
+      <div id="photo-controls">
+        <span>WASD: Pan | 1: Normal | 2: Sepia | 3: Noir | SPACE: Capture | ESC: Exit</span>
+      </div>
+    </div>
+    <div id="card-collection" class="hidden">
+      <h3>CARD COLLECTION</h3>
+      <div id="card-grid"></div>
+      <button id="card-close" class="menu-btn">Close</button>
+    </div>
+    <div id="evidence-board" class="hidden">
+      <h3>EVIDENCE BOARD</h3>
+      <canvas id="evidenceBoardCanvas" width="600" height="400"></canvas>
+      <button id="evidence-close" class="menu-btn">Close</button>
+    </div>
+    <div id="trial-panel" class="hidden">
+      <h3>COURT TRIAL</h3>
+      <div id="trial-content"></div>
+      <div id="trial-choices"></div>
+    </div>
+    <div id="achievement-fanfare" class="hidden">
+      <div id="fanfare-badge"></div>
+      <div id="fanfare-text"></div>
+    </div>
+    <div id="wanted-stars" class="hidden">
+      <span id="wanted-star-display"></span>
+    </div>
+    <div id="town-name-display" class="hidden">
+      <span id="current-town-name"></span>
+    </div>
+    <div id="boss-hp-bar" class="hidden">
+      <span id="boss-name"></span>
+      <div id="boss-hp-outer"><div id="boss-hp-inner"></div></div>
+    </div>
+    <div id="encounter-ui" class="hidden">
+      <div id="encounter-content"></div>
+      <div id="encounter-choices"></div>
+    </div>
+    <div id="perk-roulette" class="hidden">
+      <h3>PERK ROULETTE</h3>
+      <div id="perk-wheel"></div>
+      <div id="perk-options"></div>
+    </div>
+    <div id="daily-calendar" class="hidden">
+      <h3>DAILY REWARDS</h3>
+      <div id="calendar-grid"></div>
+      <button id="calendar-close" class="menu-btn">Close</button>
+    </div>
+    <div id="speedrun-timer" class="hidden">
+      <span id="speedrun-time">00:00:00</span>
+    </div>
+    <div id="completion-display" class="hidden">
+      <span id="completion-pct">0%</span>
+    </div>
     <div id="controls-hint">
-      WASD: Move | E: Interact | SPACE: Shoot | F: Melee/Fish/Camp | M: Minigames Menu | J: Journal | H: Mount | Q: Dodge | R: Lasso | K: Skills | ESC: Pause
+      WASD: Move | E: Interact | SPACE: Shoot | F: Melee/Fish/Camp | T: Travel Map | J: Journal | H: Mount | Q: Dodge | D: Dual Wield | C: Cover | Z: War Cry | TAB: Weapon Wheel | ESC: Pause
     </div>
   </div>
   <div id="title-screen">
@@ -147,6 +252,7 @@
         <button class="menu-btn diff-btn" data-diff="normal">NORMAL — Balanced experience</button>
         <button class="menu-btn diff-btn" data-diff="hard">HARD — More crimes, tougher outlaws</button>
         <button class="menu-btn diff-btn" data-diff="hardcore">HARDCORE — One life, permadeath</button>
+        <button class="menu-btn diff-btn" data-diff="legendary">LEGENDARY — Permadeath, 4HP, 3x enemies</button>
       </div>
       <div id="controls-panel" class="hidden">
         <div id="controls-scroll">
@@ -225,6 +331,7 @@
     <p id="go-reason"></p>
     <div id="go-stats"></div>
     <button class="menu-btn" id="btn-restart">TRY AGAIN</button>
+    <button class="menu-btn" id="btn-load-autosave" class="hidden">LOAD AUTO-SAVE</button>
     <button class="menu-btn" id="btn-ng-plus" class="hidden">NEW GAME+</button>
   </div>
 </div>
@@ -233,5 +340,6 @@
 <script src="corruption.js"></script>
 <script src="features.js"></script>
 <script src="minigames.js"></script>
+<script src="towns.js"></script>
 </body>
 </html>
