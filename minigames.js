@@ -3533,7 +3533,7 @@ function _updateForgery(dt) {
     if (isForged) {
       m.forgeryScore++;
       addFloatingText(game.player.x, game.player.y - 30, 'FORGERY FOUND!', '#44cc44');
-      audio.playDing();
+      if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
     } else {
       addFloatingText(game.player.x, game.player.y - 30, 'WRONG BILL!', '#cc4444');
       m.forgeryTimer -= 5; // penalty
@@ -3547,8 +3547,11 @@ function _updateForgery(dt) {
     }
   }
   if (consumeKey('Escape')) {
+    var reward = m.forgeryScore * 15;
+    if (reward > 0) { game.gold += reward; game.totalGoldEarned += reward; addXP(m.forgeryScore * 10); }
     m.forgery = false;
     m.activeMinigame = null;
+    m.forgeryCooldown = 60;
     game.state = 'playing';
   }
 }

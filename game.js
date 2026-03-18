@@ -3792,7 +3792,7 @@ function drawMinimap(game) {
         mmCtx.fillStyle = '#ff0000'; // red = hostile
       } else if (npc.type === NPC_TYPES.OUTLAW || npc.type === NPC_TYPES.BOUNTY) {
         mmCtx.fillStyle = '#ff8800'; // orange = outlaw
-      } else if (npc.type === NPC_TYPES.SHOPKEEPER || npc.type === NPC_TYPES.BLACKSMITH) {
+      } else if (npc.type === NPC_TYPES.SHOPKEEPER) {
         mmCtx.fillStyle = '#4488ff'; // blue = merchant
       } else if (npc.hasQuest || (game.activeQuest && game.activeQuest.targetNPC === npc.id)) {
         mmCtx.fillStyle = '#ffff00'; // yellow = quest
@@ -5438,8 +5438,8 @@ function updateNPCs(dt) {
 
     // NPC Schedules v2 (Feature 55): weather & day-of-week modifiers
     var _npcSpeedMod = 1.0;
-    if (game._weather === 'rain' || game._weather === 'storm') _npcSpeedMod *= 0.7;
-    if (game._weather === 'heat') _npcSpeedMod *= 0.85;
+    if ((game._features && game._features.weather) === 'rain' || (game._features && game._features.weather) === 'storm') _npcSpeedMod *= 0.7;
+    if ((game._features && game._features.weather) === 'heat') _npcSpeedMod *= 0.85;
     // Weekend (days 6,7 of each week cycle): NPCs wander more, shops busier
     var _dayOfWeek = ((game.dayCount - 1) % 7) + 1;
     if (_dayOfWeek >= 6) _npcSpeedMod *= 1.15;

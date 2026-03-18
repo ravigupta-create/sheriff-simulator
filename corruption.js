@@ -1639,7 +1639,7 @@ function _updateGamblingDen(dt) {
 
   // Setup gambling den (press G at saloon — handled by corruption 50+ prompt)
   if (!_gamblingDen.active) {
-    if (game.state === 'playing' && consumeKey('KeyJ')) {
+    if (game.state === 'playing' && consumeKey('KeyY')) {
       if ((game.gold || 0) < 100) {
         showNotification('Need $100 to set up a gambling den.');
         return;
@@ -1690,7 +1690,7 @@ function _updateMoonshine(dt) {
   if (corruption < 40) return;
 
   if (!_moonshine.active) {
-    if (game.state === 'playing' && consumeKey('KeyH')) {
+    if (game.state === 'playing' && consumeKey('BracketLeft')) {
       if ((game.gold || 0) < 75) {
         showNotification('Need $75 to build a moonshine still.');
         return;

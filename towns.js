@@ -2326,7 +2326,8 @@ function _renderLieutenantFight() {
   ctx.fillText('LIEUTENANT BATTLE: ' + lt.name, w / 2, 50);
 
   // Lieutenant dialog
-  var line = lt.lines[rand(0, lt.lines.length - 1)];
+  if (lt._dialogIdx === undefined) lt._dialogIdx = rand(0, lt.lines.length - 1);
+  var line = lt.lines[lt._dialogIdx];
   ctx.fillStyle = '#e8d8b8';
   ctx.font = 'italic 14px serif';
   ctx.fillText('"' + line + '"', w / 2, 80);
@@ -3443,6 +3444,7 @@ function _updateSyndicate(dt) {
         addJournalEntry('Defeated The Syndicate! You are the undisputed Marshal of the territory!');
         if (audio && audio.playVictory) audio.playVictory();
         triggerShake(10, 40);
+        if (typeof showEndCredits === 'function') showEndCredits();
       } else {
         game._towns.syndicateActive = false;
         showNotification('The Syndicate proved too powerful... for now.', 'bad');

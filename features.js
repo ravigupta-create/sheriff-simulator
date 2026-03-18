@@ -373,7 +373,7 @@ function updateFeatures(dt) {
     if (f.smokeActive[si].life > 0) f.smokeActive[smWrite++] = f.smokeActive[si];
   }
   f.smokeActive.length = smWrite;
-  if (f.smokeBombs > 0 && game.state === 'playing' && consumeKey('Digit4')) {
+  if (f.smokeBombs > 0 && game.state === 'playing' && consumeKey('Minus')) {
     f.smokeBombs--;
     f.smokeActive.push({ x: p.x, y: p.y, life: 5, radius: 60 });
     showNotification('Smoke bomb! (' + f.smokeBombs + ' left)');
@@ -3583,7 +3583,7 @@ function _updateCombatV2(dt, f2, p, blocked) {
 
   // 34: Shield Bash — Q near enemy (only if has shield)
   if (f2.shieldBashCooldown > 0) f2.shieldBashCooldown -= dt;
-  if (!blocked && f2.hasShield && f2.shieldBashCooldown <= 0 && consumeKey('KeyQ')) {
+  if (!blocked && f2.hasShield && f2.shieldBashCooldown <= 0 && keys['ShiftLeft'] && consumeKey('KeyQ')) {
     // Only if not dodge-rolling (V1 uses Q for dodge)
     var bashTarget = null, bashDist = 40;
     for (var sbi = 0; sbi < game.npcs.length; sbi++) {
@@ -3697,7 +3697,7 @@ function _updateCombatV2(dt, f2, p, blocked) {
   }
 
   // 39: Dual Pistols — D toggle
-  if (!blocked && consumeKey('KeyD')) {
+  if (!blocked && keys['ShiftLeft'] && consumeKey('KeyD')) {
     f2.dualPistols = !f2.dualPistols;
     showNotification(f2.dualPistols ? 'Dual Pistols: ON (2x fire rate, less accuracy)' : 'Dual Pistols: OFF');
   }
@@ -3922,6 +3922,12 @@ function _updateCombatV2(dt, f2, p, blocked) {
   if (!f2.lastStandActive && p.hp <= 1 && p.hp > 0) {
     f2.lastStandActive = true;
     f2.lastStandTimer = 5;
+    // Mark all currently-dead hostiles so only NEW kills during Last Stand grant healing
+    for (var lsm = 0; lsm < game.npcs.length; lsm++) {
+      if (game.npcs[lsm].state === 'dead' && game.npcs[lsm].hostile) {
+        game.npcs[lsm]._lastStandChecked = true;
+      }
+    }
     showNotification('LAST STAND! 5 seconds of 2x damage!');
   }
   // Last stand kill = recover HP
@@ -4321,7 +4327,7 @@ function _updateNPCSocial(dt, f2, p, blocked) {
       }
     }
   }
-  if (!blocked && !f2.posseActive && f2.posseCooldown <= 0 && game.level >= 15 && consumeKey('KeyP')) {
+  if (!blocked && !f2.posseActive && f2.posseCooldown <= 0 && game.level >= 15 && keys['ShiftLeft'] && consumeKey('KeyP')) {
     f2.posseActive = true;
     f2.posseTimer = 60;
     f2.posseCooldown = 300;
@@ -4948,9 +4954,9 @@ function _updateEconomy(dt, f2, p, blocked) {
   }
 
   // 89: Crafting System — open/close
-  if (!blocked && consumeKey('KeyK')) {
+  if (!blocked && keys['ShiftLeft'] && consumeKey('KeyN')) {
     f2.craftingOpen = !f2.craftingOpen;
-    showNotification(f2.craftingOpen ? 'Crafting menu opened (1-5 to craft, K to close)' : 'Crafting menu closed');
+    showNotification(f2.craftingOpen ? 'Crafting menu opened (1-5 to craft, Shift+N to close)' : 'Crafting menu closed');
   }
   if (f2.craftingOpen) {
     // Number keys 1-5 to craft recipes
@@ -5236,9 +5242,14 @@ function _updateCrimeFeatures(dt, f2, p, blocked) {
       var vdd = Math.sqrt(vdx * vdx + vdy * vdy);
       if (vdd > 20) { vig.x += (vdx / vdd) * 2; vig.y += (vdy / vdd) * 2; }
       else {
-        vigTarget.hp -= 2;
-        addFloatingText(vigTarget.x, vigTarget.y - 8, '-2', '#ffaa00');
-        if (vigTarget.hp <= 0) { vigTarget.state = 'dead'; }
+        if (!vig._atkCd) vig._atkCd = 0;
+        if (vig._atkCd > 0) { vig._atkCd -= dt; }
+        else {
+          vigTarget.hp -= 2;
+          addFloatingText(vigTarget.x, vigTarget.y - 8, '-2', '#ffaa00');
+          if (vigTarget.hp <= 0) { vigTarget.state = 'dead'; }
+          vig._atkCd = 1.0;
+        }
       }
     }
     if (!vigTarget) {

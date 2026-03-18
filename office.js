@@ -6030,7 +6030,7 @@ function _updateInterrogation(dt) {
 
   if (!interr.active) {
     // Check if near jail cells and pressing E on a prisoner
-    if (office.active && office.nearFurniture === 'jailCells' && office.prisoners.length > 0) {
+    if (office.active && office.nearFurniture && office.nearFurniture.key === 'jailCells' && office.prisoners.length > 0) {
       if (typeof consumeKey === 'function' && consumeKey('KeyI')) {
         let pIdx = office.selectedPrisoner || 0;
         if (pIdx >= 0 && pIdx < office.prisoners.length) {
@@ -6577,7 +6577,7 @@ function _updateEvidenceBoard(dt) {
   if (!eb) return;
 
   if (!eb.viewing) {
-    if (office.active && office.nearFurniture === 'caseBoard' && consumeKey('KeyV')) {
+    if (office.active && office.nearFurniture && office.nearFurniture.key === 'caseBoard' && consumeKey('KeyV')) {
       eb.viewing = true;
       eb.selectedItem = eb.items.length > 0 ? 0 : -1;
       eb.connectMode = false;
@@ -7014,7 +7014,7 @@ function _updateJailSecurity(dt) {
   }
 
   // Open upgrade menu at jail
-  if (office.active && office.nearFurniture === 'jailCells' && consumeKey('KeyU')) {
+  if (office.active && office.nearFurniture && office.nearFurniture.key === 'jailCells' && consumeKey('KeyU')) {
     js.upgradeMenu = true;
     js.selectedUpgrade = 0;
     return;
@@ -7191,7 +7191,7 @@ function _updateColdCases(dt) {
 
   if (!cc.viewingCases) {
     // Open cold case files at records/bookshelf
-    if (office.active && (office.nearFurniture === 'records' || office.nearFurniture === 'bookshelf') && consumeKey('KeyF')) {
+    if (office.active && office.nearFurniture && (office.nearFurniture.key === 'records' || office.nearFurniture.key === 'bookshelf') && consumeKey('KeyF')) {
       cc.viewingCases = true;
       cc.selectedCase = 0;
     }
@@ -7385,9 +7385,9 @@ function _updateParole(dt) {
         game.reputation = clamp((game.reputation || 50) - 5, 0, typeof REPUTATION_MAX !== 'undefined' ? REPUTATION_MAX : 100);
         // Spawn hostile NPC
         if (game.npcs && typeof createNPC === 'function') {
-          let npc = createNPC(game.player.x + rand(-150, 150), game.player.y + rand(-150, 150));
+          var px = game.player.x + rand(-150, 150), py = game.player.y + rand(-150, 150);
+          let npc = createNPC('parolee_' + Date.now(), NPC_TYPES.OUTLAW, p.name, Math.floor(px / TILE), Math.floor(py / TILE), null);
           if (npc) {
-            npc.name = p.name;
             npc.hostile = true;
             npc._parolee = true;
             game.npcs.push(npc);
@@ -7399,7 +7399,7 @@ function _updateParole(dt) {
 
   if (!par.viewingParole) {
     // Open parole menu at jail
-    if (office.active && office.nearFurniture === 'jailCells' && office.prisoners.length > 0 && consumeKey('KeyP')) {
+    if (office.active && office.nearFurniture && office.nearFurniture.key === 'jailCells' && office.prisoners.length > 0 && consumeKey('KeyP')) {
       par.viewingParole = true;
       par.selectedPrisoner = 0;
     }
@@ -7772,7 +7772,7 @@ function _updatePrisonLabor(dt) {
   if (!pl) return;
 
   // Toggle at jail
-  if (office.active && office.nearFurniture === 'jailCells' && consumeKey('KeyL')) {
+  if (office.active && office.nearFurniture && office.nearFurniture.key === 'jailCells' && consumeKey('KeyL')) {
     if (office.prisoners.length === 0) {
       showNotification('No prisoners for labor.');
       return;
@@ -7852,7 +7852,7 @@ function _updateLawLibrary(dt) {
   }
 
   if (!lib.viewing) {
-    if (office.active && office.nearFurniture === 'bookshelf' && consumeKey('KeyB')) {
+    if (office.active && office.nearFurniture && office.nearFurniture.key === 'bookshelf' && consumeKey('KeyB')) {
       lib.viewing = true;
       lib.selectedBook = 0;
     }
@@ -8022,16 +8022,16 @@ function _renderOfficeV2() {
   // HUD hints when near furniture
   if (office.active && !_isV2PanelOpen()) {
     let hints = [];
-    if (office.nearFurniture === 'jailCells' && office.prisoners.length > 0) {
+    if (office.nearFurniture && office.nearFurniture.key === 'jailCells' && office.prisoners.length > 0) {
       hints.push('[I] Interrogate  [U] Jail Upgrades  [P] Parole  [L] Prison Labor');
     }
-    if (office.nearFurniture === 'caseBoard') {
+    if (office.nearFurniture && office.nearFurniture.key === 'caseBoard') {
       hints.push('[V] Evidence Board');
     }
-    if (office.nearFurniture === 'bookshelf') {
+    if (office.nearFurniture && office.nearFurniture.key === 'bookshelf') {
       hints.push('[B] Law Library  [F] Cold Cases');
     }
-    if (office.nearFurniture === 'records') {
+    if (office.nearFurniture && office.nearFurniture.key === 'records') {
       hints.push('[F] Cold Cases');
     }
     if (office.sittingAtDesk) {
