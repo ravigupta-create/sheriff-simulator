@@ -136,7 +136,8 @@ function _handleGKeyActions() {
   if (game.state !== 'playing') return;
   // Don't consume G if a minigame or feature is active
   if (typeof _inputBlockedByMinigameOrFeature === 'function' && _inputBlockedByMinigameOrFeature()) return;
-  if (!consumeKey('KeyG')) return;
+  // Check G is pressed but don't consume yet — only consume when an action will happen
+  if (!keysJustPressed || !keysJustPressed['KeyG']) return;
 
   var p = game.player;
   var corruption = game.corruption || 0;
@@ -146,6 +147,7 @@ function _handleGKeyActions() {
   if (corruption >= 41) {
     var shopBuilding = _getPlayerInsideShop();
     if (shopBuilding) {
+      consumeKey('KeyG');
       _attemptSteal(shopBuilding);
       return;
     }
@@ -165,9 +167,11 @@ function _handleGKeyActions() {
   }
 
   if (!nearest) {
-    showNotification('No one nearby to intimidate.');
+    // No one nearby — don't consume G so other systems can use it
     return;
   }
+  // Found a target — now consume G
+  consumeKey('KeyG');
 
   // Shopkeeper/bartender/banker = shakedown
   var isShopNPC = nearest.type === NPC_TYPES.SHOPKEEPER ||
@@ -2050,7 +2054,7 @@ function _updateEvidenceTampering(dt) {
   }
 
   // Open tamper menu at office (KeyX near records)
-  if (typeof office !== 'undefined' && office.active && office.nearFurniture === 'records') {
+  if (typeof office !== 'undefined' && office.active && office.nearFurniture && office.nearFurniture.key === 'records') {
     if ((game.corruption || 0) >= 30 && consumeKey('KeyX')) {
       _tamperMenu = true;
       _tamperCursor = 0;

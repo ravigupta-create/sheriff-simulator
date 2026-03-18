@@ -3991,12 +3991,10 @@ function updateTowns(dt) {
   // Check if input is blocked by other systems
   if (typeof _inputBlockedByMinigameOrFeature === 'function' && _inputBlockedByMinigameOrFeature()) return;
 
-  // T key to open travel map (at town edge)
-  if (consumeKey('KeyT')) {
-    if (_isAtTownEdge()) {
+  // T key to open travel map — only consume T when actually at town edge
+  if (_isAtTownEdge()) {
+    if (consumeKey('KeyT')) {
       _openTravelMap();
-    } else {
-      showNotification('Go to the edge of town to travel (T key).', 'bad');
     }
   }
 

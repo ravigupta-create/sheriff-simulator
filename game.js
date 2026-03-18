@@ -5168,7 +5168,14 @@ function updatePlayer(dt) {
   var dx = 0, dy = 0;
   var _blocked = _inputBlockedByMinigameOrFeature();
 
-  if (!_blocked) {
+  var _featureBlocksMovement = false;
+  if (game._featuresV2 && (game._featuresV2.caveActive || game._featuresV2.photoMode ||
+      game._featuresV2.perkRouletteActive)) _featureBlocksMovement = true;
+  if (game._towns && (game._towns.mapOpen || game._towns.bossFightActive || game._towns.lieutenantFightActive ||
+      game._towns.travelActive || game._towns.travelEncounterActive || game._towns.territoryMapOpen ||
+      game._towns.empireStatsOpen)) _featureBlocksMovement = true;
+
+  if (!_blocked && !_featureBlocksMovement) {
     if (keys['KeyW'] || keys['ArrowUp'])    { dy = -1; p.dir = 1; }
     if (keys['KeyS'] || keys['ArrowDown'])   { dy = 1;  p.dir = 0; }
     if (keys['KeyA'] || keys['ArrowLeft'])   { dx = -1; p.dir = 2; }
@@ -5238,6 +5245,10 @@ function updatePlayer(dt) {
   if (game._minigames && game._minigames.activeMinigame) _featureBlocksShoot = true;
   if (game._featuresV2 && game._featuresV2.perkRouletteActive) _featureBlocksShoot = true;
   if (game._featuresV2 && game._featuresV2.photoMode) _featureBlocksShoot = true;
+  if (game._featuresV2 && (game._featuresV2.caveActive || game._featuresV2.inQuicksand ||
+      game._featuresV2.storyActive || game._featuresV2.meetingActive)) _featureBlocksShoot = true;
+  if (game._towns && (game._towns.bossFightActive || game._towns.lieutenantFightActive ||
+      game._towns.travelEncounterActive || game._towns.travelActive || game._towns.mapOpen)) _featureBlocksShoot = true;
   if (!game.mounted && !_featureBlocksShoot && consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
     if (game.ammo > 0) {
       game.ammo--;
@@ -5310,7 +5321,15 @@ function updatePlayer(dt) {
 
   // Interact
   if (p.interactCooldown > 0) p.interactCooldown--;
-  if (!_blocked && consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
+  var _featureBlocksInteract = false;
+  if (game._featuresV2 && (game._featuresV2.caveActive || game._featuresV2.homeVisitActive ||
+      game._featuresV2.storyActive || game._featuresV2.inTunnel || game._featuresV2.onRooftop ||
+      game._featuresV2.craftingOpen || game._featuresV2.codexOpen || game._featuresV2.photoMode ||
+      game._featuresV2.barterActive)) _featureBlocksInteract = true;
+  if (game._towns && (game._towns.mapOpen || game._towns.bossFightActive || game._towns.lieutenantFightActive ||
+      game._towns.travelActive || game._towns.travelEncounterActive || game._towns.territoryMapOpen ||
+      game._towns.empireStatsOpen || game._towns.townMgmtOpen)) _featureBlocksInteract = true;
+  if (!_blocked && !_featureBlocksInteract && consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
     p.interactCooldown = 15;
 
     if (game.shopOpen) {
@@ -6624,6 +6643,9 @@ function loadGame() {
     game.xp = data.xp || 0;
     game.level = data.level || 1;
 
+    if (data.completedQuests) {
+      game.completedQuests = data.completedQuests.map(function(n) { return typeof n === 'string' ? { name: n } : n; });
+    }
     if (data.npcstalkedTo) {
       game.npcstalkedTo = new Set(data.npcstalkedTo);
     }
@@ -7277,8 +7299,7 @@ function showGameOver() {
       if (ngData.fogOfWar) { game._fogOfWar = ngData.fogOfWar; game._fogExplored = ngData.fogExplored; }
       if (ngData.statPoints) game.statPoints = ngData.statPoints;
       if (ngData.npcstalkedTo) game.npcstalkedTo = new Set(ngData.npcstalkedTo);
-      // NG+ enemies get +50% per cycle
-      applyLegacyPerks();
+      // NG+ enemies get +50% per cycle — applyLegacyPerks() already called inside initGame()
       game.state = 'playing';
       showNotification('New Game+ (Level ' + game.ngPlusLevel + ') - Outlaws are ' + (50 * game.ngPlusLevel) + '% tougher!');
       addJournalEntry('Started New Game+ level ' + game.ngPlusLevel + '.');
@@ -8721,14 +8742,21 @@ function gameLoop(timestamp) {
         }
       }
 
-      // Escape -> pause
-      if (consumeKey('Escape')) {
+      // Escape -> pause (don't consume if towns overlay is open — let towns.js handle it)
+      if (game._towns && (game._towns.mapOpen || game._towns.bossFightActive || game._towns.territoryMapOpen ||
+          game._towns.empireStatsOpen || game._towns.townMgmtOpen)) {
+        // Don't consume Escape here - let towns.js handle it
+      } else if (consumeKey('Escape')) {
         game.state = 'paused';
         document.getElementById('pause-screen').classList.remove('hidden');
       }
-      // J -> journal
+      // J -> journal (don't open if codex is open — features.js handles J for codex)
       if (consumeKey('KeyJ')) {
-        openJournal();
+        if (game._featuresV2 && game._featuresV2.codexOpen) {
+          // Don't open journal — codex is open, features.js will handle closing it
+        } else {
+          openJournal();
+        }
       }
       // M -> minimap toggle or open minigame menu
       if (consumeKey('KeyM')) {
@@ -9047,7 +9075,7 @@ document.getElementById('btn-restart').addEventListener('click', function() {
       initGame();
     }
   }
-  applyLegacyPerks();
+  // applyLegacyPerks() already called inside initGame()
   game.state = 'playing';
   seedAmbientParticles();
 });
@@ -9078,45 +9106,7 @@ document.getElementById('btn-restart').addEventListener('click', function() {
   }
 })();
 
-// 8. New Game+ button
-var ngPlusBtn = document.getElementById('btn-ng-plus');
-if (ngPlusBtn) {
-  ngPlusBtn.addEventListener('click', function() {
-    document.getElementById('game-over-screen').classList.add('hidden');
-    var ngLevel = (game.ngPlusLevel || 0) + 1;
-    // Feature 141: Legacy Perk on NG+
-    var unlockedPerks = getLegacyPerks();
-    var availablePerks = LEGACY_PERKS.filter(function(p) { return unlockedPerks.indexOf(p.id) === -1; });
-    if (availablePerks.length > 0) {
-      var perk = availablePerks[rand(0, availablePerks.length - 1)];
-      addLegacyPerk(perk.id);
-    }
-    // Feature 200: NG+ Enhanced
-    var ngData = {
-      level: ngLevel,
-      rank: game.rank,
-      gold: game.gold,
-      hasVest: game.hasVest,
-      hasSpeedBoots: game.hasSpeedBoots,
-      hasShotgun: game.hasShotgun,
-      hasRifle: game.hasRifle,
-      achievements: game.achievements ? game.achievements.slice() : [],
-      tutorialShown: Object.assign({}, game.tutorialShown),
-      fogOfWar: game._fogOfWar || {},
-      fogExplored: game._fogExplored || 0,
-      statPoints: game.statPoints || null,
-    };
-    if (typeof initGame === 'function') {
-      initGame(game.difficulty || 'normal', ngData);
-    }
-    if (ngData.fogOfWar) { game._fogOfWar = ngData.fogOfWar; game._fogExplored = ngData.fogExplored; }
-    if (ngData.statPoints) game.statPoints = ngData.statPoints;
-    applyLegacyPerks();
-    game.state = 'playing';
-    seedAmbientParticles();
-    showNotification('New Game+ (Level ' + ngLevel + ') started! Enemies +' + (50 * ngLevel) + '% tougher!');
-  });
-}
+// 8. New Game+ button — handled by showGameOver() onclick, no duplicate addEventListener needed
 
 // 9. Journal close
 document.getElementById('journal-close').addEventListener('click', function() {

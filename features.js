@@ -5595,8 +5595,8 @@ function _updateRPGPolish(dt, f2, p, blocked) {
   if (game.gold >= 1000 && f2.titles.indexOf('Wealthy') === -1) f2.titles.push('Wealthy');
   if (game.level >= 25 && f2.titles.indexOf('Veteran') === -1) f2.titles.push('Veteran');
 
-  // 187: Codex/Encyclopedia — toggle
-  if (!blocked && consumeKey('KeyJ')) {
+  // 187: Codex/Encyclopedia — toggle (Backquote key to avoid conflict with Journal)
+  if (!blocked && consumeKey('Backquote')) {
     f2.codexOpen = !f2.codexOpen;
   }
   // Auto-populate codex
