@@ -356,6 +356,22 @@ function initTowns() {
     // previous game state (for overlay restoration)
     _prevState: null,
   };
+
+  // Apply cheat mode to towns if active
+  if (game._cheatMode) {
+    for (var ctid in game._towns.towns) {
+      game._towns.towns[ctid].unlocked = true;
+      game._towns.towns[ctid].controlled = true;
+      game._towns.towns[ctid].visited = true;
+      game._towns.towns[ctid].prosperity = 80;
+      game._towns.towns[ctid].reputation = 100;
+    }
+    game._towns.railroadBuilt = true;
+    for (var cbid in game._towns.bossStates) {
+      game._towns.bossStates[cbid].defeated = true;
+      game._towns.bossStates[cbid].influence = 0;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────

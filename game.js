@@ -5329,6 +5329,20 @@ function updatePlayer(dt) {
   if (game._towns && (game._towns.mapOpen || game._towns.bossFightActive || game._towns.lieutenantFightActive ||
       game._towns.travelActive || game._towns.travelEncounterActive || game._towns.territoryMapOpen ||
       game._towns.empireStatsOpen || game._towns.townMgmtOpen)) _featureBlocksInteract = true;
+  // Let V2 features claim E key when player is near special objects (caves, tunnels, props, crime network, etc.)
+  if (!_featureBlocksInteract && game._featuresV2) {
+    var f2e = game._featuresV2;
+    // Check proximity to V2 interactables — if near one, skip game.js E handler so V2 gets it
+    var _v2WantsE = false;
+    if (f2e.crimeNetwork) { for (var _ce = 0; _ce < f2e.crimeNetwork.length; _ce++) { if (!f2e.crimeNetwork[_ce].busted && dist(p, f2e.crimeNetwork[_ce]) < 30) _v2WantsE = true; } }
+    if (f2e.caves) { for (var _cv = 0; _cv < f2e.caves.length; _cv++) { if (!f2e.caves[_cv].discovered) continue; if (dist(p, f2e.caves[_cv]) < 35) _v2WantsE = true; } }
+    if (f2e.tunnelLocations) { for (var _tl = 0; _tl < f2e.tunnelLocations.length; _tl++) { var _tun = f2e.tunnelLocations[_tl]; if (dist(p, {x:_tun.x1,y:_tun.y1}) < 30 || dist(p, {x:_tun.x2,y:_tun.y2}) < 30) _v2WantsE = true; } }
+    if (f2e.propLocations) { for (var _pr = 0; _pr < f2e.propLocations.length; _pr++) { if (!f2e.propLocations[_pr].found && dist(p, f2e.propLocations[_pr]) < 30) _v2WantsE = true; } }
+    if (f2e.capsuleLocations) { for (var _cp = 0; _cp < f2e.capsuleLocations.length; _cp++) { if (!f2e.capsuleLocations[_cp].found && dist(p, f2e.capsuleLocations[_cp]) < 30) _v2WantsE = true; } }
+    if (f2e.skullLocations) { for (var _sk = 0; _sk < f2e.skullLocations.length; _sk++) { if (!f2e.skullLocations[_sk].found && dist(p, f2e.skullLocations[_sk]) < 30) _v2WantsE = true; } }
+    if (f2e.oasisLocations) { for (var _oa = 0; _oa < f2e.oasisLocations.length; _oa++) { if (!f2e.oasisLocations[_oa].used && dist(p, f2e.oasisLocations[_oa]) < 30) _v2WantsE = true; } }
+    if (_v2WantsE) _featureBlocksInteract = true;
+  }
   if (!_blocked && !_featureBlocksInteract && consumeKey('KeyE') && p.interactCooldown <= 0 && game.state === 'playing') {
     p.interactCooldown = 15;
 
@@ -6921,7 +6935,25 @@ function applyCheatCode() {
   game.level = 50;
   game.rank = 'Wyatt Earp';
   game._cheatMode = true; // bullets pass through innocents
-  showNotification('CHEAT ACTIVATED: Max everything!', 'good');
+  // Unlock and control all towns
+  if (game._towns && game._towns.towns) {
+    for (var tid in game._towns.towns) {
+      game._towns.towns[tid].unlocked = true;
+      game._towns.towns[tid].controlled = true;
+      game._towns.towns[tid].visited = true;
+      game._towns.towns[tid].prosperity = 80;
+      game._towns.towns[tid].reputation = 100;
+    }
+    game._towns.railroadBuilt = true;
+    // Defeat all bosses
+    if (game._towns.bossStates) {
+      for (var bid in game._towns.bossStates) {
+        game._towns.bossStates[bid].defeated = true;
+        game._towns.bossStates[bid].influence = 0;
+      }
+    }
+  }
+  showNotification('CHEAT ACTIVATED: Max everything + all towns!', 'good');
   addJournalEntry('A mysterious power surges through you...');
 }
 
