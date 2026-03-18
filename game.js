@@ -1347,6 +1347,27 @@ function generateNPCs(buildings) {
   return npcs;
 }
 
+// Spawn a replacement townsperson when one is killed or arrested
+function spawnReplacementTownsperson() {
+  var names = NPC_NAMES.townsperson;
+  var name = names[rand(0, names.length - 1)];
+  // Spawn along a random road
+  var tx, ty;
+  var roadChoice = rand(0, 3);
+  if (roadChoice === 0) { tx = rand(2, MAP_W - 3); ty = rand(28, 31); }
+  else if (roadChoice === 1) { tx = rand(38, 41); ty = rand(2, MAP_H - 3); }
+  else if (roadChoice === 2) { tx = rand(2, MAP_W - 3); ty = rand(15, 16); }
+  else { tx = rand(2, MAP_W - 3); ty = rand(43, 44); }
+  var npc = createNPC(game.npcs.length, NPC_TYPES.TOWNSPERSON, name, tx, ty, null);
+  npc.schedule = [
+    { startHour: 7, endHour: 12, buildingType: BUILDING_TYPES.GENERAL },
+    { startHour: 12, endHour: 18, buildingType: null },
+    { startHour: 18, endHour: 22, buildingType: BUILDING_TYPES.SALOON },
+    { startHour: 22, endHour: 7, buildingType: BUILDING_TYPES.HOUSE },
+  ];
+  game.npcs.push(npc);
+}
+
 // ─────────────────────────────────────────────
 // §C  CRIME SYSTEM
 // ─────────────────────────────────────────────
@@ -1974,6 +1995,7 @@ class BulletSystem {
                 gameState.reputation = clamp((gameState.reputation || 50) - 15, 0, REPUTATION_MAX);
                 addFloatingText(npc.x, npc.y - 20, '-15 REP', '#ff4444');
                 showNotification('You killed an innocent!', 'bad');
+                if (npc.type === NPC_TYPES.TOWNSPERSON) spawnReplacementTownsperson();
               }
             } else {
               gameState.stats = gameState.stats || {};
@@ -4513,6 +4535,7 @@ function handleDialogChoice(action, npc) {
       showNotification('Arrested ' + npc.name + ' for "' + fakeCrime + '"! -10 Rep, +5 Corruption');
       addJournalEntry('Wrongfully arrested civilian ' + npc.name + ' for "' + fakeCrime + '".');
       if (typeof audio !== 'undefined' && typeof audio.playBad === 'function') audio.playBad();
+      if (npc.type === NPC_TYPES.TOWNSPERSON) spawnReplacementTownsperson();
       closeDialog();
       break;
   }
@@ -5061,6 +5084,7 @@ function playerMelee() {
           addPrisoner(npc.name, 'Wrongful Arrest', npc);
           showNotification('You arrested an innocent! -15 Rep');
           audio.playBad();
+          if (npc.type === NPC_TYPES.TOWNSPERSON) spawnReplacementTownsperson();
         }
       } else if (npc.hp === 1 && (npc.hostile || npc.type === NPC_TYPES.OUTLAW)) {
         // Auto-arrest at 1 HP
@@ -5404,6 +5428,9 @@ function updateNPCs(dt) {
         }
       }
     }
+
+    // Townspeople are never hostile
+    if (npc.hostile && npc.type === NPC_TYPES.TOWNSPERSON) npc.hostile = false;
 
     // Hostile NPC behavior
     if (npc.hostile && game.state === 'playing') {
