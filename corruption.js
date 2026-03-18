@@ -2198,3 +2198,45 @@ if (typeof window !== 'undefined') {
   window._addWantedStars = _addWantedStars;
   window._blackMarketInventory = _blackMarketInventory;
 }
+
+// ── Save/Load helpers for corruption V2 state ──
+function saveCorruptionV2() {
+  if (!_corruptionV2Init) return null;
+  return {
+    wantedStars: _wantedStars,
+    wantedDecayTimer: _wantedDecayTimer,
+    gamblingDen: _gamblingDen,
+    moonshine: _moonshine,
+    blackMarketSales: _blackMarketSales,
+    blackMarketInventory: _blackMarketInventory,
+    tamperCount: _tamperCount,
+    tamperCooldown: _tamperCooldown,
+    betrayalCooldown: _betrayalCooldown,
+    fedInvestigation: {
+      active: _fedInvestigation.active,
+      timer: _fedInvestigation.timer,
+      phase: _fedInvestigation.phase,
+      selectedOption: _fedInvestigation.selectedOption
+    }
+  };
+}
+
+function loadCorruptionV2(data) {
+  if (!data) return;
+  _corruptionV2Init = true;
+  _wantedStars = data.wantedStars || 0;
+  _wantedDecayTimer = data.wantedDecayTimer || 0;
+  if (data.gamblingDen) _gamblingDen = data.gamblingDen;
+  if (data.moonshine) _moonshine = data.moonshine;
+  _blackMarketSales = data.blackMarketSales || 0;
+  if (data.blackMarketInventory) _blackMarketInventory = data.blackMarketInventory;
+  _tamperCount = data.tamperCount || 0;
+  _tamperCooldown = data.tamperCooldown || 0;
+  _betrayalCooldown = data.betrayalCooldown || 0;
+  if (data.fedInvestigation) {
+    _fedInvestigation.active = data.fedInvestigation.active || false;
+    _fedInvestigation.timer = data.fedInvestigation.timer || 0;
+    _fedInvestigation.phase = data.fedInvestigation.phase || 0;
+    _fedInvestigation.selectedOption = data.fedInvestigation.selectedOption || 0;
+  }
+}

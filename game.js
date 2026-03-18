@@ -6525,7 +6525,40 @@ function saveGame() {
     speedrunTimer: game._speedrunTimer || null,
     deathCount: game._deathCount || 0,
     xp: game.xp || 0,
-    level: game.level || 1
+    level: game.level || 1,
+    // Features V1 state
+    _features: game._features || null,
+    // Features V2 state
+    _featuresV2: game._featuresV2 || null,
+    // Towns state
+    _towns: game._towns || null,
+    // Minigames state
+    _minigames: game._minigames || null,
+    // Office state
+    _office: (typeof office !== 'undefined') ? {
+      prisoners: office.prisoners,
+      completedCases: office.completedCases,
+      upgrades: office.upgrades,
+      deputies: office.deputies,
+      trophies: office.trophies,
+      bookRead: office.bookRead,
+      safeGold: office.safeGold,
+      _v2init: office._v2init || false,
+      _interrogation: office._interrogation || null,
+      _salary: office._salary || null,
+      _csi: office._csi || null,
+      _evidenceBoard: office._evidenceBoard || null,
+      _trial: office._trial || null,
+      _jailSecurity: office._jailSecurity || null,
+      _coldCases: office._coldCases || null,
+      _parole: office._parole || null,
+      _prediction: office._prediction || null,
+      _reports: office._reports || null,
+      _prisonLabor: office._prisonLabor || null,
+      _lawLib: office._lawLib || null
+    } : null,
+    // Corruption V2 state
+    _corruptionV2: (typeof saveCorruptionV2 === 'function') ? saveCorruptionV2() : null
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   showNotification('Game saved!');
@@ -6594,6 +6627,44 @@ function loadGame() {
     }
     if (data.visitedBuildings) {
       game.visitedBuildings = new Set(data.visitedBuildings);
+    }
+
+    // Features V1 state
+    if (data._features) game._features = data._features;
+    // Features V2 state
+    if (data._featuresV2) game._featuresV2 = data._featuresV2;
+    // Towns state
+    if (data._towns) game._towns = data._towns;
+    // Minigames state
+    if (data._minigames) game._minigames = data._minigames;
+    // Office state
+    if (data._office && typeof office !== 'undefined') {
+      office.prisoners = data._office.prisoners || [];
+      office.completedCases = data._office.completedCases || [];
+      office.upgrades = data._office.upgrades || office.upgrades;
+      office.deputies = data._office.deputies || [];
+      office.trophies = data._office.trophies || [];
+      office.bookRead = data._office.bookRead || {};
+      office.safeGold = data._office.safeGold || 0;
+      if (data._office._v2init) {
+        office._v2init = true;
+        office._interrogation = data._office._interrogation || null;
+        office._salary = data._office._salary || null;
+        office._csi = data._office._csi || null;
+        office._evidenceBoard = data._office._evidenceBoard || null;
+        office._trial = data._office._trial || null;
+        office._jailSecurity = data._office._jailSecurity || null;
+        office._coldCases = data._office._coldCases || null;
+        office._parole = data._office._parole || null;
+        office._prediction = data._office._prediction || null;
+        office._reports = data._office._reports || null;
+        office._prisonLabor = data._office._prisonLabor || null;
+        office._lawLib = data._office._lawLib || null;
+      }
+    }
+    // Corruption V2 state
+    if (data._corruptionV2 && typeof loadCorruptionV2 === 'function') {
+      loadCorruptionV2(data._corruptionV2);
     }
 
     return true;
