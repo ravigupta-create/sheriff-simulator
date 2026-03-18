@@ -5236,6 +5236,8 @@ function updatePlayer(dt) {
         _f.horseRaceActive || _f.mineActive || _f.goldPanningActive) _featureBlocksShoot = true;
   }
   if (game._minigames && game._minigames.activeMinigame) _featureBlocksShoot = true;
+  if (game._featuresV2 && game._featuresV2.perkRouletteActive) _featureBlocksShoot = true;
+  if (game._featuresV2 && game._featuresV2.photoMode) _featureBlocksShoot = true;
   if (!game.mounted && !_featureBlocksShoot && consumeKey('Space') && game.state === 'playing' && p.shootCooldown <= 0) {
     if (game.ammo > 0) {
       game.ammo--;
