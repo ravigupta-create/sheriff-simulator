@@ -2982,6 +2982,16 @@ if (newsCloseBtn) {
 // Appended after original features.js (line 2978)
 // ============================================================
 
+// ── Perk Roulette definitions (kept outside game state so functions survive JSON round-trip) ──
+var PERK_ROULETTE_DEFS = [
+  { name: '+5 Max HP', applyFn: function(p, f2) { p.maxHp += 5; p.hp += 5; } },
+  { name: '+$50 Gold', applyFn: function(p, f2) { game.gold += 50; } },
+  { name: '+5 Arrows', applyFn: function(p, f2) { f2.arrows += 5; } },
+  { name: '+3 Bear Traps', applyFn: function(p, f2) { f2.bearTrapCount += 3; } },
+  { name: '+2 Throwing Stars', applyFn: function(p, f2) { f2.throwingStars += 2; } },
+  { name: '+10% Armor', applyFn: function(p, f2) { f2.armor.vest = Math.min(3, f2.armor.vest + 1); } }
+];
+
 // ── V2 Lazy State Init ──
 function initFeaturesV2() {
   if (game._featuresV2) return;
@@ -5095,8 +5105,10 @@ function _updateCrimeFeatures(dt, f2, p, blocked) {
     sc.y += randF(-1, 1);
     sc.x = clamp(sc.x, TILE, (MAP_W - 1) * TILE);
     sc.y = clamp(sc.y, TILE, (MAP_H - 1) * TILE);
-    // Player can fight
-    if (dist(p, sc) < 25 && keys['Space']) {
+    // Player can fight (with cooldown to prevent every-frame damage)
+    if (sc._attackCd > 0) sc._attackCd -= dt;
+    if (dist(p, sc) < 25 && keys['Space'] && (!sc._attackCd || sc._attackCd <= 0)) {
+      sc._attackCd = 0.35;
       var scDmg = 2 + (f2.weaponUpgrades[game.currentWeapon] || 0);
       sc.hp -= scDmg;
       addFloatingText(sc.x, sc.y - 10, '-' + scDmg, '#ff4444');
@@ -5465,14 +5477,7 @@ function _updateRPGPolish(dt, f2, p, blocked) {
   if (game.level % 5 === 0 && game.level > (f2._lastPerkLevel || 0)) {
     f2.perkRouletteActive = true;
     f2._lastPerkLevel = game.level;
-    f2.availablePerks = [
-      { name: '+5 Max HP', apply: function() { p.maxHp += 5; p.hp += 5; } },
-      { name: '+$50 Gold', apply: function() { game.gold += 50; } },
-      { name: '+5 Arrows', apply: function() { f2.arrows += 5; } },
-      { name: '+3 Bear Traps', apply: function() { f2.bearTrapCount += 3; } },
-      { name: '+2 Throwing Stars', apply: function() { f2.throwingStars += 2; } },
-      { name: '+10% Armor', apply: function() { f2.armor.vest = Math.min(3, f2.armor.vest + 1); } }
-    ];
+    f2.availablePerks = PERK_ROULETTE_DEFS.map(function(d, i) { return { name: d.name, defIdx: i }; });
     f2.perkRouletteAngle = 0;
     showNotification('PERK ROULETTE! Press SPACE to spin, then SPACE to stop!');
   }
@@ -5481,7 +5486,7 @@ function _updateRPGPolish(dt, f2, p, blocked) {
     if (consumeKey('Space')) {
       var selectedIdx = Math.floor((f2.perkRouletteAngle * 10) % f2.availablePerks.length);
       var perk = f2.availablePerks[selectedIdx];
-      perk.apply();
+      PERK_ROULETTE_DEFS[perk.defIdx].applyFn(p, f2);
       f2.perkRouletteActive = false;
       f2.selectedPerk = perk;
       showNotification('Perk selected: ' + perk.name + '!');
@@ -6197,6 +6202,11 @@ function renderFeaturesV2Overlay() {
 
   // ── Fire patches ──
   _renderFirePatches(f2, camX, camY, w, h);
+
+  // ── Memorials ──
+  if (f2.memorials && f2.memorials.length > 0) {
+    _renderMemorials(f2, camX, camY, w, h);
+  }
 
   // ── Completion % in corner ──
   ctx.fillStyle = '#888';

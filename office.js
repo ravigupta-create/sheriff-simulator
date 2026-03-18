@@ -7189,41 +7189,7 @@ function _updateColdCases(dt) {
   let cc = office._coldCases;
   if (!cc) return;
 
-  if (!cc.viewingCases) {
-    // Open cold case files at records/bookshelf
-    if (office.active && office.nearFurniture && (office.nearFurniture.key === 'records' || office.nearFurniture.key === 'bookshelf') && consumeKey('KeyF')) {
-      cc.viewingCases = true;
-      cc.selectedCase = 0;
-    }
-    return;
-  }
-
-  if (consumeKey('Escape')) {
-    cc.viewingCases = false;
-    cc.activeCase = null;
-    return;
-  }
-
-  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
-    cc.selectedCase = Math.max(0, cc.selectedCase - 1);
-  }
-  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
-    cc.selectedCase = Math.min(cc.cases.length - 1, cc.selectedCase + 1);
-  }
-
-  if (consumeKey('Enter') || consumeKey('KeyE')) {
-    let selectedCase = cc.cases[cc.selectedCase];
-    if (selectedCase && !selectedCase.solved) {
-      cc.activeCase = selectedCase;
-      cc.viewingCases = false;
-      showNotification('Investigating: ' + selectedCase.name);
-      addJournalEntry('Started cold case: ' + selectedCase.name);
-    } else if (selectedCase && selectedCase.solved) {
-      showNotification('This case is already solved!');
-    }
-  }
-
-  // Check clue discovery in world for active case
+  // Check clue discovery in world for active case (must run outside office)
   if (cc.activeCase && !office.active && game.state === 'playing') {
     let ac = cc.activeCase;
     let px = game.player.x / (MAP_W * TILE);
@@ -7282,6 +7248,40 @@ function _updateColdCases(dt) {
       showNotification('COLD CASE SOLVED: ' + ac.name + '! +$' + ac.reward + ' +' + ac.xpReward + 'XP', 'good');
       addJournalEntry('Solved cold case: ' + ac.name + '. Reward: $' + ac.reward + '.');
       if (typeof audio !== 'undefined' && audio.playDing) audio.playDing();
+    }
+  }
+
+  // Office: open cold case files at records/bookshelf
+  if (!cc.viewingCases) {
+    if (office.active && office.nearFurniture && (office.nearFurniture.key === 'records' || office.nearFurniture.key === 'bookshelf') && consumeKey('KeyF')) {
+      cc.viewingCases = true;
+      cc.selectedCase = 0;
+    }
+    return;
+  }
+
+  if (consumeKey('Escape')) {
+    cc.viewingCases = false;
+    cc.activeCase = null;
+    return;
+  }
+
+  if (consumeKey('ArrowUp') || consumeKey('KeyW')) {
+    cc.selectedCase = Math.max(0, cc.selectedCase - 1);
+  }
+  if (consumeKey('ArrowDown') || consumeKey('KeyS')) {
+    cc.selectedCase = Math.min(cc.cases.length - 1, cc.selectedCase + 1);
+  }
+
+  if (consumeKey('Enter') || consumeKey('KeyE')) {
+    let selectedCase = cc.cases[cc.selectedCase];
+    if (selectedCase && !selectedCase.solved) {
+      cc.activeCase = selectedCase;
+      cc.viewingCases = false;
+      showNotification('Investigating: ' + selectedCase.name);
+      addJournalEntry('Started cold case: ' + selectedCase.name);
+    } else if (selectedCase && selectedCase.solved) {
+      showNotification('This case is already solved!');
     }
   }
 }
@@ -7531,7 +7531,7 @@ function _updatePrediction(dt) {
 
       showNotification('PREDICTION: ' + pred.predicted.crime + ' at ' + pred.predicted.location + '! 30s head start!', 'info');
       addJournalEntry('Crime predicted: ' + pred.predicted.crime + ' at ' + pred.predicted.location + ' (' + accuracy + '% confidence).');
-      pred.history.push({ location: pred.predicted.location, crime: pred.predicted.crime, day: game.dayCount || 1 });
+      pred.history.push({ location: pred.predicted.location, crime: pred.predicted.crime, day: game.dayCount || 1, barH: rand(10, 55) });
     }
     return;
   }
@@ -7609,7 +7609,9 @@ function _renderPrediction() {
     let maxBars = Math.min(pred.history.length, 8);
     let barW = (gw - 10) / maxBars;
     for (let i = 0; i < maxBars; i++) {
-      let h = rand(10, gh - 5);
+      let entry = pred.history[pred.history.length - maxBars + i];
+      if (!entry.barH) entry.barH = rand(10, gh - 5);
+      let h = entry.barH;
       ctx.fillStyle = '#4488ff';
       ctx.fillRect(gx + 5 + i * barW, gy + gh - h, barW - 2, h);
     }
@@ -7974,6 +7976,7 @@ function _renderLawLibrary() {
 function _updateOfficeV2(dt) {
   _initOfficeV2();
   if (!game.player) return;
+  if (game.state !== 'playing' && game.state !== 'office') return;
 
   let realDt = dt || (1 / 60);
 

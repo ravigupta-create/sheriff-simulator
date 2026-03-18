@@ -2220,7 +2220,8 @@ function saveCorruptionV2() {
       active: _fedInvestigation.active,
       timer: _fedInvestigation.timer,
       phase: _fedInvestigation.phase,
-      selectedOption: _fedInvestigation.selectedOption
+      selectedOption: _fedInvestigation.selectedOption,
+      _lastTriggerDay: _fedInvestigation._lastTriggerDay || 0
     }
   };
 }
@@ -2242,5 +2243,6 @@ function loadCorruptionV2(data) {
     _fedInvestigation.timer = data.fedInvestigation.timer || 0;
     _fedInvestigation.phase = data.fedInvestigation.phase || 0;
     _fedInvestigation.selectedOption = data.fedInvestigation.selectedOption || 0;
+    _fedInvestigation._lastTriggerDay = data.fedInvestigation._lastTriggerDay || 0;
   }
 }
