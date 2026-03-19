@@ -4249,7 +4249,7 @@ function _renderTownHUD() {
     ctx.fillStyle = '#cc88ff';
     ctx.font = 'bold 12px serif';
     ctx.textAlign = 'center';
-    ctx.fillText('The Syndicate awaits... Visit the Sheriff\'s Office.', canvas.width / 2, canvas.height - 63);
+    ctx.fillText('The Syndicate awaits... Enter the Sheriff\'s Office and press F.', canvas.width / 2, canvas.height - 63);
     ctx.textAlign = 'left';
   }
 
@@ -4277,23 +4277,18 @@ function _checkSyndicateTrigger() {
   if (game._towns.syndicateDefeated || game._towns.syndicateActive) return;
   if (!_allTownsControlled()) return;
 
-  // Triggered when player enters sheriff's office after controlling all towns
-  var p = game.player;
-  if (!p) return;
-  var ptx = Math.floor(p.x / TILE);
-  var pty = Math.floor((p.y + 10) / TILE);
+  // Only trigger when player is inside the office interior (office.active)
+  // This avoids stealing the E key from the building door entry
+  if (typeof office === 'undefined' || !office.active) return;
 
-  for (var bi = 0; bi < game.buildings.length; bi++) {
-    var bld = game.buildings[bi];
-    if (bld.type === BUILDING_TYPES.SHERIFF) {
-      if (ptx >= bld.x && ptx < bld.x + bld.w && pty >= bld.y && pty < bld.y + bld.h) {
-        // Player is inside sheriff's office with all towns controlled
-        if (consumeKey('KeyE')) {
-          _startSyndicateFight();
-        }
-        return;
-      }
-    }
+  // Show prompt inside office — use F key (not E) to avoid conflict with office interactions
+  if (!game._towns._syndicatePromptShown) {
+    game._towns._syndicatePromptShown = true;
+    showNotification('THE SYNDICATE: Press F to begin the final showdown!', 'bad');
+  }
+  if (consumeKey('KeyF')) {
+    _startSyndicateFight();
+    game._towns._syndicatePromptShown = false;
   }
 }
 
