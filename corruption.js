@@ -448,7 +448,7 @@ function _blackMarketDeal(npc) {
 // ─────────────────────────────────────────────
 function _updateBodyguards(dt) {
   var corruption = game.corruption || 0;
-  if (corruption < 41) {
+  if (corruption < 41 && !game._cheatMode) {
     // Remove bodyguards if corruption dropped below threshold
     if (game.bodyguards && game.bodyguards.length > 0) {
       game.bodyguards = [];
@@ -1363,7 +1363,7 @@ function _handleBuyBodyguard() {
   if (!consumeKey('KeyB')) return;
 
   var corruption = game.corruption || 0;
-  if (corruption < 21) {
+  if (corruption < 21 && !game._cheatMode) {
     showNotification('You need corruption 21+ to hire bodyguards. (Press G near NPCs to build corruption)');
     return;
   }
