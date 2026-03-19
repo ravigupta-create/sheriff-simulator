@@ -4249,7 +4249,7 @@ function _renderTownHUD() {
     ctx.fillStyle = '#cc88ff';
     ctx.font = 'bold 12px serif';
     ctx.textAlign = 'center';
-    ctx.fillText('The Syndicate awaits... Enter the Sheriff\'s Office and press F.', canvas.width / 2, canvas.height - 63);
+    ctx.fillText('The Syndicate awaits... Enter the Sheriff\'s Office and press X.', canvas.width / 2, canvas.height - 63);
     ctx.textAlign = 'left';
   }
 
@@ -4277,18 +4277,21 @@ function _checkSyndicateTrigger() {
   if (game._towns.syndicateDefeated || game._towns.syndicateActive) return;
   if (!_allTownsControlled()) return;
 
-  // Only trigger when player is inside the office interior (office.active)
-  // This avoids stealing the E key from the building door entry
-  if (typeof office === 'undefined' || !office.active) return;
-
-  // Show prompt inside office — use F key (not E) to avoid conflict with office interactions
-  if (!game._towns._syndicatePromptShown) {
-    game._towns._syndicatePromptShown = true;
-    showNotification('THE SYNDICATE: Press F to begin the final showdown!', 'bad');
-  }
-  if (consumeKey('KeyF')) {
-    _startSyndicateFight();
-    game._towns._syndicatePromptShown = false;
+  // Works in both 'playing' and 'office' states
+  if (typeof office !== 'undefined' && office.active) {
+    // Player is inside the office — show prompt and accept X key
+    if (!game._towns._syndicatePromptShown) {
+      game._towns._syndicatePromptShown = true;
+      showNotification('THE SYNDICATE: Press X to begin the final showdown!', 'bad');
+    }
+    if (consumeKey('KeyX')) {
+      office.active = false;
+      var offOverlay = document.getElementById('office-overlay');
+      if (offOverlay) offOverlay.classList.add('hidden');
+      game.state = 'playing';
+      _startSyndicateFight();
+      game._towns._syndicatePromptShown = false;
+    }
   }
 }
 
@@ -4693,20 +4696,23 @@ function _renderPassiveIncomePopup() {
 
 function _updateTownsSubsystems(dt) {
   if (!game._towns) return;
+
+  // Syndicate trigger works in office state too
+  _checkSyndicateTrigger();
+
   if (game.state !== 'playing') return;
 
   _checkTownUnlocks();
   _updateNPCCheering(dt);
   _updateBiomeAmbience(dt);
   _updateBossEncounters(dt);
-  _checkSyndicateTrigger();
 }
 
 // Patch into updateTowns at the end
 var _origUpdateTowns = updateTowns;
 updateTowns = function(dt) {
   _origUpdateTowns(dt);
-  if (game._towns && game.state === 'playing') {
+  if (game._towns && (game.state === 'playing' || game.state === 'office')) {
     _updateTownsSubsystems(dt || (1/60));
   }
 };
