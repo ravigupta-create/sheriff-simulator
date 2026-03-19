@@ -3193,8 +3193,66 @@ function _updateTownEvents(dt) {
 // §29  TERRITORY CONTROL MAP OVERLAY
 // ─────────────────────────────────────────────
 
+// ── Territory click-to-travel ──
+var _territoryClickHandler = null;
+function _territoryTravelTo(idx) {
+  var td = TOWN_DATA[idx];
+  var ts = game._towns.towns[td.id];
+  if (!ts) return;
+  if (td.id === game._towns.currentTown) {
+    showNotification('You are already in ' + td.name + '.');
+    return;
+  }
+  if (!ts.unlocked) {
+    showNotification(td.name + ' is locked. Defeat the previous boss first.');
+    return;
+  }
+  // Instant travel (railroad or controlled towns)
+  _saveCurrTown();
+  _loadTown(td.id);
+  ts.visited = true;
+  // Place player at sheriff office
+  var sheriff = null;
+  for (var bi = 0; bi < game.buildings.length; bi++) {
+    if (game.buildings[bi].type === BUILDING_TYPES.SHERIFF) { sheriff = game.buildings[bi]; break; }
+  }
+  if (sheriff) {
+    game.player.x = sheriff.doorX * TILE + TILE / 2;
+    game.player.y = (sheriff.doorY + 1) * TILE + TILE / 2;
+  }
+  game.camera.x = game.player.x - canvas.width / 2;
+  game.camera.y = game.player.y - canvas.height / 2;
+  game._towns.territoryOverlayOpen = false;
+  showNotification('Traveled to ' + td.name + '!', 'good');
+  addJournalEntry('Traveled to ' + td.name + '.');
+}
+
+function _setupTerritoryClickHandler() {
+  if (_territoryClickHandler) return;
+  _territoryClickHandler = function(e) {
+    if (!game._towns || !game._towns.territoryOverlayOpen) return;
+    var rect = canvas.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    var my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    var w = canvas.width;
+    var blockW = (w - 100) / TOWN_DATA.length;
+    var by = 80;
+    var bh = canvas.height - 140;
+    for (var i = 0; i < TOWN_DATA.length; i++) {
+      var bx = 50 + i * blockW;
+      var bw = blockW - 10;
+      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+        _territoryTravelTo(i);
+        return;
+      }
+    }
+  };
+  canvas.addEventListener('click', _territoryClickHandler);
+}
+
 function _renderTerritoryOverlay() {
   if (!game._towns || !game._towns.territoryOverlayOpen) return;
+  _setupTerritoryClickHandler();
 
   var w = canvas.width;
   var h = canvas.height;
@@ -3283,18 +3341,27 @@ function _renderTerritoryOverlay() {
       ctx.fillText(boss.name + (bs.defeated ? ' (DEFEATED)' : ' (' + bs.influence + '%)'), bx + bw / 2, by + bh - 30);
     }
 
-    // Current town indicator
+    // Current town indicator or click hint
     if (td.id === game._towns.currentTown) {
       ctx.fillStyle = '#ffd700';
       ctx.fillText('>> YOU ARE HERE <<', bx + bw / 2, by + bh - 10);
+    } else if (ts.unlocked) {
+      ctx.fillStyle = '#88ccff';
+      ctx.fillText('CLICK or [' + (i + 1) + '] to Travel', bx + bw / 2, by + bh - 10);
     }
+
+    // Number label in corner
+    ctx.fillStyle = '#5a4a30';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('' + (i + 1), bx + 5, by + 18);
   }
 
   // Controls
   ctx.fillStyle = '#a09070';
   ctx.font = '12px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Press ESC to close', w / 2, h - 15);
+  ctx.fillText('Click a territory or press 1-5 to travel | ESC to close', w / 2, h - 15);
 
   ctx.textAlign = 'left';
 }
@@ -3994,6 +4061,13 @@ function updateTowns(dt) {
 
   if (game._towns.territoryOverlayOpen) {
     if (consumeKey('Escape')) game._towns.territoryOverlayOpen = false;
+    // Click or number keys 1-5 to fast-travel to a town
+    for (var _ti = 0; _ti < TOWN_DATA.length; _ti++) {
+      if (consumeKey('Digit' + (_ti + 1))) {
+        _territoryTravelTo(_ti);
+        return;
+      }
+    }
     return;
   }
 
