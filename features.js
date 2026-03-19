@@ -1553,8 +1553,8 @@ function updateFeatures(dt) {
     }
   }
   // Start mine exploration — check for mine building or area
-  if (!f.mineActive && game.state === 'playing' && consumeKey('KeyE')) {
-    // Check if near blacksmith (mine entrance)
+  if (!f.mineActive && game.state === 'playing') {
+    // Check if near blacksmith (mine entrance) BEFORE consuming E
     var ptx3 = Math.floor(p.x / TILE);
     var pty3 = Math.floor(p.y / TILE);
     var nearMine = false;
@@ -1565,7 +1565,7 @@ function updateFeatures(dt) {
         if (mdist < 4) nearMine = true;
       }
     }
-    if (nearMine) {
+    if (nearMine && consumeKey('KeyE')) {
       f.mineActive = true;
       f.mineRoom = 0;
       f.minePlayerX = 30;
@@ -3679,8 +3679,8 @@ function _updateCombatV2(dt, f2, p, blocked) {
     showNotification('BULLET TIME! 3 seconds of slow motion!');
   }
 
-  // 38: Execution Moves — E on stunned/low-hp enemy
-  if (!blocked && consumeKey('KeyE')) {
+  // 38: Execution Moves — E on stunned/low-hp enemy (only consume E if valid target found)
+  if (!blocked) {
     var execTarget = null, execDist = 35;
     for (var exi = 0; exi < game.npcs.length; exi++) {
       var exn = game.npcs[exi];
@@ -3690,7 +3690,7 @@ function _updateCombatV2(dt, f2, p, blocked) {
         if (exd < execDist) { execDist = exd; execTarget = exn; }
       }
     }
-    if (execTarget) {
+    if (execTarget && consumeKey('KeyE')) {
       execTarget.state = 'dead';
       execTarget.hp = 0;
       f2.executionCount++;
