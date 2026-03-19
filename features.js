@@ -401,7 +401,7 @@ function updateFeatures(dt) {
     if (!knHit) f.knives[knWrite++] = kn;
   }
   f.knives.length = knWrite;
-  if (consumeKey('KeyV') && game.state === 'playing') {
+  if (!_mgBlocked && consumeKey('KeyV') && game.state === 'playing') {
     var kDirs = [[0, 1], [0, -1], [-1, 0], [1, 0]];
     var kd = kDirs[p.dir] || [1, 0];
     f.knives.push({ x: p.x, y: p.y, dx: kd[0], dy: kd[1], life: 40 });

@@ -2073,7 +2073,21 @@ function updateOffice(dt) {
       }
       if (consumeKey('KeyC')) { office.deskMode = 'coffee'; }
       if (consumeKey('KeyT')) { office.deskMode = 'telegraph'; }
-      if (consumeKey('KeyX')) { office.deskMode = 'drawers'; }
+      if (consumeKey('KeyX')) {
+        // Check if Syndicate fight should trigger (all towns controlled)
+        if (typeof _allTownsControlled === 'function' && _allTownsControlled() &&
+            game._towns && !game._towns.syndicateDefeated && !game._towns.syndicateActive) {
+          // Start Syndicate fight from desk
+          office.active = false;
+          office.sittingAtDesk = false;
+          var offOvl = document.getElementById('office-overlay');
+          if (offOvl) offOvl.classList.add('hidden');
+          game.state = 'playing';
+          if (typeof _startSyndicateFight === 'function') _startSyndicateFight();
+        } else {
+          office.deskMode = 'drawers';
+        }
+      }
       if (consumeKey('KeyM')) { office.deskMode = 'meetings'; }
       if (consumeKey('KeyS')) { office.deskMode = 'schedule'; }
       if (consumeKey('KeyN')) { office.craftingOpen = true; }
@@ -3471,7 +3485,7 @@ function drawDeskView(W, H) {
       { key: 'S', label: 'Schedule a Meeting', highlight: false },
       { key: 'C', label: 'Brew Coffee' + (office._coffeeBrewedDay === (game.dayCount || 1) ? ' (done)' : '') },
       { key: 'T', label: 'Telegraph' + (unreadTelegrams > 0 ? ' (' + unreadTelegrams + ' NEW)' : '') },
-      { key: 'X', label: 'Search Drawers' },
+      { key: 'X', label: (typeof _allTownsControlled === 'function' && _allTownsControlled() && game._towns && !game._towns.syndicateDefeated && !game._towns.syndicateActive) ? '⚔ FIGHT THE SYNDICATE ⚔' : 'Search Drawers', warn: (typeof _allTownsControlled === 'function' && _allTownsControlled() && game._towns && !game._towns.syndicateDefeated) },
       { key: 'N', label: 'Crafting & Supplies' },
       { key: 'P', label: 'Deputy Management (' + office.deputies.length + ')' },
       { key: 'B', label: 'Read a Book (' + Object.keys(office.bookRead).filter(function(k){return k[0]!=='_';}).length + '/' + LORE_BOOKS.length + ')' },

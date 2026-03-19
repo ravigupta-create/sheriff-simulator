@@ -4088,42 +4088,41 @@ function updateTowns(dt) {
     }
   }
 
-  // N key for territory overview
-  if (consumeKey('KeyN')) {
-    game._towns.territoryOverlayOpen = !game._towns.territoryOverlayOpen;
-  }
-
-  // B key for empire stats
-  if (consumeKey('KeyB')) {
-    game._towns.empireStatsOpen = !game._towns.empireStatsOpen;
-  }
-
-  // G key at sheriff's office for town management
-  // (Only if near sheriff's office building — check building proximity)
-  if (consumeKey('KeyG')) {
-    var p = game.player;
-    var ptx = Math.floor(p.x / TILE);
-    var pty = Math.floor((p.y + 10) / TILE);
-    var nearSheriff = false;
-    for (var bi = 0; bi < game.buildings.length; bi++) {
-      var bld = game.buildings[bi];
-      if (bld.type === BUILDING_TYPES.SHERIFF) {
-        var bCX = bld.x + bld.w / 2;
-        var bCY = bld.y + bld.h / 2;
-        var d = Math.hypot(ptx - bCX, pty - bCY);
-        if (d < 8) { nearSheriff = true; break; }
-      }
-    }
-    if (nearSheriff) {
-      _openTownManagement();
+  // N key for territory overview — only consume if no other N-key feature is active
+  if (!game._features || !game._features.horseRaceNotifyTimer || game._features.horseRaceNotifyTimer <= 0) {
+    if (consumeKey('KeyN')) {
+      game._towns.territoryOverlayOpen = !game._towns.territoryOverlayOpen;
     }
   }
 
-  // R key to invest in railroad
-  if (consumeKey('KeyR')) {
-    if (!game._towns.railroadBuilt && game._towns.towns['fort_desolation'].controlled) {
-      _investInRailroad();
+  // B key for empire stats — only consume if no corruption bodyguard purchase is possible
+  if (!(game.corruption >= 21 && game.bodyguards && game.bodyguards.length < 2)) {
+    if (consumeKey('KeyB')) {
+      game._towns.empireStatsOpen = !game._towns.empireStatsOpen;
     }
+  }
+
+  // G key at sheriff's office for town management — check proximity BEFORE consuming
+  var _gNearSheriff = false;
+  var _gp = game.player;
+  var _gptx = Math.floor(_gp.x / TILE);
+  var _gpty = Math.floor((_gp.y + 10) / TILE);
+  for (var _gbi = 0; _gbi < game.buildings.length; _gbi++) {
+    var _gbld = game.buildings[_gbi];
+    if (_gbld.type === BUILDING_TYPES.SHERIFF) {
+      var _gbCX = _gbld.x + _gbld.w / 2;
+      var _gbCY = _gbld.y + _gbld.h / 2;
+      if (Math.hypot(_gptx - _gbCX, _gpty - _gbCY) < 8) { _gNearSheriff = true; break; }
+    }
+  }
+  if (_gNearSheriff && consumeKey('KeyG')) {
+    _openTownManagement();
+  }
+
+  // R key to invest in railroad — only consume when conditions are met
+  if (!game._towns.railroadBuilt && game._towns.towns['fort_desolation'] &&
+      game._towns.towns['fort_desolation'].controlled && consumeKey('KeyR')) {
+    _investInRailroad();
   }
 
   // Daily income on new day

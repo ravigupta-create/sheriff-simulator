@@ -1559,23 +1559,22 @@ function _updateBlackMarket(dt) {
     return;
   }
 
-  // Open black market near outlaw NPCs (press M)
+  // Open black market near outlaw NPCs (press M) — check proximity BEFORE consuming key
   if (game.state !== 'playing' || !game.npcs) return;
-  if (!consumeKey('KeyM')) return;
 
   var p = game.player;
+  var _hasNearbyOutlaw = false;
   for (var i = 0; i < game.npcs.length; i++) {
     var npc = game.npcs[i];
     if (npc.dead) continue;
     var isOutlaw = npc.type === (typeof NPC_TYPES !== 'undefined' ? NPC_TYPES.OUTLAW : 2);
     if (!isOutlaw && !npc._isBlackMarket) continue;
-    var d = dist(p, npc);
-    if (d < 50) {
-      _blackMarketOpen = true;
-      _blackMarketCursor = 0;
-      showNotification('Black market opened...');
-      return;
-    }
+    if (dist(p, npc) < 50) { _hasNearbyOutlaw = true; break; }
+  }
+  if (_hasNearbyOutlaw && consumeKey('KeyM')) {
+    _blackMarketOpen = true;
+    _blackMarketCursor = 0;
+    showNotification('Black market opened...');
   }
 }
 
